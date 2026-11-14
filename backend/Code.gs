@@ -2,9 +2,10 @@
  * ============================================================================
  * HOME LIBRARY & DIGITAL ARCHIVE — 24-FIELD BACKEND API (Code.gs)
  * ============================================================================
- * 1. Run `setupRevampedLMS()` once to initialize all 7 tabs & Drive folders.
- * 2. Add `ADMIN_PIN` and `GEMINI_API_KEY` in Project Settings > Script Properties.
- * 3. Deploy > New Deployment > Web App (Execute as: Me, Access: Anyone).
+ * 1. Copy appsscript.json too; its service declarations enable APIs in the Default project.
+ * 2. Run `setupRevampedLMS()` to create the app-owned database & storage folders.
+ * 3. Add `ADMIN_PIN` and `GEMINI_API_KEY` in Project Settings > Script Properties.
+ * 4. Deploy > New Deployment > Web App (Execute as: Me, Access: Anyone).
  * ============================================================================
  */
 
@@ -110,93 +111,99 @@ const SCHEMA = {
  * 1. ONE-CLICK INSTALLER: RUN THIS ONCE FROM THE APPS SCRIPT EDITOR
  */
 function setupRevampedLMS() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
-
-  Object.keys(SCHEMA).forEach(sheetName => {
-    let sheet = ss.getSheetByName(sheetName);
-    if (!sheet) sheet = ss.insertSheet(sheetName);
-
-    const headers = SCHEMA[sheetName];
-    const currentHeaders = sheet.getLastColumn() > 0
-      ? sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
-      : [];
-
-    if (currentHeaders.join(',') !== headers.join(',')) {
-      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-      sheet.getRange(1, 1, 1, headers.length)
-           .setBackground('#1e293b')
-           .setFontColor('#ffffff')
-           .setFontWeight('bold')
-           .setHorizontalAlignment('center');
-      sheet.setFrozenRows(1);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    // Reuse only IDs saved by this installation. Never search the user's Drive.
+    const rootId = ensureLibraryFolder_('ROOT_FOLDER_ID', 'Home_Library_LMS_Storage');
+    ensureLibraryFolder_('COVERS_FOLDER_ID', 'LMS_Covers', rootId);
+    ensureLibraryFolder_('ARCHIVE_FOLDER_ID', 'LMS_Digital_Archive', rootId);
+    if (!props.getProperty('SPREADSHEET_ID')) {
+      const file = googleApi_('https://www.googleapis.com/drive/v3/files?fields=id', 'post', {
+        name: 'Home_Library_Database',
+        mimeType: 'application/vnd.google-apps.spreadsheet',
+        parents: [rootId]
+      });
+      props.setProperty('SPREADSHEET_ID', file.id);
     }
-  });
+    const metadata = sheetsApi_('?fields=sheets.properties');
+    const sheets = metadata.sheets || [];
+    const requests = [];
+    Object.keys(SCHEMA).forEach((name, index) => {
+      let sheet = sheets.find(s => s.properties.title === name);
+      if (!sheet) {
+        // Avoid collisions with the initial blank sheet and with existing tabs.
+        const id = Math.max(0, ...sheets.map(s => s.properties.sheetId)) + index + 1;
+        sheet = { properties: { sheetId: id, title: name,
+          gridProperties: { columnCount: Math.max(26, SCHEMA[name].length) } } };
+        requests.push({ addSheet: { properties: sheet.properties } });
+      }
+      const sheetId = sheet.properties.sheetId;
+      requests.push({ updateSheetProperties: {
+        properties: { sheetId: sheetId, gridProperties: { frozenRowCount: 1 } },
+        fields: 'gridProperties.frozenRowCount'
+      } });
+      requests.push({ repeatCell: {
+        range: { sheetId: sheetId, startRowIndex: 0, endRowIndex: 1,
+          startColumnIndex: 0, endColumnIndex: SCHEMA[name].length },
+        cell: { userEnteredFormat: {
+          backgroundColor: { red: 30 / 255, green: 41 / 255, blue: 59 / 255 },
+          textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } },
+          horizontalAlignment: 'CENTER'
+        } },
+        fields: 'userEnteredFormat'
+      } });
+    });
+    sheetsApi_(':batchUpdate', 'post', { requests: requests });
+    Object.keys(SCHEMA).forEach(name => writeRows_(name, 1, [SCHEMA[name]]));
+    props.setProperty('NEXT_ACCESSION_SEQ', props.getProperty('NEXT_ACCESSION_SEQ') || '1001');
 
-  const defaultSheet = ss.getSheetByName('Sheet1');
-  if (defaultSheet && defaultSheet.getLastRow() === 0 && ss.getSheets().length > 1) {
-    ss.deleteSheet(defaultSheet);
+    if (readRows_('3_System_Configs').length <= 1) {
+      const defaultConfigs = [
+        ['CFG-L1', 'Language', 'English', 'English'],
+        ['CFG-L2', 'Language', 'Malayalam', 'Malayalam (മലയാളം)'],
+        ['CFG-L3', 'Language', 'Arabic', 'Arabic (العربية)'],
+        ['CFG-L4', 'Language', 'Hindi', 'Hindi (हिन्दी)'],
+        ['CFG-L5', 'Language', 'Sanskrit', 'Sanskrit'],
+        ['CFG-L6', 'Language', 'Tamil', 'Tamil'],
+        ['CFG-G1', 'Category_Genre', 'Fiction & Literature', 'Fiction & Literature'],
+        ['CFG-G2', 'Category_Genre', 'History & Sociology', 'History & Sociology'],
+        ['CFG-G3', 'Category_Genre', 'Religion & Philosophy', 'Religion & Philosophy'],
+        ['CFG-G4', 'Category_Genre', 'Biography & Memoir', 'Biography & Memoir'],
+        ['CFG-G5', 'Category_Genre', 'Science & Technology', 'Science & Technology'],
+        ['CFG-G6', 'Category_Genre', 'Reference & Rare Archive', 'Reference & Rare Archive'],
+        ['CFG-G7', 'Category_Genre', 'Poetry & Drama', 'Poetry & Drama'],
+        ['CFG-G8', 'Category_Genre', 'Children & Youth', 'Children & Youth'],
+        ['CFG-S1', 'Shelf_Location', 'Main Room - Shelf A - Row 1', 'Main Room - Shelf A - Row 1'],
+        ['CFG-S2', 'Shelf_Location', 'Main Room - Shelf A - Row 2', 'Main Room - Shelf A - Row 2'],
+        ['CFG-S3', 'Shelf_Location', 'Main Room - Shelf B - Row 1', 'Main Room - Shelf B - Row 1'],
+        ['CFG-S4', 'Shelf_Location', 'Study Room - Shelf 1 - Row 1', 'Study Room - Shelf 1 - Row 1'],
+        ['CFG-S5', 'Shelf_Location', 'Archival Glass Cabinet', 'Archival Glass Cabinet'],
+        ['CFG-W1', 'WhatsApp_Template', 'Book_Taken_Update',
+          'Hello [Member_Name]! You have borrowed *"[Book_Title]"* (Accession: [Accession_Number]) on [Issue_Date]. Due date for return is *[Due_Date]*. Happy reading!'],
+        ['CFG-W2', 'WhatsApp_Template', 'Pending_Due_Reminder',
+          'Hi [Member_Name], friendly reminder from the library! The book *"[Book_Title]"* ([Accession_Number]) is due on *[Due_Date]*. Please let me know if you need an extension.'],
+        ['CFG-W3', 'WhatsApp_Template', 'Overdue_Notice',
+          'Hi [Member_Name], your borrowed copy of *"[Book_Title]"* ([Accession_Number]) was due on *[Due_Date]*. Kindly return it at your earliest convenience.'],
+        ['CFG-W4', 'WhatsApp_Template', 'Malayalam_Notice',
+          'നമസ്കാരം [Member_Name], ലൈബ്രറിയിൽ നിന്നുള്ള അറിയിപ്പ്: താങ്കൾ എടുത്ത *"[Book_Title]"* ([Accession_Number]) എന്ന പുസ്തകം തിരികെ നൽകേണ്ട തീയതി *[Due_Date]* ആണ്. നന്ദി!']
+      ];
+      writeRows_('3_System_Configs', 2, defaultConfigs);
+    }
+
+    if (readRows_('4_Members').length <= 1) {
+      writeRows_('4_Members', 2, [[
+        'MEM-01', 'Library Owner', 'Owner', '', '', 99, 0, 'Active'
+      ]]);
+    }
+
+    Logger.log('SUCCESS: Library initialized. Database: https://docs.google.com/spreadsheets/d/' +
+      props.getProperty('SPREADSHEET_ID') + '/edit');
+    Logger.log('Storage: https://drive.google.com/drive/folders/' + rootId);
+  } finally {
+    lock.releaseLock();
   }
-
-  const rootFolder = getOrCreateFolder_('Home_Library_LMS_Storage', DriveApp.getRootFolder());
-  const coversFolder = getOrCreateFolder_('LMS_Covers', rootFolder);
-  const archiveFolder = getOrCreateFolder_('LMS_Digital_Archive', rootFolder);
-
-  props.setProperties({
-    'SPREADSHEET_ID': ss.getId(),
-    'ROOT_FOLDER_ID': rootFolder.getId(),
-    'COVERS_FOLDER_ID': coversFolder.getId(),
-    'ARCHIVE_FOLDER_ID': archiveFolder.getId(),
-    'NEXT_ACCESSION_SEQ': props.getProperty('NEXT_ACCESSION_SEQ') || '1001'
-  });
-
-  const configSheet = ss.getSheetByName('3_System_Configs');
-  if (configSheet.getLastRow() === 1) {
-    const defaultConfigs = [
-      ['CFG-L1', 'Language', 'English', 'English'],
-      ['CFG-L2', 'Language', 'Malayalam', 'Malayalam (മലയാളം)'],
-      ['CFG-L3', 'Language', 'Arabic', 'Arabic (العربية)'],
-      ['CFG-L4', 'Language', 'Hindi', 'Hindi (हिन्दी)'],
-      ['CFG-L5', 'Language', 'Sanskrit', 'Sanskrit'],
-      ['CFG-L6', 'Language', 'Tamil', 'Tamil'],
-      ['CFG-G1', 'Category_Genre', 'Fiction & Literature', 'Fiction & Literature'],
-      ['CFG-G2', 'Category_Genre', 'History & Sociology', 'History & Sociology'],
-      ['CFG-G3', 'Category_Genre', 'Religion & Philosophy', 'Religion & Philosophy'],
-      ['CFG-G4', 'Category_Genre', 'Biography & Memoir', 'Biography & Memoir'],
-      ['CFG-G5', 'Category_Genre', 'Science & Technology', 'Science & Technology'],
-      ['CFG-G6', 'Category_Genre', 'Reference & Rare Archive', 'Reference & Rare Archive'],
-      ['CFG-G7', 'Category_Genre', 'Poetry & Drama', 'Poetry & Drama'],
-      ['CFG-G8', 'Category_Genre', 'Children & Youth', 'Children & Youth'],
-      ['CFG-S1', 'Shelf_Location', 'Main Room - Shelf A - Row 1', 'Main Room - Shelf A - Row 1'],
-      ['CFG-S2', 'Shelf_Location', 'Main Room - Shelf A - Row 2', 'Main Room - Shelf A - Row 2'],
-      ['CFG-S3', 'Shelf_Location', 'Main Room - Shelf B - Row 1', 'Main Room - Shelf B - Row 1'],
-      ['CFG-S4', 'Shelf_Location', 'Study Room - Shelf 1 - Row 1', 'Study Room - Shelf 1 - Row 1'],
-      ['CFG-S5', 'Shelf_Location', 'Archival Glass Cabinet', 'Archival Glass Cabinet'],
-      ['CFG-W1', 'WhatsApp_Template', 'Book_Taken_Update',
-        'Hello [Member_Name]! You have borrowed *"[Book_Title]"* (Accession: [Accession_Number]) on [Issue_Date]. Due date for return is *[Due_Date]*. Happy reading!'],
-      ['CFG-W2', 'WhatsApp_Template', 'Pending_Due_Reminder',
-        'Hi [Member_Name], friendly reminder from the library! The book *"[Book_Title]"* ([Accession_Number]) is due on *[Due_Date]*. Please let me know if you need an extension.'],
-      ['CFG-W3', 'WhatsApp_Template', 'Overdue_Notice',
-        'Hi [Member_Name], your borrowed copy of *"[Book_Title]"* ([Accession_Number]) was due on *[Due_Date]*. Kindly return it at your earliest convenience.'],
-      ['CFG-W4', 'WhatsApp_Template', 'Malayalam_Notice',
-        'നമസ്കാരം [Member_Name], ലൈബ്രറിയിൽ നിന്നുള്ള അറിയിപ്പ്: താങ്കൾ എടുത്ത *"[Book_Title]"* ([Accession_Number]) എന്ന പുസ്തകം തിരികെ നൽകേണ്ട തീയതി *[Due_Date]* ആണ്. നന്ദി!']
-    ];
-    configSheet.getRange(2, 1, defaultConfigs.length, 4).setValues(defaultConfigs);
-  }
-
-  const memberSheet = ss.getSheetByName('4_Members');
-  if (memberSheet.getLastRow() === 1) {
-    memberSheet.appendRow([
-      'MEM-01', 'Library Owner', 'Owner', '', Session.getActiveUser().getEmail() || '', 99, 0, 'Active'
-    ]);
-  }
-
-  Logger.log('SUCCESS: 24-Field LMS Database & Drive Folders Initialized!');
-}
-
-function getOrCreateFolder_(name, parent) {
-  const iter = parent.getFoldersByName(name);
-  return iter.hasNext() ? iter.next() : parent.createFolder(name);
 }
 
 /**
@@ -783,28 +790,14 @@ Extract:
  * 7. GOOGLE DRIVE UPLOADS (FRONT/BACK COVERS & DIRECT PDF ARCHIVE)
  */
 function saveImageToDrive_(base64Str, fileName) {
-  try {
-    const folderId = PropertiesService.getScriptProperties().getProperty('COVERS_FOLDER_ID');
-    const folder = DriveApp.getFolderById(folderId);
-    const clean = base64Str.replace(/^data:image\/\w+;base64,/, '');
-    const blob = Utilities.newBlob(Utilities.base64Decode(clean), 'image/jpeg', fileName);
-    const file = folder.createFile(blob);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    return `https://drive.google.com/thumbnail?id=${file.getId()}&sz=w800`;
-  } catch (e) {
-    return '';
-  }
+  const file = uploadLibraryFile_('COVERS_FOLDER_ID', base64Str, 'image/jpeg', fileName);
+  return `https://drive.google.com/thumbnail?id=${file.id}&sz=w800`;
 }
 
 function uploadArchivePdf_(data) {
-  const folderId = PropertiesService.getScriptProperties().getProperty('ARCHIVE_FOLDER_ID');
-  const folder = DriveApp.getFolderById(folderId);
-  const clean = String(data.base64Data).replace(/^data:application\/pdf;base64,/, '').replace(/^data:.*;base64,/, '');
-  const blob = Utilities.newBlob(Utilities.base64Decode(clean), 'application/pdf', data.fileName || 'Archive_Scan.pdf');
-  const file = folder.createFile(blob);
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-
-  const fileId = file.getId();
+  const file = uploadLibraryFile_('ARCHIVE_FOLDER_ID', data.base64Data,
+    'application/pdf', data.fileName || 'Archive_Scan.pdf');
+  const fileId = file.id;
   const digitalRecord = {
     Digital_ID: 'DIG-' + Utilities.getUuid().substring(0, 8).toUpperCase(),
     Book_ID: data.Book_ID || '',
@@ -812,8 +805,8 @@ function uploadArchivePdf_(data) {
     Drive_File_ID: fileId,
     Drive_View_URL: `https://drive.google.com/file/d/${fileId}/preview`,
     Drive_Download_URL: `https://drive.google.com/uc?export=download&id=${fileId}`,
-    File_Name: file.getName(),
-    File_Size_MB: (file.getSize() / (1024 * 1024)).toFixed(2),
+    File_Name: file.name,
+    File_Size_MB: (Number(file.size || 0) / (1024 * 1024)).toFixed(2),
     Access_Level: 'Public_View',
     Uploaded_Date: new Date().toISOString().substring(0, 10)
   };
@@ -824,19 +817,17 @@ function uploadArchivePdf_(data) {
 
 function syncDriveArchive_() {
   const folderId = PropertiesService.getScriptProperties().getProperty('ARCHIVE_FOLDER_ID');
-  const folder = DriveApp.getFolderById(folderId);
-  const files = folder.getFiles();
+  const files = listLibraryFiles_(folderId);
   const existing = getTableData_('6_Digital_Archive');
   const catalog = getTableData_('1_Catalog');
   let added = 0;
 
-  while (files.hasNext()) {
-    const f = files.next();
-    if (existing.some(e => e.Drive_File_ID === f.getId())) continue;
-    const baseName = f.getName().replace(/\.[^/.]+$/, '').trim();
+  for (const f of files) {
+    if (existing.some(e => e.Drive_File_ID === f.id)) continue;
+    const baseName = f.name.replace(/\.[^/.]+$/, '').trim();
     const matched = catalog.find(b => baseName.toLowerCase().includes(String(b.Title_English).toLowerCase()));
 
-    const viewUrl = `https://drive.google.com/file/d/${f.getId()}/preview`;
+    const viewUrl = `https://drive.google.com/file/d/${f.id}/preview`;
     if (matched) {
       matched.Has_Digital_Copy = true;
       matched.Digital_View_URL = viewUrl;
@@ -847,11 +838,11 @@ function syncDriveArchive_() {
       Digital_ID: 'DIG-' + Utilities.getUuid().substring(0, 8).toUpperCase(),
       Book_ID: matched ? matched.Book_ID : '',
       Book_Title: matched ? matched.Title_English : baseName,
-      Drive_File_ID: f.getId(),
+      Drive_File_ID: f.id,
       Drive_View_URL: viewUrl,
-      Drive_Download_URL: `https://drive.google.com/uc?export=download&id=${f.getId()}`,
-      File_Name: f.getName(),
-      File_Size_MB: (f.getSize() / (1024 * 1024)).toFixed(2),
+      Drive_Download_URL: `https://drive.google.com/uc?export=download&id=${f.id}`,
+      File_Name: f.name,
+      File_Size_MB: (Number(f.size || 0) / (1024 * 1024)).toFixed(2),
       Access_Level: 'Public_View',
       Uploaded_Date: new Date().toISOString().substring(0, 10)
     });
@@ -892,49 +883,48 @@ function saveMember_(data) {
 }
 
 function deleteRecord_(data) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(data.table);
-  const headers = SCHEMA[data.table];
+  const headers = tableHeaders_(data.table);
   const pkIdx = headers.indexOf(data.pkColumn);
-  const lastRow = sheet.getLastRow();
-  if (lastRow <= 1) return { status: 'error', message: 'Empty table' };
-
-  const vals = sheet.getRange(2, pkIdx + 1, lastRow - 1, 1).getValues().flat();
-  const idx = vals.findIndex(v => String(v) === String(data.id));
-  if (idx !== -1) sheet.deleteRow(idx + 2);
+  if (pkIdx < 0) throw new Error('Unknown primary key column.');
+  const rows = readRows_(data.table);
+  if (rows.length <= 1) return { status: 'error', message: 'Empty table' };
+  const idx = rows.slice(1).findIndex(row => String(row[pkIdx]) === String(data.id));
+  if (idx !== -1) {
+    const metadata = sheetsApi_('?fields=sheets.properties');
+    const sheet = metadata.sheets.find(s => s.properties.title === data.table);
+    sheetsApi_(':batchUpdate', 'post', { requests: [{ deleteDimension: {
+      range: { sheetId: sheet.properties.sheetId, dimension: 'ROWS',
+        startIndex: idx + 1, endIndex: idx + 2 }
+    } }] });
+  }
   return { status: 'ok', deletedId: data.id };
 }
 
 function getTableData_(sheetName) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(sheetName);
-  if (!sheet || sheet.getLastRow() <= 1) return [];
-  const rows = sheet.getDataRange().getValues();
+  tableHeaders_(sheetName);
+  const rows = readRows_(sheetName);
+  if (rows.length <= 1) return [];
   const headers = rows[0];
-  return rows.slice(1).map(r => {
+  return rows.slice(1).map(row => {
     const obj = {};
-    headers.forEach((h, i) => { obj[h] = r[i]; });
+    headers.forEach((h, i) => { obj[h] = row[i] === undefined ? '' : row[i]; });
     return obj;
   });
 }
 
 function upsertRow_(sheetName, pkColumn, recordObj) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(sheetName);
-  const headers = SCHEMA[sheetName];
-  const lastRow = sheet.getLastRow();
+  const headers = tableHeaders_(sheetName);
   const pkIdx = headers.indexOf(pkColumn);
-  const rowArray = headers.map(h => (recordObj[h] !== undefined ? recordObj[h] : ''));
-
-  if (lastRow > 1) {
-    const pkVals = sheet.getRange(2, pkIdx + 1, lastRow - 1, 1).getValues().flat();
-    const matchIdx = pkVals.findIndex(v => String(v) === String(recordObj[pkColumn]));
-    if (matchIdx !== -1) {
-      sheet.getRange(matchIdx + 2, 1, 1, headers.length).setValues([rowArray]);
-      return;
-    }
+  if (pkIdx < 0) throw new Error('Unknown primary key column.');
+  const row = headers.map(h => recordObj[h] === undefined ? '' : recordObj[h]);
+  const rows = readRows_(sheetName);
+  const idx = rows.slice(1).findIndex(r => String(r[pkIdx]) === String(recordObj[pkColumn]));
+  if (idx !== -1) {
+    writeRows_(sheetName, idx + 2, [row]);
+  } else {
+    sheetsApi_('/values/' + encodeURIComponent(quotedSheet_(sheetName)) +
+      ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', 'post', { values: [row] });
   }
-  sheet.appendRow(rowArray);
 }
 
 function logAudit_(actionType, targetTable, targetId, detailsObj) {
@@ -953,4 +943,111 @@ function logAudit_(actionType, targetTable, targetId, detailsObj) {
 function mapIsoLang_(code) {
   const map = { 'en': 'English', 'ml': 'Malayalam (മലയാളം)', 'ar': 'Arabic (العربية)', 'hi': 'Hindi (हिन्दी)', 'ta': 'Tamil' };
   return map[String(code).toLowerCase()] || code;
+}
+
+/**
+ * Per-file Google API access. The built-in Sheets/Drive services require broader
+ * scopes, so all library storage goes through REST with drive.file instead.
+ * Tokens stay on the server and are never returned by the web app.
+ */
+function googleApi_(url, method, body, contentType) {
+  const options = {
+    method: method || 'get',
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    muteHttpExceptions: true
+  };
+  if (body !== undefined) {
+    options.contentType = contentType || 'application/json';
+    options.payload = contentType ? body : JSON.stringify(body);
+  }
+  const response = UrlFetchApp.fetch(url, options);
+  const status = response.getResponseCode();
+  const text = response.getContentText();
+  if (status < 200 || status >= 300) {
+    throw new Error('Google API request failed (' + status + '): ' + text);
+  }
+  return text ? JSON.parse(text) : {};
+}
+
+function requiredProperty_(name) {
+  const value = PropertiesService.getScriptProperties().getProperty(name);
+  if (!value) throw new Error(name + ' is missing. Run setupRevampedLMS first.');
+  return value;
+}
+
+function sheetsApi_(path, method, body) {
+  return googleApi_('https://sheets.googleapis.com/v4/spreadsheets/' +
+    encodeURIComponent(requiredProperty_('SPREADSHEET_ID')) + path, method, body);
+}
+
+function tableHeaders_(name) {
+  if (!Object.prototype.hasOwnProperty.call(SCHEMA, name)) throw new Error('Unknown library table.');
+  return SCHEMA[name];
+}
+
+function quotedSheet_(name) {
+  tableHeaders_(name);
+  return "'" + name.replace(/'/g, "''") + "'";
+}
+
+function readRows_(name) {
+  return sheetsApi_('/values/' + encodeURIComponent(quotedSheet_(name)) +
+    '?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING').values || [];
+}
+
+function writeRows_(name, startRow, rows) {
+  return sheetsApi_('/values/' + encodeURIComponent(quotedSheet_(name) + '!A' + startRow) +
+    '?valueInputOption=RAW', 'put', { values: rows });
+}
+
+function ensureLibraryFolder_(property, name, parentId) {
+  const props = PropertiesService.getScriptProperties();
+  const saved = props.getProperty(property);
+  if (saved) {
+    // Fail rather than silently replacing inaccessible or deleted storage.
+    const folder = googleApi_('https://www.googleapis.com/drive/v3/files/' +
+      encodeURIComponent(saved) + '?fields=id,mimeType,trashed');
+    if (folder.trashed || folder.mimeType !== 'application/vnd.google-apps.folder') {
+      throw new Error(property + ' must refer to an accessible, non-trashed folder.');
+    }
+    return saved;
+  }
+  const metadata = { name: name, mimeType: 'application/vnd.google-apps.folder' };
+  if (parentId) metadata.parents = [parentId];
+  const folder = googleApi_('https://www.googleapis.com/drive/v3/files?fields=id', 'post', metadata);
+  props.setProperty(property, folder.id);
+  return folder.id;
+}
+
+function uploadLibraryFile_(folderProperty, base64, mimeType, name) {
+  const folderId = requiredProperty_(folderProperty);
+  const clean = String(base64).replace(/^data:.*?;base64,/, '');
+  // Normalize before using base64 as MIME transfer encoding in the multipart body.
+  const encoded = Utilities.base64Encode(Utilities.base64Decode(clean));
+  const boundary = 'library_' + Utilities.getUuid();
+  const metadata = { name: name, mimeType: mimeType, parents: [folderId] };
+  const body = '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' +
+    JSON.stringify(metadata) + '\r\n--' + boundary + '\r\nContent-Type: ' + mimeType +
+    '\r\nContent-Transfer-Encoding: base64\r\n\r\n' + encoded + '\r\n--' + boundary + '--';
+  const file = googleApi_('https://www.googleapis.com/upload/drive/v3/files' +
+    '?uploadType=multipart&fields=id,name,size', 'post', body, 'multipart/related; boundary=' + boundary);
+  // Preserve the original app's public cover/PDF viewer behavior.
+  googleApi_('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(file.id) +
+    '/permissions', 'post', { type: 'anyone', role: 'reader', allowFileDiscovery: false });
+  return file;
+}
+
+function listLibraryFiles_(folderId) {
+  if (!folderId) throw new Error('Archive folder is missing. Run setupRevampedLMS first.');
+  const files = [];
+  let pageToken = '';
+  do {
+    const query = "'" + folderId.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "' in parents and trashed = false";
+    const page = googleApi_('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(query) +
+      '&fields=nextPageToken,files(id,name,size)&pageSize=1000' +
+      (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : ''));
+    files.push(...(page.files || []));
+    pageToken = page.nextPageToken || '';
+  } while (pageToken);
+  return files;
 }

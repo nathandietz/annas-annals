@@ -1,79 +1,66 @@
-# 📚 Home Library & Digital Archive Management System (LMS)
+# Home Library & Digital Archive
 
-A lightweight, serverless **Home Library & Digital Archive Management System** (LMS) powered by **Google Sheets**, **Google Drive**, **Google Apps Script**, and a responsive **Flat Design Progressive Web App (PWA)**. 
+A personal library app built with Google Sheets, Google Drive, Google Apps Script, and a web frontend hosted on GitHub Pages. Based on [skd414/home-library](https://github.com/skd414/home-library).
 
-Designed for personal and home libraries supporting multilingual cataloging (**English, Malayalam, Arabic, Hindi**), camera barcode/QR scanning, interactive 4-point book cover perspective cropping, physical copy tracking, custom WhatsApp reminders (`wa.me`), and an embedded Google Drive PDF Archive reader.
-Github works as a host website only, ALL THE DATAS AS ARE SECURE AND STORED IN THE PERSONAL GOOGLE ACCOUNT ECOSYSTEM ONLY (Sheets, Appscript, Drive)
-Made purely with the help of Gemini AI - 4 Argon (High)
+Features include multilingual cataloging, ISBN scanning, optional Gemini photo recognition, cover cropping, physical copy tracking, lending and returns, WhatsApp reminder links, PDF viewing, printable QR labels, and CSV/JSON export.
 
-https://skd414.github.io/home-library/index.html
+This version uses Google's per-file permission (`drive.file`) for its database and uploads. It does not request access to all your Drive files or spreadsheets. The Apps Script timezone is **`America/Chicago`**, which automatically handles CST/CDT.
 
----
+## 1. Set up Apps Script
 
-## ✨ Key Features
+1. Create a new standalone project at [script.google.com](https://script.google.com/) and name it **Home Library**. You do not need to create a spreadsheet first.
+2. Replace the default `Code.gs` contents with [backend/Code.gs](./backend/Code.gs).
+3. Open **Project Settings** and enable **Show appsscript.json manifest file in editor**.
+4. Return to the editor and replace the entire manifest with [appsscript.json](./appsscript.json). Save it **before running any function**. It includes the limited permissions, Drive and Sheets service declarations, and Chicago timezone.
+5. Leave **Google Cloud Platform (GCP) Project** set to **Default**. Apps Script enables the declared APIs automatically; no separate Cloud project or consent-screen setup is needed.
+6. Select **setupRevampedLMS** from the function dropdown and click **Run**. Authorize the requested permissions. It should request access to the files used with this app and permission to connect to external services, rather than all Drive files or all spreadsheets.
+7. Open the database and storage links in the **Execution log**.
 
-### 1. 24-Field Multilingual Catalog & Copy-Level Inventory
-* **Dual Titles:** Store both the English/Transliterated title and the Original Script title (e.g., മലയാളം, العربية, हिन्दी).
-* **24 Metadata Fields:** Book ID, English Title, Original Title, Book Type (Normal / Series / Volume), Series Name, Volume Number, Author(s), Publisher, ISBN, Edition, Language, Category/Genre, Publication Year, Pages, Format, Shelf Location, Date Acquired, Purchase Price, Reading Status, Book Condition, Star Rating, Notes/Remarks, Blurb, Front Cover, and Back Cover.
-* **Copy-Level Tracking:** Separates master book metadata (`1_Catalog`) from physical copies (`2_Copies`), assigning each physical book a unique **Accession Number** (`LIB-01001`) and **Call Number**.
-* **Smart Auto-Suggest & Categorization:** Automatically builds dropdown suggestions for previously entered Authors and Publishers. Click any Author, Publisher, or Category tag to filter the catalog.
-* **Interactive DDC Guide:** Built-in Dewey Decimal Classification (DDC) quick-reference chart for manual or automated call numbers.
+Setup creates and saves the IDs for:
 
-### 2. Smart AI Auto-Add & 4-Point Perspective Crop/Warp
-* **3-Stage Metadata Pipeline:**
-  1. **ISBN Barcode Scan:** Decodes EAN-13/ISBN-10 barcodes via mobile/desktop camera and queries **Google Books API** and **Open Library API** (free, no cost).
-  2. **Gemini 2.5 Flash Multilingual Vision OCR:** For regional or older books without barcodes, extracts title, author, publisher, price, and back-cover blurb from photos.
-  3. **Interactive 4-Point Crop & Perspective Warp:** Built-in HTML5 canvas homography tool lets you drag 4 corner handles (`TL`, `TR`, `BR`, `BL`) over angled book photos to flatten and crop Front and Back covers before uploading to Google Drive.
+- **Home_Library_Database**, containing the seven library database tabs.
+- **Home_Library_LMS_Storage**, containing **LMS_Covers** and **LMS_Digital_Archive**.
 
-### 3. Direct Lending Desk, History & Zero-API WhatsApp Alerts
-* **1-Click Direct Lending:** Lend or return books directly from the Catalog card or the Lending Desk (with inline **"+ New Borrower"** creation).
-* **Full Transaction History:** View borrowing history per individual book or browse the global transaction log.
-* **Custom WhatsApp Templates (`wa.me`):** Edit custom templates with placeholders (`[Member_Name]`, `[Book_Title]`, `[Accession_Number]`, `[Issue_Date]`, `[Due_Date]`) for 1-tap WhatsApp redirects without paid APIs.
+Running setup again reuses these resources.
 
-### 4. Digital Preservation Archive (Google Drive PDF Integration)
-* Upload scanned PDFs of old, rare, or fragile books directly through the web app or auto-sync an entire `/LMS_Digital_Archive` Google Drive folder.
-* Read scanned PDFs directly inside the portal's embedded viewer.
+## 2. Set your PIN and optional Gemini key
 
-### 5. Space-Saving A4 Spine/QR Stickers & Data Export
-* **Ultra-Dense Printable Stickers:** Print up to ~88 minimalist stickers per A4 sheet (`3mm` margins) containing **Call Number**, **QR Code**, and **Accession Number** only.
-* **View Switcher & Custom Branding:** Toggle between **Card**, **Deck**, and **List** views, customize your Library Name and Profile Picture, and export data anytime to **CSV (UTF-8)** or **JSON**.
+In **Project Settings → Script Properties**, add:
 
----
+| Property | Value |
+| --- | --- |
+| `ADMIN_PIN` | Your secret librarian PIN, required for write actions. |
+| `GEMINI_API_KEY` | Optional key from [Google AI Studio](https://aistudio.google.com/apikey), used for photo recognition. |
 
-## 🛠️ Step-by-Step Setup Guide (For Personal Use)
+Click **Save script properties**.
 
-### Step 1: Set Up the Google Sheets Database & Apps Script Backend
-1. Create a new Google Sheet at [sheets.new](https://sheets.new) and name it **`Home_Library_Database`**.
-2. In the top menu, click **Extensions** → **Apps Script**.
-3. Delete any default code in `Code.gs`, paste the entire contents of [`backend/Code.gs`](./backend/Code.gs), and click **Save (💾)**.
-4. From the function dropdown menu at the top of the Apps Script editor, select **`setupRevampedLMS`** and click **Run**.
-   * Click **Review Permissions** → select your Google account → click **Advanced** → **Go to project (unsafe)** → **Allow**.
-   * This automatically creates and formats all **7 database tabs** and creates your Google Drive storage folders (`/SKD_Home_Library_Storage/LMS_Covers` and `/LMS_Digital_Archive`).
+## 3. Deploy the backend
 
-### Step 2: Configure Your Secret PIN & Free Gemini API Key
-1. In the Apps Script editor, click **Project Settings (⚙️)** on the left sidebar.
-2. Scroll down to **Script Properties** and click **Add script property**:
-   * **Property 1:** `ADMIN_PIN` → Value: Set a 4–6 digit secret PIN (e.g., `1234`). This protects all write/edit/lending actions.
-   * **Property 2:** `GEMINI_API_KEY` → Value: Paste your free API key from [Google AI Studio](https://aistudio.google.com/apikey) (used for multilingual photo OCR).
-3. Click **Save script properties**.
+1. Click **Deploy → New deployment** and select **Web app**.
+2. Set **Execute as** to **Me** and **Who has access** to **Anyone**.
+3. Click **Deploy** and copy the web app URL ending in `/exec`.
 
-### Step 3: Deploy the Backend as a Web App API
-1. In the top right of the Apps Script editor, click **Deploy** → **New deployment**.
-2. Click the gear icon next to *Select type* and choose **Web app**.
-3. Set the following options:
-   * **Description:** `LMS Backend API`
-   * **Execute as:** `Me`
-   * **Who has access:** `Anyone`
-4. Click **Deploy** and copy the generated **Web App URL** (ending in `/exec`).
+## 4. Host the frontend
 
-### Step 4: Host the Frontend on GitHub Pages (Free)
-1. Fork or upload `index.html`, `manifest.json`, and `sw.js` to your GitHub repository.
-2. Go to your repository's **Settings** → **Pages**.
-3. Under **Build and deployment** → **Branch**, select **`main`** (root `/`) and click **Save**.
-4. Wait ~60 seconds and open your live URL: `https://<your-username>.github.io/<repo-name>/`.
+1. Upload `index.html`, `manifest.json`, `sw.js`, and `icon.png` to the root of your GitHub repository.
+2. Open the repository's **Settings → Pages**.
+3. Under **Build and deployment**, select **Deploy from a branch**, then **main** and **/ (root)**. Click **Save**.
+4. Open the website URL shown on the Pages settings screen once deployment finishes.
 
-### Step 5: Connect & Install on Android and Windows
-1. Open your GitHub Pages website and click **🔒 Login** in the top right.
-2. Paste your Apps Script **Web App URL (`/exec`)** and your **`ADMIN_PIN`**, then click **Save & Connect**.
-   * *Public Visitors:* Anyone opening your link without entering the PIN will see the **Public Catalog (Read-Only)** without shelf locations, prices, or lending controls.
-3. Click **📲 Install** in the header (or browser address bar) to install the portal as a standalone app on **Android** or **Windows**.
+## 5. Connect the app
+
+1. Open your website and click **Login**.
+2. Enter your Apps Script `/exec` URL and `ADMIN_PIN`, then click **Save & Connect**.
+3. Use the browser's install option to install the app if desired.
+
+## File access and existing data
+
+Upload covers and PDFs through the library app. Files added manually through the Drive website are not automatically authorized and will not appear in archive sync. Pasting an existing spreadsheet or folder ID into Script Properties does not grant access. To migrate catalog data, copy the data into the new database's matching tabs, preserving the headers.
+
+The database and storage folders are private. Uploaded covers and PDFs retain the original app's anyone-with-the-link sharing for its public catalog and PDF viewer. Photo recognition sends the supplied photos to Gemini when used.
+
+If you previously authorized the original app, revoke its old grant under [Google Account connections](https://myaccount.google.com/connections) if you no longer use it. This clone does not revoke that grant automatically.
+
+## Local checks
+
+Run `node --test tests/per-file-access.test.cjs` from this repository. The tests use simulated Google APIs; live authorization and deployment must be checked in your Google account.
