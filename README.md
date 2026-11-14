@@ -42,7 +42,7 @@ Click **Save script properties**.
 
 ## 4. Host the frontend
 
-1. Upload `index.html`, `manifest.json`, `sw.js`, and `icon.png` to the root of your GitHub repository.
+1. Upload `index.html`, `manifest.json`, `sw.js`, `scanner.js`, and `icon.png` to the root of your GitHub repository.
 2. Open the repository's **Settings → Pages**.
 3. Under **Build and deployment**, select **Deploy from a branch**, then **main** and **/ (root)**. Click **Save**.
 4. Open the website URL shown on the Pages settings screen once deployment finishes.
@@ -63,4 +63,8 @@ If you previously authorized the original app, revoke its old grant under [Googl
 
 ## Local checks
 
-Run `node --test tests/per-file-access.test.cjs` from this repository. The tests use simulated Google APIs; live authorization and deployment must be checked in your Google account.
+Run `node --test tests/*.test.cjs` from this repository. The tests cover per-file Google access and scanner camera/photo lifecycle behavior. Google APIs and camera controls are simulated; live authorization and device camera behavior must also be checked in your browser.
+
+## Barcode scanning
+
+Use the GitHub Pages HTTPS site and allow camera access. Keep the full barcode visible, including the blank margins at both ends, and hold steady in good light. The scanner reads the full camera frame and supports ISBN/EAN barcodes and library QR codes. If camera access fails, the scanner shows the reason; use **Restart camera**, **Scan a photo instead**, or enter the ISBN manually.

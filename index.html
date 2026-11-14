@@ -38,7 +38,8 @@
   </script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <!-- Barcode/QR Scanner & QR Generator -->
-  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js" type="text/javascript"></script>
+  <script src="./scanner.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
 
@@ -1241,10 +1242,15 @@
 
       <div id="universal-qr-reader" class="w-full min-h-[240px] rounded-xl overflow-hidden bg-stone-950 border border-stone-200"></div>
 
+      <p x-show="scannerStatus" x-text="scannerStatus" role="status" class="text-xs text-stone-600"></p>
+      <p x-show="scannerError" x-text="scannerError" role="alert" class="text-xs text-red-700"></p>
+      <button type="button" @click="startScannerCamera()" :disabled="scannerReadingPhoto"
+              class="btn btn-soft w-full py-2 text-xs">Restart camera</button>
+
       <div class="space-y-2 pt-1 border-t border-stone-100 text-xs">
         <label class="btn btn-out w-full py-2.5 cursor-pointer">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><use href="#i-camera"></use></svg>
-          Camera not focusing? Snap a photo
+          Scan a photo instead
           <input type="file" accept="image/*" capture="environment" @change="scanQrFromPhotoFile($event)" class="hidden" />
         </label>
 
@@ -1562,6 +1568,7 @@
     }
 
     function flatLibraryApp() {
+      const scanner = createLibraryScanner();
       return {
         apiUrl: localStorage.getItem('LMS_API_URL') || '',
         adminPin: sessionStorage.getItem('LMS_ADMIN_PIN') || '',
@@ -1618,7 +1625,9 @@
         showScannerModal: false,
         scannerTarget: 'home', // 'home' | 'isbn' | 'checkout'
         manualScanInput: '',
-        qrInstance: null,
+        scannerStatus: '',
+        scannerError: '',
+        scannerReadingPhoto: false,
 
         // Crop & Perspective Warp State
         showCropWarpModal: false,
@@ -1786,55 +1795,48 @@
         // ===================================================================
         // FIXED MOBILE-SAFE QR & BARCODE SCANNER (LIVE CAMERA + PHOTO FALLBACK)
         // ===================================================================
-        openScannerModal(targetMode) {
+        async openScannerModal(targetMode) {
           this.scannerTarget = targetMode || 'home';
           this.manualScanInput = '';
+          this.scannerError = '';
+          this.scannerStatus = 'Starting camera…';
           this.showScannerModal = true;
+          await this.$nextTick();
+          if (this.showScannerModal) await this.startScannerCamera();
+        },
 
-          // Wait 200ms so mobile DOM finishes rendering the modal width before starting camera
-          setTimeout(() => {
-            const readerEl = document.getElementById('universal-qr-reader');
-            if (!readerEl) return;
-            readerEl.innerHTML = '';
-            this.qrInstance = new Html5Qrcode('universal-qr-reader');
-
-            this.qrInstance.start(
-              { facingMode: "environment" },
-              {
-                fps: 10,
-                qrbox: (viewfinderWidth, viewfinderHeight) => {
-                  const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-                  const boxSize = Math.max(150, Math.floor(minEdge * 0.75));
-                  return { width: boxSize, height: boxSize };
-                }
-              },
-              (decodedText) => {
-                this.handleDecodedScan(decodedText);
-              },
-              () => {}
-            ).catch(() => {
-              // If live video stream is blocked, user can still use the Photo Snapshot button below
-            });
-          }, 200);
+        async startScannerCamera() {
+          this.scannerError = '';
+          try {
+            await scanner.start(
+              text => this.handleDecodedScan(text),
+              status => { this.scannerStatus = status; }
+            );
+          } catch (error) {
+            if (this.showScannerModal) {
+              this.scannerStatus = '';
+              this.scannerError = error.message;
+            }
+          }
         },
 
         async scanQrFromPhotoFile(event) {
           const file = event.target.files[0];
-          if (!file) return;
-          this.loading = true;
-          this.loadingText = 'Decoding QR / Barcode from photo...';
+          if (!file || this.scannerReadingPhoto) return;
+          this.scannerReadingPhoto = true;
+          this.scannerError = '';
+          this.scannerStatus = 'Reading barcode from photo…';
           try {
-            if (this.qrInstance) {
-              try { await this.qrInstance.stop(); } catch (e) {}
-            } else {
-              this.qrInstance = new Html5Qrcode('universal-qr-reader');
+            const decodedText = await scanner.scanFile(file);
+            if (decodedText && this.showScannerModal) this.handleDecodedScan(decodedText);
+          } catch (error) {
+            if (this.showScannerModal) {
+              this.scannerStatus = '';
+              this.scannerError = 'No readable code found. Use a sharp photo with the entire barcode and blank margins visible, or restart the camera.';
             }
-            const decodedText = await this.qrInstance.scanFile(file, true);
-            this.handleDecodedScan(decodedText);
-          } catch (err) {
-            alert('Could not detect a clear QR or barcode in that photo. Try moving slightly further back for sharper focus.');
           } finally {
-            this.loading = false;
+            this.scannerReadingPhoto = false;
+            event.target.value = '';
           }
         },
 
@@ -1872,19 +1874,11 @@
           }
         },
 
-        closeScannerModal() {
-          if (this.qrInstance) {
-            this.qrInstance.stop().then(() => {
-              this.qrInstance.clear();
-              this.qrInstance = null;
-              this.showScannerModal = false;
-            }).catch(() => {
-              this.qrInstance = null;
-              this.showScannerModal = false;
-            });
-          } else {
-            this.showScannerModal = false;
-          }
+        async closeScannerModal() {
+          this.showScannerModal = false;
+          this.scannerStatus = '';
+          this.scannerError = '';
+          try { await scanner.stop(); } catch (error) { console.warn('Camera cleanup failed:', error); }
         },
 
         // ===================================================================
