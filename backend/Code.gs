@@ -622,7 +622,7 @@ function markReminderSent_(txnId) {
 }
 
 /**
- * 6. AI "AUTO-ADD" PIPELINE (ISBN APIs + GEMINI 2.5 FLASH VISION OCR)
+ * 6. AI "AUTO-ADD" PIPELINE (ISBN APIs + GEMINI VISION OCR)
  */
 function analyzeBookPipeline_(data) {
   const isbnInput = String(data.isbn || '').replace(/[^0-9X]/gi, '');
@@ -631,12 +631,19 @@ function analyzeBookPipeline_(data) {
 
   let apiData = {};
   let aiData = {};
+  const warnings = [];
 
   if (isbnInput) apiData = fetchFromPublicBookAPIs_(isbnInput, '', '');
 
   const apiFound = Boolean(apiData.Title_English);
   if ((!apiFound || forceAiOcr) && imagesBase64.length > 0) {
-    aiData = extractWithGeminiVision_(imagesBase64);
+    try {
+      aiData = extractWithGeminiVision_(imagesBase64);
+    } catch (error) {
+      // An optional photo lookup must not discard usable ISBN results.
+      if (!apiFound) throw error;
+      warnings.push('ISBN details were filled, but photo recognition failed: ' + error.message);
+    }
     const detectedIsbn = String(aiData.isbn || '').replace(/[^0-9X]/gi, '');
     if (!apiFound && (detectedIsbn || aiData.title_english)) {
       apiData = fetchFromPublicBookAPIs_(
@@ -645,6 +652,10 @@ function analyzeBookPipeline_(data) {
         (aiData.authors && aiData.authors[0]) ? aiData.authors[0] : ''
       );
     }
+  }
+
+  if (!apiData.Title_English && !aiData.title_english) {
+    throw new Error('No book details found for this ISBN. Try a clear cover/title-page photo or enter the details manually.');
   }
 
   const aiAuthors = Array.isArray(aiData.authors) ? aiData.authors.join(', ') : (aiData.authors || '');
@@ -664,70 +675,82 @@ function analyzeBookPipeline_(data) {
     Pages: apiData.Pages || aiData.pages || '',
     Description_Blurb: aiData.description_blurb || apiData.Description_Blurb || '',
     Purchase_Price: aiData.printed_price || '',
-    Cover_Image_URL: apiData.Cover_Image_URL || '',
+    Cover_Image_URL: apiData.Cover_Image_URL || openLibraryCoverUrl_(isbnInput || apiData.ISBN || aiData.isbn),
     Suggested_DDC: apiData.DDC_Suggestion || aiData.suggested_ddc || '800 LIT'
   };
 
   merged.Call_Number = generateCallNumber_({ ...merged, Call_Number_Mode: 'Auto' });
   merged.Call_Number_Mode = 'Auto';
 
-  return { status: 'ok', book: merged };
+  return { status: 'ok', book: merged, warnings: warnings };
+}
+
+function openLibraryCoverUrl_(isbn) {
+  const clean = String(isbn || '').replace(/[^0-9X]/gi, '').toUpperCase();
+  return /^(?:[0-9]{13}|[0-9]{9}[0-9X])$/.test(clean)
+    ? 'https://covers.openlibrary.org/b/isbn/' + clean + '-L.jpg?default=false' : '';
 }
 
 function fetchFromPublicBookAPIs_(isbn, title, author) {
   const resObj = {};
+  // Keep the two providers independent: a network/JSON error in one should not
+  // prevent lookup in the other.
   try {
-    let q = isbn ? `isbn:${isbn}` : `intitle:${encodeURIComponent(title)}`;
-    if (!isbn && author) q += `+inauthor:${encodeURIComponent(author)}`;
-
-    const gbRes = UrlFetchApp.fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1`, { muteHttpExceptions: true });
-    if (gbRes.getResponseCode() === 200) {
-      const gbJson = JSON.parse(gbRes.getContentText());
-      if (gbJson.items && gbJson.items.length > 0) {
-        const info = gbJson.items[0].volumeInfo;
-        resObj.Title_English = info.title ? (info.subtitle ? `${info.title}: ${info.subtitle}` : info.title) : '';
+    let q = isbn ? 'isbn:' + isbn : 'intitle:' + title;
+    if (!isbn && author) q += ' inauthor:' + author;
+    const response = UrlFetchApp.fetch('https://www.googleapis.com/books/v1/volumes?q=' +
+      encodeURIComponent(q) + '&maxResults=1', { muteHttpExceptions: true });
+    if (response.getResponseCode() === 200) {
+      const info = JSON.parse(response.getContentText()).items?.[0]?.volumeInfo;
+      if (info) {
+        resObj.Title_English = info.title ? (info.subtitle ? info.title + ': ' + info.subtitle : info.title) : '';
         resObj.Authors = (info.authors || []).join(', ');
         resObj.Publisher = info.publisher || '';
-        resObj.Publish_Year = info.publishedDate ? info.publishedDate.substring(0, 4) : '';
+        resObj.Publish_Year = String(info.publishedDate || '').substring(0, 4);
         resObj.Pages = info.pageCount || '';
-        resObj.Category_Genre = (info.categories && info.categories[0]) ? info.categories[0] : '';
+        resObj.Category_Genre = info.categories?.[0] || '';
         resObj.Description_Blurb = info.description || '';
-        resObj.Language = mapIsoLang_(info.language || 'en');
-        if (info.imageLinks && info.imageLinks.thumbnail) {
-          resObj.Cover_Image_URL = info.imageLinks.thumbnail.replace('http://', 'https://');
-        }
-        if (info.industryIdentifiers && info.industryIdentifiers.length > 0) {
-          resObj.ISBN = info.industryIdentifiers[0].identifier;
-        }
+        resObj.Language = info.language ? mapIsoLang_(info.language) : '';
+        resObj.Cover_Image_URL = String(info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail || '').replace(/^http:/, 'https:');
+        const identifiers = info.industryIdentifiers || [];
+        resObj.ISBN = (identifiers.find(id => id.type === 'ISBN_13') ||
+          identifiers.find(id => id.type === 'ISBN_10') || {}).identifier || '';
       }
     }
+  } catch (error) { Logger.log('Google Books lookup failed; trying Open Library.'); }
 
-    const targetIsbn = isbn || resObj.ISBN;
-    if (targetIsbn) {
-      const olRes = UrlFetchApp.fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${targetIsbn}&format=json&jscmd=data`, { muteHttpExceptions: true });
-      if (olRes.getResponseCode() === 200) {
-        const olBook = JSON.parse(olRes.getContentText())[`ISBN:${targetIsbn}`];
-        if (olBook) {
-          if (!resObj.Title_English) resObj.Title_English = olBook.title || '';
-          if (!resObj.Authors && olBook.authors) resObj.Authors = olBook.authors.map(a => a.name).join(', ');
-          if (!resObj.Publisher && olBook.publishers) resObj.Publisher = olBook.publishers.map(p => p.name).join(', ');
-          if (!resObj.Pages && olBook.number_of_pages) resObj.Pages = olBook.number_of_pages;
-          if (!resObj.Cover_Image_URL && olBook.cover) resObj.Cover_Image_URL = olBook.cover.large || olBook.cover.medium || '';
-          if (olBook.classifications && olBook.classifications.dewey_decimal_class) {
-            resObj.DDC_Suggestion = olBook.classifications.dewey_decimal_class[0];
-          }
+  const targetIsbn = isbn || resObj.ISBN;
+  if (targetIsbn) {
+    try {
+      const response = UrlFetchApp.fetch('https://openlibrary.org/api/books?bibkeys=' +
+        encodeURIComponent('ISBN:' + targetIsbn) + '&format=json&jscmd=data', { muteHttpExceptions: true });
+      if (response.getResponseCode() === 200) {
+        const book = JSON.parse(response.getContentText())['ISBN:' + targetIsbn];
+        if (book) {
+          if (!resObj.Title_English) resObj.Title_English = book.title || '';
+          if (!resObj.Authors) resObj.Authors = (book.authors || []).map(a => a.name).join(', ');
+          if (!resObj.Publisher) resObj.Publisher = (book.publishers || []).map(p => p.name).join(', ');
+          if (!resObj.Pages) resObj.Pages = book.number_of_pages || '';
+          if (!resObj.Publish_Year) resObj.Publish_Year = String(book.publish_date || '').match(/\b\d{4}\b/)?.[0] || '';
+          if (!resObj.Cover_Image_URL) resObj.Cover_Image_URL = String(book.cover?.large || book.cover?.medium || '').replace(/^http:/, 'https:');
+          resObj.DDC_Suggestion = book.classifications?.dewey_decimal_class?.[0] || '';
         }
       }
-    }
-  } catch (e) {}
+    } catch (error) { Logger.log('Open Library metadata lookup failed.'); }
+    if (!resObj.ISBN) resObj.ISBN = targetIsbn;
+    if (!resObj.Cover_Image_URL) resObj.Cover_Image_URL = openLibraryCoverUrl_(targetIsbn);
+  }
   return resObj;
 }
 
 function extractWithGeminiVision_(imagesArray) {
-  const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+  const props = PropertiesService.getScriptProperties();
+  const apiKey = props.getProperty('GEMINI_API_KEY');
   if (!apiKey) throw new Error('GEMINI_API_KEY is missing in Script Properties.');
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const model = (props.getProperty('GEMINI_MODEL') || 'gemini-3.8-flash').replace(/^models\//, '').trim();
+  if (!/^gemini-[a-zA-Z0-9.-]+$/.test(model)) throw new Error('GEMINI_MODEL must be a valid Gemini model ID.');
+  const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';
   const parts = [{
     text: `You are an expert multilingual librarian cataloging books in English, Malayalam (മലയാളം), Arabic (العربية), and Hindi.
 Analyze these book photos (front cover, back cover, title page, or copyright page).
@@ -750,7 +773,6 @@ Extract:
   const payload = {
     contents: [{ parts: parts }],
     generationConfig: {
-      temperature: 0.1,
       responseMimeType: 'application/json',
       responseSchema: {
         type: 'OBJECT',
@@ -778,12 +800,21 @@ Extract:
 
   const res = UrlFetchApp.fetch(endpoint, {
     method: 'post',
+    headers: { 'x-goog-api-key': apiKey },
     contentType: 'application/json',
     payload: JSON.stringify(payload),
     muteHttpExceptions: true
   });
-  if (res.getResponseCode() !== 200) throw new Error('Gemini API Error: ' + res.getContentText());
-  return JSON.parse(JSON.parse(res.getContentText()).candidates[0].content.parts[0].text);
+  const result = JSON.parse(res.getContentText());
+  if (res.getResponseCode() !== 200) {
+    throw new Error('Photo recognition (' + model + ') failed: ' +
+      (result.error?.message || 'HTTP ' + res.getResponseCode()));
+  }
+  const text = (result.candidates?.[0]?.content?.parts || [])
+    .filter(part => !part.thought && typeof part.text === 'string').map(part => part.text).join('');
+  if (!text) throw new Error('Photo recognition returned no book details. Try another clear cover or title-page photo.');
+  try { return JSON.parse(text); }
+  catch (error) { throw new Error('Photo recognition returned an unreadable response. Please try again.'); }
 }
 
 /**

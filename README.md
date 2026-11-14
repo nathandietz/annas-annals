@@ -31,6 +31,7 @@ In **Project Settings → Script Properties**, add:
 | --- | --- |
 | `ADMIN_PIN` | Your secret librarian PIN, required for write actions. |
 | `GEMINI_API_KEY` | Optional key from [Google AI Studio](https://aistudio.google.com/apikey), used for photo recognition. |
+| `GEMINI_MODEL` | Optional model ID override. Defaults to `gemini-3.8-flash`. |
 
 Click **Save script properties**.
 
@@ -68,3 +69,11 @@ Run `node --test tests/*.test.cjs` from this repository. The tests cover per-fil
 ## Barcode scanning
 
 Use the GitHub Pages HTTPS site and allow camera access. Keep the full barcode visible, including the blank margins at both ends, and hold steady in good light. The scanner reads the full camera frame and supports ISBN/EAN barcodes and library QR codes. If camera access fails, the scanner shows the reason; use **Restart camera**, **Scan a photo instead**, or enter the ISBN manually.
+
+## Updating the Apps Script backend
+
+GitHub Pages updates the frontend only. To apply backend fixes, replace your Apps Script `Code.gs` with [backend/Code.gs](./backend/Code.gs), save, then select **Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy**. Editing the existing deployment keeps your `/exec` URL and saved Script Properties. Do not rerun setup or recreate the database to apply these updates.
+
+Photo recognition uses `gemini-3.8-flash` by default; `GEMINI_MODEL` lets you change it without editing code. Your API key must have access and sufficient quota for the selected model. ISBN lookup works without Gemini, and usable ISBN results are kept if optional photo recognition fails.
+
+Covers fall back to Open Library using the ISBN, including for existing catalog entries. A cover is not available for every edition; use **Front cover** to upload your own if needed. [Cover images supplied by Open Library](https://openlibrary.org/).

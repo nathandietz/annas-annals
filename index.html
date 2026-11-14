@@ -323,12 +323,11 @@
               </div>
 
               <div class="flex gap-3.5 cursor-pointer" @click="openBookDetail(book)">
-                <div class="w-20 h-28 rounded-lg border border-stone-200 bg-stone-100/50 shrink-0 flex items-center justify-center overflow-hidden">
-                  <template x-if="book.Cover_Image_URL">
-                    <img :src="book.Cover_Image_URL" class="w-full h-full object-cover" alt="Cover" />
-                  </template>
-                  <template x-if="!book.Cover_Image_URL">
-                    <svg class="w-6 h-6 text-stone-300" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><use href="#i-book-open"></use></svg>
+                <div class="relative w-20 h-28 rounded-lg border border-stone-200 bg-stone-100/50 shrink-0 flex items-center justify-center overflow-hidden">
+                  <svg class="w-6 h-6 text-stone-300" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><use href="#i-book-open"></use></svg>
+                  <template x-if="bookCoverUrl(book)">
+                    <img :src="bookCoverUrl(book)" @error="handleBookCoverError($event, book)" @load="$el.style.display = ''"
+                         class="absolute inset-0 w-full h-full object-cover" alt="Book cover" loading="lazy" />
                   </template>
                 </div>
 
@@ -380,11 +379,12 @@
         <template x-for="book in filteredCatalog" :key="book.Book_ID">
           <div class="card p-3.5 flex items-center justify-between gap-4 hover:shadow-lift hover:border-stone-300 transition">
             <div class="flex items-center gap-3.5 min-w-0 flex-1 cursor-pointer" @click="openBookDetail(book)">
-              <div class="w-14 h-20 rounded-lg border border-stone-200 bg-stone-100/50 shrink-0 flex items-center justify-center overflow-hidden">
-                <template x-if="book.Cover_Image_URL">
-                  <img :src="book.Cover_Image_URL" class="w-full h-full object-cover" />
+              <div class="relative w-14 h-20 rounded-lg border border-stone-200 bg-stone-100/50 shrink-0 flex items-center justify-center overflow-hidden">
+                <svg class="w-5 h-5 text-stone-300" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><use href="#i-book-open"></use></svg>
+                <template x-if="bookCoverUrl(book)">
+                  <img :src="bookCoverUrl(book)" @error="handleBookCoverError($event, book)" @load="$el.style.display = ''"
+                       class="absolute inset-0 w-full h-full object-cover" alt="Book cover" loading="lazy" />
                 </template>
-                <template x-if="!book.Cover_Image_URL"><svg class="w-5 h-5 text-stone-300" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><use href="#i-book-open"></use></svg></template>
               </div>
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 mb-1">
@@ -955,6 +955,11 @@
           </div>
 
         </div>
+        <div x-show="formBook.frontCoverBase64 || bookCoverUrl(formBook)" class="flex items-center gap-3 text-xs text-stone-500">
+          <img :src="formBook.frontCoverBase64 || bookCoverUrl(formBook)" @error="handleBookCoverError($event, formBook)" @load="$el.style.display = ''"
+               class="w-16 h-24 object-contain rounded-lg border border-stone-200 bg-stone-50" alt="Front cover preview" />
+          <span>Front cover preview</span>
+        </div>
         <div class="-mt-3">
           <button type="button" @click="runAiPipeline()" :disabled="loading"
                   class="btn btn-ink w-full text-xs py-3">
@@ -1349,8 +1354,8 @@
 
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div class="flex sm:flex-col gap-2">
-              <template x-if="selectedBook.Cover_Image_URL">
-                <img :src="selectedBook.Cover_Image_URL" class="w-28 sm:w-full h-40 object-contain bg-stone-50 rounded-xl border border-stone-200" />
+              <template x-if="bookCoverUrl(selectedBook)">
+                <img :src="bookCoverUrl(selectedBook)" @error="handleBookCoverError($event, selectedBook)" @load="$el.style.display = ''" alt="Book cover" class="w-28 sm:w-full h-40 object-contain bg-stone-50 rounded-xl border border-stone-200" />
               </template>
               <template x-if="selectedBook.Back_Image_URL">
                 <img :src="selectedBook.Back_Image_URL" class="w-28 sm:w-full h-32 object-contain bg-stone-50 rounded-xl border border-stone-200" />
@@ -1884,6 +1889,27 @@
         // ===================================================================
         // HELPERS, FILTERS & TRANSACTION HISTORY
         // ===================================================================
+        isbnCoverUrl(book) {
+          const isbn = String(book?.ISBN || '').replace(/[^0-9X]/gi, '').toUpperCase();
+          return /^(?:[0-9]{13}|[0-9]{9}[0-9X])$/.test(isbn)
+            ? `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false` : '';
+        },
+
+        bookCoverUrl(book) {
+          return String(book?.Cover_Image_URL || '').trim().replace(/^http:/, 'https:') || this.isbnCoverUrl(book);
+        },
+
+        handleBookCoverError(event, book) {
+          const image = event.target;
+          const fallback = this.isbnCoverUrl(book);
+          if (fallback && image.src !== fallback && image.dataset.coverFallback !== fallback) {
+            image.dataset.coverFallback = fallback;
+            image.src = fallback;
+          } else {
+            image.style.display = 'none';
+          }
+        },
+
         configList(type) {
           const items = this.configs.filter(c => c.Config_Type === type).map(c => c.Config_Value);
           if (items.length) return items;
@@ -2564,6 +2590,7 @@
           const imgs = [];
           if (this.formBook.frontCoverBase64) imgs.push({ base64: this.formBook.frontCoverBase64, mimeType: 'image/jpeg' });
           if (this.formBook.backCoverBase64) imgs.push({ base64: this.formBook.backCoverBase64, mimeType: 'image/jpeg' });
+          if (this.formBook.publisherCoverBase64) imgs.push({ base64: this.formBook.publisherCoverBase64, mimeType: 'image/jpeg' });
 
           if (!this.formBook.ISBN && imgs.length === 0) {
             alert('Scan an ISBN or snap a cover photo first.');
@@ -2581,8 +2608,14 @@
               })
             });
             const out = await res.json();
-            if (out.status === 'ok') this.formBook = { ...this.formBook, ...out.book };
-            else alert(out.message);
+            if (out.status === 'ok') {
+              const details = Object.fromEntries(Object.entries(out.book || {})
+                .filter(([, value]) => value !== '' && value !== null && value !== undefined));
+              this.formBook = { ...this.formBook, ...details };
+              if (out.warnings?.length) alert(out.warnings.join('\n'));
+            } else alert(out.message || 'Book lookup failed. Please try again.');
+          } catch (error) {
+            alert('Could not auto-fill details: ' + error.message);
           } finally { this.loading = false; }
         },
 
