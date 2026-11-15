@@ -105,3 +105,14 @@ button.upgrade-button:hover { background: #9a4032; border-color: #9a4032; opacit
 
 .site-header #status { margin: 0 0 0 auto; min-height: 0; }
 @media (max-width: 700px) { .site-header #status { flex-basis: 100%; margin: 0; } }
+.duplicate-group { margin: 0 0 16px; padding: 16px; border: 1px solid #e7e5e4; border-radius: 16px; background: white; }
+.duplicate-group h3 { margin: 0 0 10px; font-size: 15px; }
+.duplicate-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid #f5f5f4; }
+.duplicate-row p { margin: 4px 0 0; font-size: 12px; color: #78716c; overflow-wrap: anywhere; }
+@media (max-width: 480px) { .duplicate-row { align-items: flex-start; flex-direction: column; } }
+
+.sort-indicator.ascending, .sort-indicator.descending { -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.sort-indicator.ascending { background-image: linear-gradient(to bottom, #292524 50%, #a8a29e 50%); }
+.sort-indicator.descending { background-image: linear-gradient(to bottom, #a8a29e 50%, #292524 50%); }
+
+.duplicate-reason { margin-top: 5px; color: #9a4032; font-size: 11px; font-weight: 500; }

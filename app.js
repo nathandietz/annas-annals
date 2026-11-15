@@ -24,7 +24,7 @@
   const sessionKey = 'annas-annals-google-session';
   const cacheKey = 'annas-annals-catalog-snapshot';
   let token = '', sheetId = '', books = [], pickerReady = false, busy = false, creatingLibrary = false, libraryWidth = 16;
-  let rememberedSheet = '', editingBook = null, viewMode = 'card', sortField = '', sortDirection = 1;
+  let rememberedSheet = '', editingBook = null, viewMode = 'card', duplicatesMode = false, sortField = '', sortDirection = 1;
   try { const savedView = localStorage.getItem('annas-annals-view'); if (['card', 'list'].includes(savedView)) viewMode = savedView; } catch {}
   try { rememberedSheet = localStorage.getItem(storageKey) || ''; } catch {}
   const scanner = createLibraryScanner();
@@ -42,7 +42,7 @@
   }
   function showLibrary() { $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('new-library-connected').hidden = false; $('transfer-actions').hidden = false;  $('library-actions').hidden = false; $('filters').hidden = false; $('view-switcher').hidden = false; $('search').disabled = false; }
   updateConnect();
-  function clearSession() { try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('filters').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true; $('transfer-actions').hidden = true;  }
+  function clearSession() { try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; duplicatesMode = false; $('duplicates-toggle').textContent = 'Duplicates'; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('filters').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true; $('transfer-actions').hidden = true;  }
   async function api(path, options = {}) {
     const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(sheetId) + path, {
       ...options, headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
@@ -79,8 +79,14 @@
     }
   }
   function render() {
+    $('duplicates-toggle').setAttribute('aria-pressed', String(duplicatesMode));
+    const duplicateReasons = new Map();
+    if (duplicatesMode) for (const group of findDuplicateGroups(books, normalizeIsbn)) for (const book of group.books) {
+      if (!duplicateReasons.has(book)) duplicateReasons.set(book, []);
+      duplicateReasons.get(book).push(group.reason);
+    }
     const query = $('search').value.trim().toLocaleLowerCase();
-    const filtered = books.filter(book => [book.title, book.author, book.isbn, book.shelf_location, book.category, book.series_name, book.description].some(value => value.toLocaleLowerCase().includes(query)) && filterFields.every(([field, id]) => !$(id).value || book[field].trim() === $(id).value));
+    const filtered = books.filter(book => (!duplicatesMode || duplicateReasons.has(book)) && [book.title, book.author, book.isbn, book.shelf_location, book.category, book.series_name, book.description].some(value => value.toLocaleLowerCase().includes(query)) && filterFields.every(([field, id]) => !$(id).value || book[field].trim() === $(id).value));
     if (viewMode === 'list' && sortField) filtered.sort((a, b) => {
       const left = a[sortField].trim(), right = b[sortField].trim();
       if (!left || !right) return left ? -1 : right ? 1 : 0;
@@ -99,8 +105,8 @@
           if (sortField === field) cell.setAttribute('aria-sort', sortDirection === 1 ? 'ascending' : 'descending');
           const button = document.createElement('button'); button.type = 'button'; button.className = 'sort-button';
           button.textContent = label;
-          const indicator = document.createElement('span'); indicator.className = 'sort-indicator' + (sortField === field ? ' active' : ''); indicator.setAttribute('aria-hidden', 'true');
-          indicator.textContent = sortField === field ? (sortDirection === 1 ? 'expand_less' : 'expand_more') : 'unfold_more'; button.append(indicator);
+          const indicator = document.createElement('span'); indicator.className = 'sort-indicator' + (sortField === field ? (sortDirection === 1 ? ' ascending' : ' descending') : ''); indicator.setAttribute('aria-hidden', 'true');
+          indicator.textContent = 'unfold_more'; button.append(indicator);
           button.setAttribute('aria-label', 'Sort by ' + label + (sortField === field && sortDirection === 1 ? ', descending' : ', ascending'));
           button.addEventListener('click', () => { sortDirection = sortField === field ? -sortDirection : 1; sortField = field; render(); });
           cell.append(button);
@@ -112,7 +118,7 @@
     for (const book of filtered) {
       if (viewMode === 'list') {
         const row = document.createElement('tr');
-        for (const value of [book.title, book.author, book.publisher, book.category, book.shelf_location]) { const cell = document.createElement('td'); cell.textContent = value || '—'; row.append(cell); }
+        for (const [index, value] of [book.title, book.author, book.publisher, book.category, book.shelf_location].entries()) { const cell = document.createElement('td'); cell.textContent = value || '—'; if (index === 0 && duplicatesMode) { const reason = document.createElement('div'); reason.className = 'duplicate-reason'; reason.textContent = duplicateReasons.get(book).join(' · '); cell.append(reason); } row.append(cell); }
         const actions = document.createElement('td'); actions.className = 'list-actions';
         const view = document.createElement('button'); view.type = 'button'; view.className = 'secondary'; view.textContent = 'Details'; view.setAttribute('aria-label', 'View details for ' + book.title); view.addEventListener('click', () => showDetails(book)); actions.append(view);
         const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary'; edit.textContent = book.id ? 'Edit' : 'Assign ID'; edit.setAttribute('aria-label', (book.id ? 'Edit ' : 'Assign ID to ') + book.title); edit.addEventListener('click', () => book.id ? openEditor(book) : assignBookId(book, edit)); actions.append(edit);
@@ -125,6 +131,7 @@
       for (const [tag, value] of [['h3', book.title], ['p', book.author], ['p', book.publisher], ['p', book.publication_year], ['p', book.language], ['p', book.shelf_location], ['p', book.category], ['p', book.series_name ? book.series_name + (book.volume_number ? ' · Vol. ' + book.volume_number : '') : ''], ['p', book.pages ? book.pages + ' pages' : ''], ['p', book.isbn]]) {
         if (value) { const el = document.createElement(tag); el.textContent = value; details.append(el); }
       }
+      if (duplicatesMode) { const reason = document.createElement('p'); reason.className = 'duplicate-reason'; reason.textContent = duplicateReasons.get(book).join(' · '); details.append(reason); }
       content.append(details); card.append(content);
       const view = document.createElement('button'); view.type = 'button'; view.className = 'secondary book-view'; view.textContent = 'View details'; view.setAttribute('aria-label', 'View details for ' + book.title); view.addEventListener('click', () => showDetails(book));
       const actions = document.createElement('div'); actions.className = 'book-actions'; actions.append(view);
@@ -137,8 +144,9 @@
       actions.append(edit); card.append(actions);
       $('books').append(card);
     }
-    $('count').textContent = filtered.length + (filtered.length === 1 ? ' book' : ' books') + (query ? ' found' : ' in your catalog');
+    $('count').textContent = filtered.length + (filtered.length === 1 ? ' book' : ' books') + (duplicatesMode ? ' with potential matches' : (query ? ' found' : ' in your catalog'));
   }
+  $('duplicates-toggle').addEventListener('click', () => { duplicatesMode = !duplicatesMode; $('duplicates-toggle').textContent = duplicatesMode ? 'All books' : 'Duplicates'; render(); });
   async function assignBookId(book, button) {
     if (busy) return;
     if (!sheetHeaders.includes('updated_at')) { status('Update the library before assigning an ID so the update time can be recorded.'); return; }
@@ -387,9 +395,14 @@
   });
   $('search').addEventListener('input', render);
   for (const [, id] of filterFields) $(id).addEventListener('change', render);
-  let editMode = false;
+  let editMode = false, deleteArmed = false, deleteTimer;
+  function resetDelete() {
+    deleteArmed = false; clearTimeout(deleteTimer);
+    $('delete').textContent = 'Delete book'; $('delete').classList.remove('upgrade-button'); $('delete').classList.add('secondary');
+  }
   const editableFields = ['isbn', 'title', 'author', 'publisher', 'publication_year', 'language', 'shelf_location', 'category', 'description', 'series_name', 'volume_number', 'pages', 'notes'];
   function setEditorMode(editable) {
+    resetDelete();
     editMode = editable;
     const form = $('book-form');
     for (const key of editableFields) form.elements[key].readOnly = !editable;
@@ -433,15 +446,16 @@
     $('editor').close(); status(label + ' Refreshing catalog…');
     try { await refresh(); } catch (error) { status(label + ' Refresh failed: ' + message(error)); }
   }
-  $('delete').addEventListener('click', () => {
+  $('delete').addEventListener('click', async () => {
     if (busy || !editingBook) return;
-    $('delete-description').textContent = 'Delete “' + editingBook.title + '” from this library?';
-    $('delete-dialog').showModal();
-  });
-  $('cancel-delete').addEventListener('click', () => $('delete-dialog').close());
-  $('confirm-delete').addEventListener('click', async () => {
-    if (busy || !editingBook) return;
-    $('delete-dialog').close();
+    if (!deleteArmed) {
+      deleteArmed = true; $('delete').textContent = 'Confirm delete';
+      $('delete').classList.remove('secondary'); $('delete').classList.add('upgrade-button');
+      formStatus('Click Confirm delete to remove this book.');
+      deleteTimer = setTimeout(() => { resetDelete(); formStatus(''); }, 5000);
+      return;
+    }
+    resetDelete();
     busy = true; $('save').disabled = true; $('delete').disabled = true; formStatus('Checking for changes…');
     try {
       const rowNumber = await findUnchangedBook(editingBook);
@@ -451,8 +465,8 @@
     finally { busy = false; $('save').disabled = false; $('delete').disabled = false; }
   });
   async function stopScanner() { await scanner.stop(); $('scan-area').hidden = true; }
-  $('close-editor').addEventListener('click', async () => { await stopScanner(); $('editor').close(); });
-  $('editor').addEventListener('cancel', () => { scanner.stop().catch(() => {}); $('scan-area').hidden = true; });
+  $('close-editor').addEventListener('click', async () => { resetDelete(); await stopScanner(); $('editor').close(); });
+  $('editor').addEventListener('cancel', () => { resetDelete(); scanner.stop().catch(() => {}); $('scan-area').hidden = true; });
   $('scan').addEventListener('click', async () => {
     $('scan-area').hidden = false;
     try { await scanner.start(async text => { $('book-form').elements.isbn.value = text; await stopScanner(); formStatus('Barcode captured. Look up the ISBN or enter the details.'); }, text => { $('scan-status').textContent = text; }); }
