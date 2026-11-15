@@ -10,3 +10,9 @@ dialog { width: min(95vw, 580px); max-height: 90vh; overflow: auto; border: 1px 
 
 #library-name { color: inherit; text-decoration: none; }
 #library-name[href]:hover { text-decoration: underline; }
+
+#upgrade-dialog { max-width: 440px; }
+#upgrade-description { color: #78716c; line-height: 1.6; margin: 14px 0 22px; }
+.dialog-actions { justify-content: flex-end; }
+
+#upgrade-columns { color: #44403c; line-height: 1.8; padding-left: 22px; }

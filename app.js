@@ -3,12 +3,12 @@
   const $ = id => document.getElementById(id);
   const config = window.LIBRARY_CONFIG;
   const scope = 'https://www.googleapis.com/auth/drive.file';
-  const headers = ['id', 'isbn', 'title', 'author', 'language', 'notes', 'created_at', 'publisher', 'publication_year'];
-  const legacyHeaders = headers.slice(0, 7);
+  const headers = ['id', 'isbn', 'title', 'author', 'language', 'notes', 'created_at', 'publisher', 'publication_year', 'shelf_location'];
+  const supportedWidths = [7, 9, 10];
   const storageKey = 'annas-annals-sheet-id';
   const sessionKey = 'annas-annals-google-session';
   const cacheKey = 'annas-annals-catalog-snapshot';
-  let token = '', sheetId = '', books = [], pickerReady = false, busy = false, creatingLibrary = false, legacyLibrary = false;
+  let token = '', sheetId = '', books = [], pickerReady = false, busy = false, creatingLibrary = false, libraryWidth = 10;
   let rememberedSheet = '', editingBook = null;
   try { rememberedSheet = localStorage.getItem(storageKey) || ''; } catch {}
   const scanner = createLibraryScanner();
@@ -24,9 +24,9 @@
     try { if (id) localStorage.setItem(storageKey, id); else localStorage.removeItem(storageKey); } catch {}
     updateConnect();
   }
-  function showLibrary() { $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('library-actions').hidden = false; $('search').disabled = false; }
+  function showLibrary() { $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('new-library-connected').hidden = false; $('library-actions').hidden = false; $('search').disabled = false; }
   updateConnect();
-  function clearSession() { try { sessionStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; }
+  function clearSession() { try { sessionStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true; }
   async function api(path, options = {}) {
     const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(sheetId) + path, {
       ...options, headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
@@ -38,30 +38,30 @@
   async function refresh() {
     status('Refreshing catalog…');
     const [data, spreadsheet] = await Promise.all([
-      api('/values/' + encodeURIComponent("'Books'!A:I")),
+      api('/values/' + encodeURIComponent("'Books'!A:J")),
       api('?fields=properties(title)')
     ]);
     const rows = data.values || [];
     const foundHeaders = rows[0] || [];
-    legacyLibrary = JSON.stringify(foundHeaders) === JSON.stringify(legacyHeaders);
-    if (!legacyLibrary && JSON.stringify(foundHeaders) !== JSON.stringify(headers)) throw new Error('The Books tab headers do not match a supported library. See the setup guide.');
-    $('upgrade-library').hidden = !legacyLibrary;
-    books = rows.slice(1).filter(row => row[0] && row[2]).map(row => Object.fromEntries(headers.map((key, i) => [key, row[i] || ''])));
+    libraryWidth = supportedWidths.find(width => JSON.stringify(foundHeaders) === JSON.stringify(headers.slice(0, width))) || 0;
+    if (!libraryWidth) throw new Error('The Books tab headers do not match a supported library. See the setup guide.');
+    $('upgrade-library').hidden = libraryWidth === headers.length;
+    books = rows.slice(1).filter(row => row[0] && row[2]).map(row => Object.fromEntries(headers.map((key, i) => [key, i < libraryWidth ? String(row[i] ?? '') : ''])));
     $('library-name').textContent = spreadsheet.properties?.title || 'Your library';
     const updatedAt = Date.now();
-    try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title: $('library-name').textContent, books, updatedAt, legacyLibrary })); } catch {}
+    try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title: $('library-name').textContent, books, updatedAt, libraryWidth })); } catch {}
     render(); status('Catalog updated ' + new Date(updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '.');
   }
   function render() {
     const query = $('search').value.trim().toLocaleLowerCase();
-    const filtered = books.filter(book => [book.title, book.author, book.isbn].some(value => value.toLocaleLowerCase().includes(query)));
+    const filtered = books.filter(book => [book.title, book.author, book.isbn, book.shelf_location].some(value => value.toLocaleLowerCase().includes(query)));
     $('books').replaceChildren();
     for (const book of filtered) {
       const card = document.createElement('article'); card.className = 'book';
       const content = document.createElement('div'); content.className = 'book-content';
       const cover = document.createElement('div'); cover.className = 'cover-placeholder'; cover.setAttribute('aria-hidden', 'true'); cover.textContent = '▤'; content.append(cover);
       const details = document.createElement('div'); details.className = 'book-details';
-      for (const [tag, value] of [['h3', book.title], ['p', book.author], ['p', book.publisher], ['p', book.publication_year], ['p', book.language], ['p', book.isbn]]) {
+      for (const [tag, value] of [['h3', book.title], ['p', book.author], ['p', book.publisher], ['p', book.publication_year], ['p', book.language], ['p', book.shelf_location], ['p', book.isbn]]) {
         if (value) { const el = document.createElement(tag); el.textContent = value; details.append(el); }
       }
       content.append(details); card.append(content);
@@ -146,8 +146,8 @@
     let cached = false;
     try {
       const snapshot = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
-      if (snapshot?.sheetId === sheetId && Array.isArray(snapshot.books) && snapshot.books.every(book => headers.every(key => typeof book[key] === 'string')) && Number.isFinite(snapshot.updatedAt)) {
-        legacyLibrary = snapshot.legacyLibrary === true; $('upgrade-library').hidden = !legacyLibrary;
+      if (snapshot?.sheetId === sheetId && Array.isArray(snapshot.books) && snapshot.books.every(book => headers.every(key => typeof book[key] === 'string')) && Number.isFinite(snapshot.updatedAt) && supportedWidths.includes(snapshot.libraryWidth)) {
+        libraryWidth = supportedWidths.includes(snapshot.libraryWidth) ? snapshot.libraryWidth : 0; $('upgrade-library').hidden = libraryWidth === headers.length;
         books = snapshot.books; $('library-name').textContent = snapshot.title || 'Your library';
         render(); showLibrary(); cached = true;
       }
@@ -176,17 +176,29 @@
   $('new-library').addEventListener('click', requestNewLibrary);
   $('new-library-connected').addEventListener('click', requestNewLibrary);
   $('disconnect').addEventListener('click', () => { clearSession(); rememberSheet(''); status('Disconnected. No catalog is stored in this browser.'); });
-  $('upgrade-library').addEventListener('click', async () => {
-    if (busy || !legacyLibrary) return;
-    if (!window.confirm('Add publisher and publication year columns to this library?')) return;
+  $('upgrade-library').addEventListener('click', () => {
+    if (busy || !libraryWidth || libraryWidth === headers.length) return;
+    const labels = { publisher: 'Publisher', publication_year: 'Publication year', shelf_location: 'Shelf location' };
+    const list = $('upgrade-columns'); list.replaceChildren();
+    headers.slice(libraryWidth).forEach((key, index) => {
+      const item = document.createElement('li');
+      item.textContent = (labels[key] || key) + ' (column ' + String.fromCharCode(65 + libraryWidth + index) + ')';
+      list.append(item);
+    });
+    $('upgrade-dialog').showModal();
+  });
+  $('cancel-upgrade').addEventListener('click', () => $('upgrade-dialog').close());
+  $('confirm-upgrade').addEventListener('click', async () => {
+    if (busy || !libraryWidth || libraryWidth === headers.length) return;
+    $('upgrade-dialog').close();
     busy = true; $('upgrade-library').disabled = true;
     try {
       status('Checking library columns…');
-      const data = await api('/values/' + encodeURIComponent("'Books'!A:I") + '?valueRenderOption=FORMULA');
+      const data = await api('/values/' + encodeURIComponent("'Books'!A:J") + '?valueRenderOption=FORMULA');
       const rows = data.values || [];
-      if (JSON.stringify(rows[0] || []) !== JSON.stringify(legacyHeaders)) throw new Error('The headers have changed. Refresh and review the Sheet before updating.');
-      if (rows.some(row => row.slice(7, 9).some(value => value !== ''))) throw new Error('Columns H or I contain data. Move that data before updating; nothing was changed.');
-      await api('/values/' + encodeURIComponent("'Books'!H1:I1") + '?valueInputOption=RAW', { method: 'PUT', body: JSON.stringify({ values: [headers.slice(7)] }) });
+      if (JSON.stringify(rows[0] || []) !== JSON.stringify(headers.slice(0, libraryWidth))) throw new Error('The headers have changed. Refresh and review the Sheet before updating.');
+      if (rows.some(row => row.slice(libraryWidth, headers.length).some(value => value !== ''))) throw new Error('The columns needed for the update contain data. Move that data before updating; nothing was changed.');
+      await api('/values/' + encodeURIComponent("'Books'!" + String.fromCharCode(65 + libraryWidth) + '1:J1') + '?valueInputOption=RAW', { method: 'PUT', body: JSON.stringify({ values: [headers.slice(libraryWidth)] }) });
       await refresh(); status('Library updated.');
     } catch (error) { status('Library update failed: ' + message(error)); }
     finally { busy = false; $('upgrade-library').disabled = false; }
@@ -196,20 +208,20 @@
   function openEditor(book = null) {
     editingBook = book ? { ...book } : null;
     const form = $('book-form'); form.reset();
-    for (const key of ['isbn', 'title', 'author', 'publisher', 'publication_year', 'language', 'notes']) form.elements[key].value = book?.[key] || '';
+    for (const key of ['isbn', 'title', 'author', 'publisher', 'publication_year', 'language', 'shelf_location', 'notes']) form.elements[key].value = book?.[key] || '';
     $('editor-title').textContent = book ? 'Edit book' : 'Add a book';
     $('lookup-results').hidden = true; $('lookup-suggestions').replaceChildren();
     $('delete').hidden = !book; formStatus(''); $('editor').showModal();
   }
   $('add').addEventListener('click', () => openEditor());
   async function findUnchangedBook(original) {
-    const data = await api('/values/' + encodeURIComponent("'Books'!A:I"));
+    const data = await api('/values/' + encodeURIComponent("'Books'!A:J"));
     const rows = data.values || [];
-    if (JSON.stringify(rows[0] || []) !== JSON.stringify(legacyLibrary ? legacyHeaders : headers)) throw new Error('The Books headers changed. Refresh and check the Sheet before continuing.');
+    if (JSON.stringify(rows[0] || []) !== JSON.stringify(headers.slice(0, libraryWidth))) throw new Error('The Books headers changed. Refresh and check the Sheet before continuing.');
     const matches = [];
     rows.slice(1).forEach((row, index) => { if (row[0] === original.id) matches.push({ row, number: index + 2 }); });
     if (matches.length !== 1) throw new Error(matches.length ? 'This book ID appears more than once in the Sheet. Resolve the duplicates before editing.' : 'This book was removed or its ID changed. Close this window and refresh the catalog.');
-    const current = headers.map((key, index) => String(matches[0].row[index] ?? ''));
+    const current = headers.map((key, index) => index < libraryWidth ? String(matches[0].row[index] ?? '') : '');
     if (current.some((value, index) => value !== String(original[headers[index]] ?? ''))) throw new Error('This book changed in the Sheet since you opened it. Your changes were not saved. Close this window, refresh, and review the latest version.');
     return matches[0].number;
   }
@@ -222,7 +234,7 @@
     busy = true; $('save').disabled = true; $('delete').disabled = true; formStatus('Checking for changes…');
     try {
       const rowNumber = await findUnchangedBook(editingBook);
-      await api('/values/' + encodeURIComponent("'Books'!A" + rowNumber + (legacyLibrary ? ':G' : ':I') + rowNumber) + ':clear', { method: 'POST', body: '{}' });
+      await api('/values/' + encodeURIComponent("'Books'!A" + rowNumber + (':' + String.fromCharCode(64 + libraryWidth)) + rowNumber) + ':clear', { method: 'POST', body: '{}' });
       await finishChange('Book deleted.');
     } catch (error) { formStatus(message(error)); }
     finally { busy = false; $('save').disabled = false; $('delete').disabled = false; }
@@ -277,7 +289,7 @@
   });
   $('book-form').addEventListener('submit', async event => {
     event.preventDefault(); if (busy) return;
-    if (legacyLibrary) { formStatus('Update the library before saving book details. Close this window and choose Update library.'); return; }
+    if (libraryWidth !== headers.length) { formStatus('Update the library before saving book details. Close this window and choose Update library.'); return; }
     const form = event.currentTarget, enteredIsbn = form.elements.isbn.value.trim();
     const isbn = normalizeIsbn(enteredIsbn);
     if (enteredIsbn && !isbn) { formStatus('Enter a valid ISBN-10 or ISBN-13, or leave it blank.'); return; }
@@ -285,13 +297,13 @@
     if (isbn && books.some(book => book.id !== editingBook?.id && normalizeIsbn(book.isbn) === isbn)) { formStatus('This ISBN is already in the catalog.'); return; }
     busy = true; $('save').disabled = true; $('delete').disabled = true; formStatus('Saving…');
     try {
-      const row = [editingBook?.id || crypto.randomUUID(), isbn, form.elements.title.value.trim(), form.elements.author.value.trim(), form.elements.language.value.trim(), form.elements.notes.value.trim(), editingBook?.created_at || new Date().toISOString(), form.elements.publisher.value.trim(), form.elements.publication_year.value.trim()];
+      const row = [editingBook?.id || crypto.randomUUID(), isbn, form.elements.title.value.trim(), form.elements.author.value.trim(), form.elements.language.value.trim(), form.elements.notes.value.trim(), editingBook?.created_at || new Date().toISOString(), form.elements.publisher.value.trim(), form.elements.publication_year.value.trim(), form.elements.shelf_location.value.trim()];
       if (!row[2]) throw new Error('Enter a title.');
       if (editingBook) {
         const rowNumber = await findUnchangedBook(editingBook);
-        await api('/values/' + encodeURIComponent("'Books'!A" + rowNumber + (legacyLibrary ? ':G' : ':I') + rowNumber) + '?valueInputOption=RAW', { method: 'PUT', body: JSON.stringify({ values: [row] }) });
+        await api('/values/' + encodeURIComponent("'Books'!A" + rowNumber + (':' + String.fromCharCode(64 + libraryWidth)) + rowNumber) + '?valueInputOption=RAW', { method: 'PUT', body: JSON.stringify({ values: [row] }) });
       } else {
-        await api('/values/' + encodeURIComponent("'Books'!A:I") + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', { method: 'POST', body: JSON.stringify({ values: [row] }) });
+        await api('/values/' + encodeURIComponent("'Books'!A:J") + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', { method: 'POST', body: JSON.stringify({ values: [row] }) });
       }
       await finishChange('Book saved.');
     } catch (error) { formStatus('Save failed or could not be confirmed. Refresh the catalog before retrying: ' + message(error)); }

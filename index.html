@@ -10,19 +10,26 @@
 </head>
 <body>
   <main>
-    <header class="site-header"><div class="brand"><span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span><h1><a id="library-name" target="_blank" rel="noopener noreferrer">Your library</a></h1></div><span class="nav-pill" aria-current="page">Catalog</span><button id="disconnect" class="secondary" hidden>Disconnect</button></header>
+    <header class="site-header"><div class="brand"><span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span><h1><a id="library-name" target="_blank" rel="noopener noreferrer">Your library</a></h1></div><span class="nav-pill" aria-current="page">Catalog</span><button id="new-library-connected" class="secondary" hidden>New library</button><button id="disconnect" class="secondary" hidden>Disconnect</button></header>
     <p id="status" role="status" aria-live="polite">Loading your library…</p>
-    <div class="toolbar"><div class="search-wrap"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search title, author, or ISBN" aria-label="Search catalog" disabled></div><div id="library-actions" class="actions" hidden><button id="refresh" class="secondary">Refresh</button><button id="add">Add book</button><button id="upgrade-library" class="secondary" hidden>Update library</button><button id="new-library-connected" class="secondary">New library</button></div></div>
+    <div class="toolbar"><div class="search-wrap"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search title, author, ISBN, or location" aria-label="Search catalog" disabled></div><div id="library-actions" class="actions" hidden><button id="refresh" class="secondary">Refresh</button><button id="add">Add book</button><button id="upgrade-library" class="secondary" hidden>Update library</button></div></div>
     <section id="connect" hidden><h2>Your library, in your Sheet</h2><p>Sign in with Google, then choose an existing spreadsheet or create a new library.</p><div class="actions"><button id="signin">Connect Google Sheet</button><button id="new-library" class="secondary">Create new library</button><button id="choose-sheet" class="secondary" hidden>Choose a different Sheet</button></div><p class="hint">The app requests access only to files you choose to use with it.</p></section>
     <section id="library" hidden>
       <p id="count" class="hint"></p><div id="books" class="books"></div>
     </section>
+    <dialog id="upgrade-dialog" aria-labelledby="upgrade-title" aria-describedby="upgrade-description">
+      <h2 id="upgrade-title">Update library</h2>
+      <p id="upgrade-description">The following columns will be added to your Sheet:</p>
+      <ul id="upgrade-columns"></ul>
+      <p class="hint">Existing book data will be kept. The app checks the destination columns first.</p>
+      <div class="actions dialog-actions"><button id="cancel-upgrade" class="secondary" type="button">Cancel</button><button id="confirm-upgrade" type="button">Update library</button></div>
+    </dialog>
     <dialog id="editor"><form id="book-form"><div class="dialog-header"><h2 id="editor-title">Add a book</h2><button type="button" id="close-editor" class="secondary">Close</button></div>
       <label>ISBN <span class="hint">optional</span><input name="isbn" inputmode="numeric" autocomplete="off"></label>
       <div class="actions"><button type="button" id="scan" class="secondary">Scan barcode</button><button type="button" id="lookup" class="secondary">Find book details</button></div>
       <div id="lookup-results" class="lookup-results" hidden aria-live="polite"><p id="lookup-status" class="hint"></p><div id="lookup-suggestions"></div></div>
       <div id="scan-area" hidden><div id="universal-qr-reader"></div><p id="scan-status" class="hint"></p><label>Or scan a photo<input id="photo" type="file" accept="image/*"></label><button type="button" id="stop-scan" class="secondary">Close scanner</button></div>
-      <label>Title <input name="title" required></label><label>Author <input name="author"></label><label>Publisher <input name="publisher"></label><label>Publication year <input name="publication_year" inputmode="numeric"></label><label>Language <input name="language"></label><label>Notes <textarea name="notes" rows="3"></textarea></label>
+      <label>Title <input name="title" required></label><label>Author <input name="author"></label><label>Publisher <input name="publisher"></label><label>Publication year <input name="publication_year" inputmode="numeric"></label><label>Language <input name="language"></label><label>Shelf location <input name="shelf_location" placeholder="e.g. Living room, top shelf"></label><label>Notes <textarea name="notes" rows="3"></textarea></label>
       <p id="form-status" role="status" aria-live="polite"></p><div class="actions"><button id="save" type="submit">Save book</button><button id="delete" class="secondary" type="button" hidden>Delete book</button></div>
     </form></dialog>
   </main>
