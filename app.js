@@ -322,26 +322,35 @@
   });
   $('search').addEventListener('input', render);
   for (const [, id] of filterFields) $(id).addEventListener('change', render);
-  let selectedBook = null;
-  function showDetails(book) {
-    selectedBook = book; $('details-title').textContent = book.title;
-    const list = $('details-content'); list.replaceChildren();
-    for (const [key, label] of [['author','Author'], ['isbn','ISBN'], ['publisher','Publisher'], ['publication_year','Publication year'], ['language','Language'], ['category','Category'], ['series_name','Series'], ['volume_number','Volume'], ['pages','Pages'], ['shelf_location','Shelf location'], ['description','Description'], ['notes','Notes'], ['created_at','Created'], ['updated_at','Updated']]) {
-      if (!book[key]) continue;
-      const term = document.createElement('dt'); term.textContent = label;
-      const value = document.createElement('dd'); value.textContent = book[key]; list.append(term, value);
-    }
-    $('edit-from-details').hidden = !book.id; $('details-dialog').showModal();
+  let editMode = false;
+  const editableFields = ['isbn', 'title', 'author', 'publisher', 'publication_year', 'language', 'shelf_location', 'category', 'description', 'series_name', 'volume_number', 'pages', 'notes'];
+  function setEditorMode(editable) {
+    editMode = editable;
+    const form = $('book-form');
+    for (const key of editableFields) form.elements[key].readOnly = !editable;
+    $('editor').classList.toggle('view-mode', !editable);
+    $('editor-title').textContent = editingBook ? (editable ? 'Edit book' : 'Book details') : 'Add a book';
+    $('lookup-actions').hidden = !editable;
+    $('lookup-results').hidden = true;
+    $('save').hidden = !editable;
+    $('cancel-edit').hidden = !editable || !editingBook;
+    $('delete').hidden = !editable || !editingBook?.id;
+    $('edit-from-details').hidden = editable || !editingBook?.id;
   }
-  $('close-details').addEventListener('click', () => $('details-dialog').close());
-  $('edit-from-details').addEventListener('click', () => { $('details-dialog').close(); if (selectedBook) openEditor(selectedBook); });
-  function openEditor(book = null) {
+  function showDetails(book) { openEditor(book, false); }
+  $('edit-from-details').addEventListener('click', () => setEditorMode(true));
+  $('cancel-edit').addEventListener('click', async () => {
+    if (busy || !editingBook) return;
+    try { await stopScanner(); } catch {}
+    for (const key of editableFields) $('book-form').elements[key].value = editingBook[key] || '';
+    $('lookup-suggestions').replaceChildren(); formStatus(''); setEditorMode(false);
+  });
+  function openEditor(book = null, editable = true) {
     editingBook = book ? { ...book } : null;
     const form = $('book-form'); form.reset();
-    for (const key of ['isbn', 'title', 'author', 'publisher', 'publication_year', 'language', 'shelf_location', 'category', 'description', 'series_name', 'volume_number', 'pages', 'notes']) form.elements[key].value = book?.[key] || '';
-    $('editor-title').textContent = book ? 'Edit book' : 'Add a book';
-    $('lookup-results').hidden = true; $('lookup-suggestions').replaceChildren();
-    $('delete').hidden = !book; formStatus(''); $('editor').showModal();
+    for (const key of editableFields) form.elements[key].value = book?.[key] || '';
+    $('lookup-suggestions').replaceChildren(); formStatus('');
+    setEditorMode(editable); $('editor').showModal();
   }
   $('add').addEventListener('click', () => openEditor());
   async function findUnchangedBook(original) {
@@ -425,7 +434,7 @@
     } catch (error) { resultStatus.textContent = message(error); } finally { $('lookup').disabled = false; }
   });
   $('book-form').addEventListener('submit', async event => {
-    event.preventDefault(); if (busy) return;
+    event.preventDefault(); if (busy || !editMode) return;
     if (missingHeaders().length) { formStatus('Update the library before saving book details. Close this window and choose Update library.'); return; }
     const form = event.currentTarget, enteredIsbn = form.elements.isbn.value.trim();
     const isbn = normalizeIsbn(enteredIsbn);

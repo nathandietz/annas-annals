@@ -11,7 +11,7 @@ async function fixture({ legacy = false, extraData = false, nine = false, reorde
   if (nine) headers.splice(9);
   let row = ['id-1', '9780306406157', 'Original', 'Author', '', '', '2026-01-01', ...(extraData ? ['occupied'] : [])];
   if (reordered) { [headers[0], headers[2]] = [headers[2], headers[0]]; [row[0], row[2]] = [row[2], row[0]]; }
-  function element(id) { return elements[id] ||= { hidden: false, value: '', textContent: '', disabled: false, children: [], addEventListener(type, fn) { handlers[id + ':' + type] = fn; this['on' + type] = fn; }, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, setAttribute() {}, removeAttribute() {}, showModal() {}, close() {}, reset() {} }; }
+  function element(id) { return elements[id] ||= { hidden: false, value: '', textContent: '', disabled: false, classList: { toggle() {} }, children: [], addEventListener(type, fn) { handlers[id + ':' + type] = fn; this['on' + type] = fn; }, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, setAttribute() {}, removeAttribute() {}, showModal() {}, close() {}, reset() {} }; }
   const form = element('book-form'); form.elements = Object.fromEntries(['isbn','title','author','language','notes','publisher','publication_year','shelf_location','category','description','series_name','volume_number','pages'].map(k => [k, { value: '' }]));
   const localStorage = { getItem: () => 'sheet-id', setItem() {}, removeItem() {} };
   const sessionStorage = { getItem: () => JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }), setItem() {}, removeItem() {} };

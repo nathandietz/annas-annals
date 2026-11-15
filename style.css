@@ -46,3 +46,17 @@ button.upgrade-button:hover { background: #9a4032; border-color: #9a4032; opacit
 .sort-indicator { font-family: 'Material Symbols Outlined'; font-weight: normal; font-style: normal; font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased; display: inline-block; vertical-align: middle; margin-left: 6px; color: #a8a29e; font-size: 16px; line-height: 1; }
 .sort-indicator.active { color: #292524; }
 .sort-indicator { text-transform: none; letter-spacing: normal; }
+#editor { width: min(95vw, 700px); }
+.book-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.book-fields .wide-field { grid-column: 1 / -1; }
+#editor.view-mode input[readonly], #editor.view-mode textarea[readonly] { color: #292524; resize: none; cursor: default; }
+@media (max-width: 480px) { .book-fields { grid-template-columns: 1fr; } .book-fields .wide-field { grid-column: auto; } }
+
+#editor .dialog-header { position: sticky; top: -24px; z-index: 2; margin: -24px -24px 0; padding: 24px; background: white; border-bottom: 1px solid #e7e5e4; }
+#editor .dialog-header .actions { justify-content: flex-end; }
+@media (max-width: 480px) { #editor .dialog-header { align-items: flex-start; flex-wrap: wrap; } }
+
+#editor { padding: 0; overflow: hidden; }
+#editor #book-form { display: flex; flex-direction: column; max-height: 90vh; min-height: 0; }
+#editor .dialog-header { position: static; flex: 0 0 auto; margin: 0; padding: 20px 24px; border-bottom: 1px solid #e7e5e4; }
+#editor .editor-body { padding: 0 24px 24px; overflow-y: auto; min-height: 0; }
