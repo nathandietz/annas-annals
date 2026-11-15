@@ -22,9 +22,9 @@
     try { if (id) localStorage.setItem(storageKey, id); else localStorage.removeItem(storageKey); } catch {}
     updateConnect();
   }
-  function showLibrary() { $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; }
+  function showLibrary() { $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('library-actions').hidden = false; $('search').disabled = false; }
   updateConnect();
-  function clearSession() { try { sessionStorage.removeItem(sessionKey); } catch {} token = ''; sheetId = ''; books = []; $('books').replaceChildren(); $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; }
+  function clearSession() { try { sessionStorage.removeItem(sessionKey); } catch {} token = ''; sheetId = ''; books = []; $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; }
   async function api(path, options = {}) {
     const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(sheetId) + path, {
       ...options, headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
@@ -83,11 +83,12 @@
     client.requestAccessToken();
   }
   async function restoreSession() {
-    if (!rememberedSheet) return;
+    if (!rememberedSheet) { $('connect').hidden = false; status('Connect a private Google Sheet to get started.'); return; }
     let session;
     try { session = JSON.parse(sessionStorage.getItem(sessionKey) || 'null'); } catch {}
     if (!session?.token || !Number.isFinite(session.expiresAt) || session.expiresAt <= Date.now() + 30000) {
       try { sessionStorage.removeItem(sessionKey); } catch {}
+      $('connect').hidden = false; status('Reconnect to your Google Sheet to continue.');
       return;
     }
     token = session.token; sheetId = rememberedSheet;
