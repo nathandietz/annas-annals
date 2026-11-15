@@ -4,7 +4,7 @@ A simple book catalog with a GitHub Pages interface and a private, shareable Goo
 
 **This version does not use Google Apps Script.** The website asks each person to authorize access with their own Google account and calls the Google Sheets API directly. The site itself is public; the Sheet stays private and controls who can read or edit it.
 
-This is an early prototype. Google sign-in and opening a Sheet have been tried in a live deployment; scanner and shared-user flows still need broader testing. Editing and deletion need live testing with multiple accounts.
+This is an early prototype. Google sign-in and opening a Sheet have been tried in a live deployment; scanner and shared-user flows still need broader testing. Editing, deletion, and library upgrades need live testing with multiple accounts.
 
 ## What you will need
 
@@ -20,11 +20,11 @@ You can skip this step and use **Create new library** in the app after setup. Th
 
 1. Create a **new** spreadsheet at [Google Sheets](https://sheets.google.com/create).
 2. Rename the first tab at the bottom to **Books**, exactly as written.
-3. In the first row, put the following headers in seven separate cells, in this order:
+3. In the first row, put the following headers in nine separate cells, in this order:
 
-   | A1 | B1 | C1 | D1 | E1 | F1 | G1 |
-   | --- | --- | --- | --- | --- | --- | --- |
-   | id | isbn | title | author | language | notes | created_at |
+   | A1 | B1 | C1 | D1 | E1 | F1 | G1 | H1 | I1 |
+   | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+   | id | isbn | title | author | language | notes | created_at | publisher | publication_year |
 
 4. Keep this tab for the app's table. Do not select the old seven-tab library database: it has a different format and no migration has been built.
 5. To share the catalog, click **Share**, add the other people's Google accounts, and assign **Viewer** or **Editor** access. Under **General access**, leave the Sheet **Restricted**. [Google's sharing instructions](https://support.google.com/drive/answer/7166529)
@@ -117,10 +117,11 @@ Google access tokens expire, so you may need to reconnect. The Sheet ID is store
 - **“Setup needed”:** add all three values to `config.js` and republish.
 - **Origin mismatch:** click **error details** in the Google sign-in popup and compare its `origin` with the exact origin in the OAuth client. Confirm the local browser URL, port, saved settings and client ID in `config.js`. Google changes may take time to propagate.
 - **Access blocked during testing:** add the person's Google account as a test user and verify that the Sheet is shared with that account.
-- **Sheet or header error:** select the new spreadsheet and confirm the `Books` tab and all seven headers match exactly.
+- **Sheet or header error:** select the new spreadsheet and confirm the `Books` tab and all nine headers match exactly (or the original seven-column format).
 - **Can't save:** confirm the account has Editor access. If a save fails or its response is lost, refresh before retrying to avoid a duplicate.
 - **Camera doesn't start:** open the site over HTTPS and allow camera access; you can also scan a photo or enter the ISBN manually. ISBN lookup sends the ISBN to [Open Library](https://openlibrary.org/); a missing match does not prevent manual entry. Valid ISBN-10 values are converted to ISBN-13 and saved without hyphens; ISBN-13 check digits are validated. Existing Sheet rows are not automatically rewritten.
 - **Creating a library:** if a creation request fails or times out, check Google Drive before retrying; the Sheet might have been created even if the response was lost.
+- **Updating an older library:** open it and select **Update library**. The app checks columns H and I for existing values or formulas before adding the new headers. If either contains data, move it before updating. Viewers cannot upgrade. Back up important Sheets and avoid concurrent Sheet edits during the update; the check and write are separate requests.
 - **Shared edits:** simultaneous additions can create duplicate ISBNs. Before editing or deleting, the app checks whether the record has changed and stops if it finds a conflict. This check and the write are separate requests, so simultaneous edits or row changes between them can still overwrite or affect the wrong row. Avoid concurrent edits and verify changes in the Sheet. Long-term caching and migration are not implemented.
 
 ## Local development

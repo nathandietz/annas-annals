@@ -3,11 +3,12 @@
   const $ = id => document.getElementById(id);
   const config = window.LIBRARY_CONFIG;
   const scope = 'https://www.googleapis.com/auth/drive.file';
-  const headers = ['id', 'isbn', 'title', 'author', 'language', 'notes', 'created_at'];
+  const headers = ['id', 'isbn', 'title', 'author', 'language', 'notes', 'created_at', 'publisher', 'publication_year'];
+  const legacyHeaders = headers.slice(0, 7);
   const storageKey = 'annas-annals-sheet-id';
   const sessionKey = 'annas-annals-google-session';
   const cacheKey = 'annas-annals-catalog-snapshot';
-  let token = '', sheetId = '', books = [], pickerReady = false, busy = false, creatingLibrary = false;
+  let token = '', sheetId = '', books = [], pickerReady = false, busy = false, creatingLibrary = false, legacyLibrary = false;
   let rememberedSheet = '', editingBook = null;
   try { rememberedSheet = localStorage.getItem(storageKey) || ''; } catch {}
   const scanner = createLibraryScanner();
@@ -37,15 +38,18 @@
   async function refresh() {
     status('Refreshing catalog…');
     const [data, spreadsheet] = await Promise.all([
-      api('/values/' + encodeURIComponent("'Books'!A:G")),
+      api('/values/' + encodeURIComponent("'Books'!A:I")),
       api('?fields=properties(title)')
     ]);
     const rows = data.values || [];
-    if (JSON.stringify(rows[0] || []) !== JSON.stringify(headers)) throw new Error('The Books tab is missing or its header does not match the required format. See the setup guide.');
+    const foundHeaders = rows[0] || [];
+    legacyLibrary = JSON.stringify(foundHeaders) === JSON.stringify(legacyHeaders);
+    if (!legacyLibrary && JSON.stringify(foundHeaders) !== JSON.stringify(headers)) throw new Error('The Books tab headers do not match a supported library. See the setup guide.');
+    $('upgrade-library').hidden = !legacyLibrary;
     books = rows.slice(1).filter(row => row[0] && row[2]).map(row => Object.fromEntries(headers.map((key, i) => [key, row[i] || ''])));
     $('library-name').textContent = spreadsheet.properties?.title || 'A personal library';
     const updatedAt = Date.now();
-    try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title: $('library-name').textContent, books, updatedAt })); } catch {}
+    try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title: $('library-name').textContent, books, updatedAt, legacyLibrary })); } catch {}
     render(); status('Catalog updated ' + new Date(updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '.');
   }
   function render() {
@@ -54,7 +58,8 @@
     $('books').replaceChildren();
     for (const book of filtered) {
       const card = document.createElement('article'); card.className = 'book';
-      for (const [tag, value] of [['h3', book.title], ['p', book.author], ['p', book.isbn], ['p', book.language], ['p', book.notes]]) {
+      const cover = document.createElement('div'); cover.className = 'cover-placeholder'; cover.setAttribute('aria-hidden', 'true'); cover.textContent = 'Book cover'; card.append(cover);
+      for (const [tag, value] of [['h3', book.title], ['p', book.author], ['p', book.isbn], ['p', book.publisher], ['p', book.publication_year], ['p', book.language], ['p', book.notes]]) {
         if (value) { const el = document.createElement(tag); el.textContent = value; card.append(el); }
       }
       const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary'; edit.textContent = 'Edit'; edit.setAttribute('aria-label', 'Edit ' + book.title);
@@ -139,6 +144,7 @@
     try {
       const snapshot = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
       if (snapshot?.sheetId === sheetId && Array.isArray(snapshot.books) && snapshot.books.every(book => headers.every(key => typeof book[key] === 'string')) && Number.isFinite(snapshot.updatedAt)) {
+        legacyLibrary = snapshot.legacyLibrary === true; $('upgrade-library').hidden = !legacyLibrary;
         books = snapshot.books; $('library-name').textContent = snapshot.title || 'A personal library';
         render(); showLibrary(); cached = true;
       }
@@ -167,20 +173,36 @@
   $('new-library').addEventListener('click', requestNewLibrary);
   $('new-library-connected').addEventListener('click', requestNewLibrary);
   $('disconnect').addEventListener('click', () => { clearSession(); rememberSheet(''); status('Disconnected. No catalog is stored in this browser.'); });
+  $('upgrade-library').addEventListener('click', async () => {
+    if (busy || !legacyLibrary) return;
+    if (!window.confirm('Add publisher and publication year columns to this library?')) return;
+    busy = true; $('upgrade-library').disabled = true;
+    try {
+      status('Checking library columns…');
+      const data = await api('/values/' + encodeURIComponent("'Books'!A:I") + '?valueRenderOption=FORMULA');
+      const rows = data.values || [];
+      if (JSON.stringify(rows[0] || []) !== JSON.stringify(legacyHeaders)) throw new Error('The headers have changed. Refresh and review the Sheet before updating.');
+      if (rows.some(row => row.slice(7, 9).some(value => value !== ''))) throw new Error('Columns H or I contain data. Move that data before updating; nothing was changed.');
+      await api('/values/' + encodeURIComponent("'Books'!H1:I1") + '?valueInputOption=RAW', { method: 'PUT', body: JSON.stringify({ values: [headers.slice(7)] }) });
+      await refresh(); status('Library updated.');
+    } catch (error) { status('Library update failed: ' + message(error)); }
+    finally { busy = false; $('upgrade-library').disabled = false; }
+  });
   $('refresh').addEventListener('click', () => refresh().catch(error => status(message(error))));
   $('search').addEventListener('input', render);
   function openEditor(book = null) {
     editingBook = book ? { ...book } : null;
     const form = $('book-form'); form.reset();
-    for (const key of ['isbn', 'title', 'author', 'language', 'notes']) form.elements[key].value = book?.[key] || '';
+    for (const key of ['isbn', 'title', 'author', 'publisher', 'publication_year', 'language', 'notes']) form.elements[key].value = book?.[key] || '';
     $('editor-title').textContent = book ? 'Edit book' : 'Add a book';
+    $('lookup-results').hidden = true; $('lookup-suggestions').replaceChildren();
     $('delete').hidden = !book; formStatus(''); $('editor').showModal();
   }
   $('add').addEventListener('click', () => openEditor());
   async function findUnchangedBook(original) {
-    const data = await api('/values/' + encodeURIComponent("'Books'!A:G"));
+    const data = await api('/values/' + encodeURIComponent("'Books'!A:I"));
     const rows = data.values || [];
-    if (JSON.stringify(rows[0] || []) !== JSON.stringify(headers)) throw new Error('The Books headers changed. Refresh and check the Sheet before continuing.');
+    if (JSON.stringify(rows[0] || []) !== JSON.stringify(legacyLibrary ? legacyHeaders : headers)) throw new Error('The Books headers changed. Refresh and check the Sheet before continuing.');
     const matches = [];
     rows.slice(1).forEach((row, index) => { if (row[0] === original.id) matches.push({ row, number: index + 2 }); });
     if (matches.length !== 1) throw new Error(matches.length ? 'This book ID appears more than once in the Sheet. Resolve the duplicates before editing.' : 'This book was removed or its ID changed. Close this window and refresh the catalog.');
@@ -197,7 +219,7 @@
     busy = true; $('save').disabled = true; $('delete').disabled = true; formStatus('Checking for changes…');
     try {
       const rowNumber = await findUnchangedBook(editingBook);
-      await api('/values/' + encodeURIComponent("'Books'!A" + rowNumber + ':G' + rowNumber) + ':clear', { method: 'POST', body: '{}' });
+      await api('/values/' + encodeURIComponent("'Books'!A" + rowNumber + (legacyLibrary ? ':G' : ':I') + rowNumber) + ':clear', { method: 'POST', body: '{}' });
       await finishChange('Book deleted.');
     } catch (error) { formStatus(message(error)); }
     finally { busy = false; $('save').disabled = false; $('delete').disabled = false; }
@@ -213,21 +235,46 @@
   $('stop-scan').addEventListener('click', () => stopScanner().catch(error => formStatus(message(error))));
   $('photo').addEventListener('change', async event => { const file = event.target.files[0]; if (!file) return; try { const result = await scanner.scanFile(file); if (result) { $('book-form').elements.isbn.value = result; await stopScanner(); formStatus('Barcode captured. Look up the ISBN or enter the details.'); } } catch { $('scan-status').textContent = 'No barcode found. Try a clearer photo or enter the ISBN manually.'; } });
   $('lookup').addEventListener('click', async () => {
-    const isbn = normalizeIsbn($('book-form').elements.isbn.value);
-    if (!isbn) { formStatus('Enter a valid ISBN-10 or ISBN-13.'); return; }
-    $('book-form').elements.isbn.value = isbn;
-    formStatus('Looking up ISBN…'); $('lookup').disabled = true;
+    const form = $('book-form');
+    const isbn = normalizeIsbn(form.elements.isbn.value);
+    const results = $('lookup-results'), resultStatus = $('lookup-status'), suggestions = $('lookup-suggestions');
+    results.hidden = false; suggestions.replaceChildren();
+    if (!isbn) { resultStatus.textContent = 'Enter a valid ISBN-10 or ISBN-13.'; return; }
+    form.elements.isbn.value = isbn;
+    resultStatus.textContent = 'Looking up book details…'; $('lookup').disabled = true;
+    const currentBook = editingBook;
     try {
       const response = await fetch('https://openlibrary.org/api/books?bibkeys=' + encodeURIComponent('ISBN:' + isbn) + '&format=json&jscmd=data');
       if (!response.ok) throw new Error('Lookup unavailable. You can enter the details manually.');
       const data = (await response.json())['ISBN:' + isbn];
-      if (!data) { formStatus('No match found. You can enter the details manually.'); return; }
-      const form = $('book-form'); if (!form.elements.title.value) form.elements.title.value = data.title || ''; if (!form.elements.author.value) form.elements.author.value = (data.authors || []).map(a => a.name).join(', ');
-      formStatus('Details found. Review them before saving.');
-    } catch (error) { formStatus(message(error)); } finally { $('lookup').disabled = false; }
+      if (editingBook !== currentBook || normalizeIsbn(form.elements.isbn.value) !== isbn || !$('editor').open) return;
+      if (!data) { resultStatus.textContent = 'No match found. You can enter the details manually.'; return; }
+      const values = [
+        ['title', 'Title', data.title || ''],
+        ['author', 'Author', (data.authors || []).map(a => a.name).filter(Boolean).join(', ')],
+        ['publisher', 'Publisher', (data.publishers || []).map(p => p.name).filter(Boolean).join(', ')],
+        ['publication_year', 'Publication year', (data.publish_date || '').match(/\b(?:1[0-9]{3}|20[0-9]{2})\b/)?.[0] || ''],
+        ['language', 'Language', (data.languages || []).map(language => language.name || language.key?.split('/').pop() || '').filter(Boolean).join(', ')]
+      ];
+      let filled = 0, alternatives = 0;
+      for (const [key, label, value] of values) {
+        if (!value) continue;
+        if (!form.elements[key].value.trim()) { form.elements[key].value = value; filled++; continue; }
+        if (form.elements[key].value.trim() === value) continue;
+        alternatives++;
+        const item = document.createElement('div'); item.className = 'lookup-suggestion';
+        const description = document.createElement('p'); description.textContent = label + ': ' + value;
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary'; button.textContent = 'Use this ' + label.toLowerCase();
+        button.addEventListener('click', () => { form.elements[key].value = value; item.remove(); });
+        item.append(description, button); suggestions.append(item);
+      }
+      resultStatus.textContent = filled ? 'Filled ' + filled + (filled === 1 ? ' empty field.' : ' empty fields.') + ' Review the details and save.' : 'No empty fields were filled. Review the details and save.';
+      if (alternatives) resultStatus.textContent += ' Open Library also suggested alternatives below.';
+    } catch (error) { resultStatus.textContent = message(error); } finally { $('lookup').disabled = false; }
   });
   $('book-form').addEventListener('submit', async event => {
     event.preventDefault(); if (busy) return;
+    if (legacyLibrary) { formStatus('Update the library before saving book details. Close this window and choose Update library.'); return; }
     const form = event.currentTarget, enteredIsbn = form.elements.isbn.value.trim();
     const isbn = normalizeIsbn(enteredIsbn);
     if (enteredIsbn && !isbn) { formStatus('Enter a valid ISBN-10 or ISBN-13, or leave it blank.'); return; }
@@ -235,13 +282,13 @@
     if (isbn && books.some(book => book.id !== editingBook?.id && normalizeIsbn(book.isbn) === isbn)) { formStatus('This ISBN is already in the catalog.'); return; }
     busy = true; $('save').disabled = true; $('delete').disabled = true; formStatus('Saving…');
     try {
-      const row = [editingBook?.id || crypto.randomUUID(), isbn, form.elements.title.value.trim(), form.elements.author.value.trim(), form.elements.language.value.trim(), form.elements.notes.value.trim(), editingBook?.created_at || new Date().toISOString()];
+      const row = [editingBook?.id || crypto.randomUUID(), isbn, form.elements.title.value.trim(), form.elements.author.value.trim(), form.elements.language.value.trim(), form.elements.notes.value.trim(), editingBook?.created_at || new Date().toISOString(), form.elements.publisher.value.trim(), form.elements.publication_year.value.trim()];
       if (!row[2]) throw new Error('Enter a title.');
       if (editingBook) {
         const rowNumber = await findUnchangedBook(editingBook);
-        await api('/values/' + encodeURIComponent("'Books'!A" + rowNumber + ':G' + rowNumber) + '?valueInputOption=RAW', { method: 'PUT', body: JSON.stringify({ values: [row] }) });
+        await api('/values/' + encodeURIComponent("'Books'!A" + rowNumber + (legacyLibrary ? ':G' : ':I') + rowNumber) + '?valueInputOption=RAW', { method: 'PUT', body: JSON.stringify({ values: [row] }) });
       } else {
-        await api('/values/' + encodeURIComponent("'Books'!A:G") + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', { method: 'POST', body: JSON.stringify({ values: [row] }) });
+        await api('/values/' + encodeURIComponent("'Books'!A:I") + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', { method: 'POST', body: JSON.stringify({ values: [row] }) });
       }
       await finishChange('Book saved.');
     } catch (error) { formStatus('Save failed or could not be confirmed. Refresh the catalog before retrying: ' + message(error)); }
