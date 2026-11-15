@@ -1,10 +1,10 @@
 # Anna’s Annals
 
-A simple book catalog with a GitHub Pages interface and a private, shareable Google Sheet as its database. You can browse and search, scan an ISBN with a camera or photo, look up book details, and add books.
+A simple book catalog with a GitHub Pages interface and a private, shareable Google Sheet as its database. You can browse and search, scan an ISBN with a camera or photo, look up book details, and add, edit, or delete books.
 
 **This version does not use Google Apps Script.** The website asks each person to authorize access with their own Google account and calls the Google Sheets API directly. The site itself is public; the Sheet stays private and controls who can read or edit it.
 
-This is an early prototype. Google sign-in and opening a Sheet have been tried in a live deployment; scanner and shared-user flows still need broader testing. Editing and deleting books are not implemented yet.
+This is an early prototype. Google sign-in and opening a Sheet have been tried in a live deployment; scanner and shared-user flows still need broader testing. Editing and deletion need live testing with multiple accounts.
 
 ## What you will need
 
@@ -108,9 +108,9 @@ GitHub secret scanning may flag the key because it is published. If the restrict
 1. Open the Pages site. Click **Create new library** to create and initialize a new Sheet, or **Connect Google Sheet** to select an existing one. A connected user can also select **New library** to create another Sheet.
 2. Choose the Google account that owns the Sheet or that the Sheet was shared with. Approve the requested access.
 3. If connecting an existing library, select it in Google Picker. If creating a library, enter a name and the app creates and opens it in your Google Drive. Each person connecting must choose the shared file for their own account. The app remembers the chosen Sheet in this browser and restores the catalog after a reload while the Google session is valid. After it expires, reconnect without selecting the Sheet again. Choose **Choose a different Sheet** if needed. If it isn't visible, look in the shared-files view and check that the correct Google account has access.
-4. Search the catalog or choose **Add book**. Scan or type an ISBN, optionally look it up, review the details, and save. A viewer can browse but cannot save.
+4. Search the catalog or choose **Add book**. Scan or type an ISBN, optionally look it up, review the details, and save. Choose **Edit** on a book to change or delete it. A viewer can browse but cannot save changes.
 
-Google access tokens expire, so you may need to reconnect. The Sheet ID is stored in browser local storage, and the short-lived access token is stored in session storage to survive reloads in the same tab. Scripts running on this site can access that token. Catalog data is not deliberately stored in browser storage. Disconnect clears the session and forgets the Sheet but does not revoke the Google grant. To revoke it, use your [Google Account connections](https://myaccount.google.com/connections).
+Google access tokens expire, so you may need to reconnect. The Sheet ID is stored in browser local storage, and the short-lived access token is stored in session storage to survive reloads in the same tab. Scripts running on this site can access that token. A catalog snapshot is also stored in session storage for fast reloads in the same tab. It can briefly be shown before a fresh permission check and remains available in that tab during a network outage; avoid this on shared devices. Closing the tab normally ends the session. Disconnect clears the session and forgets the Sheet but does not revoke the Google grant. To revoke it, use your [Google Account connections](https://myaccount.google.com/connections).
 
 ## Troubleshooting and current limitations
 
@@ -119,9 +119,9 @@ Google access tokens expire, so you may need to reconnect. The Sheet ID is store
 - **Access blocked during testing:** add the person's Google account as a test user and verify that the Sheet is shared with that account.
 - **Sheet or header error:** select the new spreadsheet and confirm the `Books` tab and all seven headers match exactly.
 - **Can't save:** confirm the account has Editor access. If a save fails or its response is lost, refresh before retrying to avoid a duplicate.
-- **Camera doesn't start:** open the site over HTTPS and allow camera access; you can also scan a photo or enter the ISBN manually. ISBN lookup sends the ISBN to [Open Library](https://openlibrary.org/); a missing match does not prevent manual entry.
+- **Camera doesn't start:** open the site over HTTPS and allow camera access; you can also scan a photo or enter the ISBN manually. ISBN lookup sends the ISBN to [Open Library](https://openlibrary.org/); a missing match does not prevent manual entry. Valid ISBN-10 values are converted to ISBN-13 and saved without hyphens; ISBN-13 check digits are validated. Existing Sheet rows are not automatically rewritten.
 - **Creating a library:** if a creation request fails or times out, check Google Drive before retrying; the Sheet might have been created even if the response was lost.
-- **Shared edits:** simultaneous additions can create duplicate ISBNs. Editing, deletion, conflict handling, persistent caching and migration are not implemented.
+- **Shared edits:** simultaneous additions can create duplicate ISBNs. Before editing or deleting, the app checks whether the record has changed and stops if it finds a conflict. This check and the write are separate requests, so simultaneous edits or row changes between them can still overwrite or affect the wrong row. Avoid concurrent edits and verify changes in the Sheet. Long-term caching and migration are not implemented.
 
 ## Local development
 
