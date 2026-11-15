@@ -114,30 +114,36 @@
     }
     for (const book of filtered) {
       if (viewMode === 'list') {
-        const row = document.createElement('tr');
-        for (const [index, value] of [book.title, book.author, book.publisher, book.category, book.shelf_location].entries()) { const cell = document.createElement('td'); cell.textContent = value || '—'; if (index === 0 && duplicatesMode) { const reason = document.createElement('div'); reason.className = 'duplicate-reason'; reason.textContent = duplicateReasons.get(book).join(' · '); cell.append(reason); } row.append(cell); }
+        const row = document.createElement('tr'); row.className = 'book-row'; row.addEventListener('click', () => showDetails(book));
+        for (const [index, value] of [book.title, book.author, book.publisher, book.category, book.shelf_location].entries()) {
+          const cell = document.createElement('td');
+          if (index === 0) { const title = document.createElement('button'); title.type = 'button'; title.className = 'book-title-button'; title.textContent = value; title.addEventListener('click', event => { event.stopPropagation(); showDetails(book); }); cell.append(title); }
+          else cell.textContent = value || '—';
+          if (index === 0 && duplicatesMode) { const reason = document.createElement('div'); reason.className = 'duplicate-reason'; reason.textContent = duplicateReasons.get(book).join(' · '); cell.append(reason); }
+          row.append(cell);
+        }
         const actions = document.createElement('td'); actions.className = 'list-actions';
-        const view = document.createElement('button'); view.type = 'button'; view.className = 'secondary'; view.textContent = 'Details'; view.setAttribute('aria-label', 'View details for ' + book.title); view.addEventListener('click', () => showDetails(book)); actions.append(view);
-        const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary'; edit.textContent = book.id ? 'Edit' : 'Assign ID'; edit.setAttribute('aria-label', (book.id ? 'Edit ' : 'Assign ID to ') + book.title); edit.addEventListener('click', () => book.id ? openEditor(book) : assignBookId(book, edit)); actions.append(edit);
+        const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary' + (book.id ? ' icon-button' : ''); edit.title = book.id ? 'Edit details' : 'Assign ID'; edit.setAttribute('aria-label', (book.id ? 'Edit ' : 'Assign ID to ') + book.title);
+        if (book.id) { const icon = document.createElement('span'); icon.className = 'material-symbol'; icon.textContent = 'edit'; icon.setAttribute('aria-hidden', 'true'); edit.append(icon); } else edit.textContent = 'Assign ID';
+        edit.addEventListener('click', event => { event.stopPropagation(); if (book.id) openEditor(book); else assignBookId(book, edit); }); actions.append(edit);
         row.append(actions); listBody.append(row); continue;
       }
-      const card = document.createElement('article'); card.className = 'book';
+      const card = document.createElement('article'); card.className = 'book'; card.addEventListener('click', () => showDetails(book));
       const content = document.createElement('div'); content.className = 'book-content';
       const cover = document.createElement('div'); cover.className = 'cover-placeholder'; cover.setAttribute('aria-hidden', 'true'); cover.textContent = '▤'; content.append(cover);
       const details = document.createElement('div'); details.className = 'book-details';
       for (const [tag, value] of [['h3', book.title], ['p', book.author], ['p', book.publisher], ['p', book.publication_year], ['p', book.language], ['p', book.shelf_location], ['p', book.category], ['p', book.series_name ? book.series_name + (book.volume_number ? ' · Vol. ' + book.volume_number : '') : ''], ['p', book.pages ? book.pages + ' pages' : ''], ['p', book.isbn]]) {
-        if (value) { const el = document.createElement(tag); el.textContent = value; details.append(el); }
+        if (value) { const el = document.createElement(tag); if (tag === 'h3') { const title = document.createElement('button'); title.type = 'button'; title.className = 'book-title-button'; title.textContent = value; title.addEventListener('click', event => { event.stopPropagation(); showDetails(book); }); el.append(title); } else el.textContent = value; details.append(el); }
       }
       if (duplicatesMode) { const reason = document.createElement('p'); reason.className = 'duplicate-reason'; reason.textContent = duplicateReasons.get(book).join(' · '); details.append(reason); }
       content.append(details); card.append(content);
-      const view = document.createElement('button'); view.type = 'button'; view.className = 'secondary book-view'; view.textContent = 'View details'; view.setAttribute('aria-label', 'View details for ' + book.title); view.addEventListener('click', () => showDetails(book));
-      const actions = document.createElement('div'); actions.className = 'book-actions'; actions.append(view);
+      const actions = document.createElement('div'); actions.className = 'book-actions';
       const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary book-edit'; edit.title = 'Edit details'; edit.setAttribute('aria-label', 'Edit ' + book.title);
       if (!book.id) {
         edit.textContent = 'Assign ID'; edit.setAttribute('aria-label', 'Assign ID to ' + book.title);
         const hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = 'This book needs an ID before it can be edited.'; card.append(hint);
-        edit.addEventListener('click', () => assignBookId(book, edit));
-      } else { const icon = document.createElement('span'); icon.className = 'material-symbol'; icon.textContent = 'edit'; icon.setAttribute('aria-hidden', 'true'); edit.append(icon); edit.addEventListener('click', () => openEditor(book)); }
+        edit.addEventListener('click', event => { event.stopPropagation(); assignBookId(book, edit); });
+      } else { const icon = document.createElement('span'); icon.className = 'material-symbol'; icon.textContent = 'edit'; icon.setAttribute('aria-hidden', 'true'); edit.append(icon); edit.addEventListener('click', event => { event.stopPropagation(); openEditor(book); }); }
       actions.append(edit); card.append(actions);
       $('books').append(card);
     }

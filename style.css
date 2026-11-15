@@ -179,3 +179,8 @@ button.upgrade-button:hover { background: #9a4032; border-color: #9a4032; opacit
 
 .scroll-top { display: none; position: fixed; right: 18px; bottom: max(18px, env(safe-area-inset-bottom)); z-index: 10; width: 48px; height: 48px; padding: 0; border-radius: 50%; place-items: center; box-shadow: 0 4px 14px #1c191733; }
 @media (max-width: 700px) { .scroll-top:not([hidden]) { display: grid; } }
+.book, .book-row { cursor: pointer; }
+.book-title-button { color: inherit; background: transparent; border: 0; padding: 0; white-space: normal; text-align: left; font: inherit; }
+.book-title-button:hover { text-decoration: underline; opacity: 1; }
+.book-title-button:focus-visible { outline: 2px solid #78716c; outline-offset: 3px; }
+.book-actions { justify-content: flex-end; }

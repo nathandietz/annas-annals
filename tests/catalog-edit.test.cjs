@@ -22,7 +22,7 @@ async function fixture({ legacy = false, extraData = false, nine = false, reorde
   const card = element('books').children[0];
   const edit = card.children.find(child => child.className === 'book-actions').children.find(child => child.className.includes('book-edit'));
   assert.ok(edit);
-  edit.onclick();
+  edit.onclick({ stopPropagation() {} });
   return { handlers, form, requests, element, changeRow: value => { row = value; } };
 }
 
