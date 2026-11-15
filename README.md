@@ -75,10 +75,10 @@ A browser API key is visible to site visitors; website and API restrictions limi
 
 1. Open the Pages site and click **Connect Google Sheet**.
 2. Choose the Google account that owns the Sheet or that the Sheet was shared with. Approve the requested access.
-3. In Google Picker, select the new spreadsheet. Each person connecting must choose the shared file for their own account. If it isn't visible, look in the shared-files view and check that the correct Google account has access.
+3. In Google Picker, select the new spreadsheet. Each person connecting must choose the shared file for their own account. The app remembers the chosen Sheet in this browser; after a reload, reconnect with Google without selecting it again. Choose **Choose a different Sheet** if needed. If it isn't visible, look in the shared-files view and check that the correct Google account has access.
 4. Search the catalog or choose **Add book**. Scan or type an ISBN, optionally look it up, review the details, and save. A viewer can browse but cannot save.
 
-If authorization expires, use **Disconnect**, then connect again. The app does not deliberately save catalog data or access tokens in browser storage; disconnect clears its in-memory catalog but does not revoke the Google grant. To revoke it, use your [Google Account connections](https://myaccount.google.com/connections).
+If authorization expires, use **Disconnect**, then connect again. The app stores the selected Sheet ID in browser storage, but does not deliberately store catalog data or access tokens there. Disconnect forgets the Sheet and clears the in-memory catalog but does not revoke the Google grant. To revoke it, use your [Google Account connections](https://myaccount.google.com/connections).
 
 ## Troubleshooting and current limitations
 

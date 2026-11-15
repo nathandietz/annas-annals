@@ -4,11 +4,25 @@
   const config = window.LIBRARY_CONFIG;
   const scope = 'https://www.googleapis.com/auth/drive.file';
   const headers = ['id', 'isbn', 'title', 'author', 'language', 'notes', 'created_at'];
+  const storageKey = 'annas-annals-sheet-id';
   let token = '', sheetId = '', books = [], pickerReady = false, busy = false;
+  let rememberedSheet = '';
+  try { rememberedSheet = localStorage.getItem(storageKey) || ''; } catch {}
   const scanner = createLibraryScanner();
   const status = message => { $('status').textContent = message; };
   const formStatus = message => { $('form-status').textContent = message; };
   function message(error) { return error?.message || 'Something went wrong. Please try again.'; }
+  function updateConnect() {
+    $('signin').textContent = rememberedSheet ? 'Reconnect to Google Sheet' : 'Connect Google Sheet';
+    $('choose-sheet').hidden = !rememberedSheet;
+  }
+  function rememberSheet(id) {
+    rememberedSheet = id;
+    try { if (id) localStorage.setItem(storageKey, id); else localStorage.removeItem(storageKey); } catch {}
+    updateConnect();
+  }
+  function showLibrary() { $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; }
+  updateConnect();
   function clearSession() { token = ''; sheetId = ''; books = []; $('books').replaceChildren(); $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; }
   async function api(path, options = {}) {
     const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(sheetId) + path, {
@@ -46,21 +60,29 @@
       .setCallback(async result => {
         if (result.action !== google.picker.Action.PICKED) return;
         sheetId = result.docs[0].id;
-        try { await refresh(); $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; }
+        try { await refresh(); rememberSheet(sheetId); showLibrary(); }
         catch (error) { sheetId = ''; status(message(error)); }
       }).build().setVisible(true);
   }
-  $('signin').addEventListener('click', () => {
+  function connect(chooseAnother = false) {
     if (!config.clientId || !config.apiKey || !config.appId) { status('Setup needed: add the Google Cloud identifiers to config.js. See the setup guide.'); return; }
     if (!window.google?.accounts?.oauth2 || !window.gapi) { status('Google sign-in is still loading. Please try again.'); return; }
-    const client = google.accounts.oauth2.initTokenClient({ client_id: config.clientId, scope, callback: response => {
+    const client = google.accounts.oauth2.initTokenClient({ client_id: config.clientId, scope, callback: async response => {
       if (response.error) { status('Google authorization was not completed: ' + response.error); return; }
       token = response.access_token;
+      if (rememberedSheet && !chooseAnother) {
+        sheetId = rememberedSheet;
+        try { await refresh(); showLibrary(); }
+        catch (error) { sheetId = ''; status('Could not open the remembered Sheet: ' + message(error) + ' You can choose a different Sheet.'); }
+        return;
+      }
       if (pickerReady) openPicker(); else gapi.load('picker', { callback: () => { pickerReady = true; openPicker(); }, onerror: () => status('Google Picker could not load. Please try again.'), timeout: 10000, ontimeout: () => status('Google Picker took too long to load. Please try again.') });
     }});
     client.requestAccessToken();
-  });
-  $('disconnect').addEventListener('click', () => { clearSession(); status('Disconnected. No catalog is stored in this browser.'); });
+  }
+  $('signin').addEventListener('click', () => connect());
+  $('choose-sheet').addEventListener('click', () => connect(true));
+  $('disconnect').addEventListener('click', () => { clearSession(); rememberSheet(''); status('Disconnected. No catalog is stored in this browser.'); });
   $('refresh').addEventListener('click', () => refresh().catch(error => status(message(error))));
   $('search').addEventListener('input', render);
   $('add').addEventListener('click', () => { $('book-form').reset(); formStatus(''); $('editor').showModal(); });
