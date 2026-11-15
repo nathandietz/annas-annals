@@ -1,6 +1,6 @@
 /* Keep camera objects outside Alpine's reactive proxies. Serialize camera/file
  * operations so closing a modal or choosing a photo during startup is safe. */
-function createLibraryScanner() {
+function createLibraryScanner(readerId = 'universal-qr-reader') {
   let instance = null;
   let queue = Promise.resolve();
   let session = 0;
@@ -23,7 +23,7 @@ function createLibraryScanner() {
       throw new Error('Scanner could not load. Check your connection and reload this page.');
     }
     const formats = Html5QrcodeSupportedFormats;
-    return new Html5Qrcode('universal-qr-reader', {
+    return new Html5Qrcode(readerId, {
       formatsToSupport: [formats.QR_CODE, formats.EAN_13, formats.EAN_8,
         formats.UPC_A, formats.UPC_E, formats.CODE_128, formats.CODE_39],
       verbose: false

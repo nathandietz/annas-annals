@@ -184,3 +184,29 @@ button.upgrade-button:hover { background: #9a4032; border-color: #9a4032; opacit
 .book-title-button:hover { text-decoration: underline; opacity: 1; }
 .book-title-button:focus-visible { outline: 2px solid #78716c; outline-offset: 3px; }
 .book-actions { justify-content: flex-end; }
+
+.mode-toggle { display:flex; gap:4px; width:max-content; padding:4px; margin: 0 0 18px; border:1px solid #e7e5e4; border-radius:12px; background:#f5f5f4; }
+.mode-toggle button { color:#57534e; background:transparent; border:0; }
+.mode-toggle button[aria-pressed="true"] { background:white; color:#1c1917; box-shadow:0 1px 3px #1c19171a; }
+#scan-view { max-width:700px; margin:auto; }
+.scan-search { display:grid; gap:12px; }
+#scan-start { min-height:52px; font-size:15px; }
+#check-form { display:flex; align-items:stretch; gap:8px; }
+#check-form input { min-width:0; flex:1; }
+#check-camera, .check-result { margin:16px 0; padding:16px; border:1px solid #e7e5e4; background:white; border-radius:16px; }
+.check-result button { margin:8px 8px 0 0; white-space:normal; }
+.scan-books { display:grid; gap:12px; }
+.scan-book { position:relative; display:flex; flex-direction:column; gap:5px; width:100%; text-align:left; white-space:normal; background:white; color:#292524; border:1px solid #e7e5e4; padding:16px 42px 16px 16px; font-size:15px; }
+.scan-book::after { content:'›'; position:absolute; right:16px; top:50%; transform:translateY(-50%); color:#a8a29e; font-size:24px; }
+.scan-book span { color:#78716c; font-size:13px; font-weight:400; }
+@media(max-width:700px) { .mode-toggle { margin-bottom:16px; } #scan-view { width:100%; } }
+
+/* Keep view navigation with settings and catalog status with the book count. */
+.site-header .mode-toggle { margin: 0; }
+.site-header #settings-open { margin-left: auto; }
+.catalog-meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 16px; margin: 16px 0; }
+.catalog-meta #status, .catalog-meta .hint { margin: 0; }
+@media (max-width: 700px) { .site-header .mode-toggle { margin: 0; } }
+
+.catalog-meta { gap: 6px; }
+.catalog-meta #status:not(:empty)::before { content: "|"; padding-right: 6px; color: #a8a29e; }
