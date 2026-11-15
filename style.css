@@ -60,3 +60,37 @@ button.upgrade-button:hover { background: #9a4032; border-color: #9a4032; opacit
 #editor #book-form { display: flex; flex-direction: column; max-height: 90vh; min-height: 0; }
 #editor .dialog-header { position: static; flex: 0 0 auto; margin: 0; padding: 20px 24px; border-bottom: 1px solid #e7e5e4; }
 #editor .editor-body { padding: 0 24px 24px; overflow-y: auto; min-height: 0; }
+
+.details-cover { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 110px; height: 150px; margin: 20px 0 4px; border: 1px solid #e7e5e4; border-radius: 10px; background: #fafaf9; color: #a8a29e; font-size: 11px; }
+.details-cover span:first-child { font-size: 28px; color: #d6d3d1; }
+
+.book-intro { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 20px; align-items: start; margin-top: 20px; }
+.book-intro .details-cover { width: 150px; height: 210px; margin: 0; }
+.intro-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.intro-fields label { margin-top: 0; }
+@media (max-width: 480px) { .book-intro { grid-template-columns: 105px minmax(0, 1fr); gap: 12px; } .book-intro .details-cover { width: 105px; height: 150px; } .intro-fields { grid-template-columns: 1fr; } }
+
+.intro-fields { grid-template-columns: minmax(0, 1fr); }
+.book-intro .details-cover { width: 150px; height: 225px; }
+@media (max-width: 480px) { .book-intro { grid-template-columns: 100px minmax(0, 1fr); gap: 12px; } .book-intro .details-cover { width: 100px; height: 150px; } .intro-fields label { margin-bottom: 10px; } }
+@media (max-width: 330px) { .book-intro { grid-template-columns: 1fr; } }
+@media (min-width: 481px) {
+  .intro-fields { min-height: 225px; align-content: space-between; }
+  .intro-fields label { margin-bottom: 0; }
+}
+#editor .intro-fields { align-content: space-between; }
+#editor .book-fields { row-gap: 16px; margin-top: 16px; }
+#editor .book-fields > label { margin: 0; }
+#editor .book-fields > #lookup-actions, #editor .book-fields > #lookup-results, #editor .book-fields > #scan-area { margin-top: 0; }
+@media (max-width: 480px) { #editor .intro-fields { gap: 16px; align-content: start; } #editor .intro-fields label { margin: 0; } }
+@media (min-width: 481px) {
+  #editor .book-fields { row-gap: 19px; margin-top: 19px; }
+}
+/* Keep 42px between field boxes: 21px row gap + 15px label + 6px label-to-input gap. */
+@media (min-width: 481px) {
+  #editor .intro-fields { min-height: 225px; align-content: start; row-gap: 21px; }
+  #editor .intro-fields label, #editor .book-fields > label { margin: 0; line-height: 15px; }
+  #editor .intro-fields input, #editor .book-fields > label > input { height: 40px; margin-top: 6px; }
+  #editor .book-fields { row-gap: 21px; margin-top: 21px; }
+  #editor .book-fields label .hint { line-height: inherit; }
+}

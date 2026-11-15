@@ -28,10 +28,12 @@
     </dialog>
     <dialog id="editor"><form id="book-form"><div class="dialog-header"><h2 id="editor-title">Add a book</h2><div class="actions"><button id="edit-from-details" type="button" hidden>Edit book</button><button id="save" type="submit">Save book</button><button id="cancel-edit" class="secondary" type="button" hidden>Cancel</button><button id="delete" class="secondary" type="button" hidden>Delete book</button><button type="button" id="close-editor" class="secondary">Close</button></div></div>
       <div class="editor-body">
+      <div class="book-intro">
+        <div class="details-cover" role="img" aria-label="Book cover placeholder"><span aria-hidden="true">▤</span><span>Book cover</span></div>
+        <div class="intro-fields"><label>Title <input name="title" required></label><label>Author <input name="author"></label><label>Series name <input name="series_name"></label></div>
+      </div>
       <div class="book-fields">
-        <label>Title <input name="title" required></label><label>Author <input name="author"></label>
-        <label>Series name <input name="series_name"></label><label>Volume number <input name="volume_number"></label>
-        <label>Publisher <input name="publisher"></label><label>Publication year <input name="publication_year" inputmode="numeric"></label>
+        <label>Volume number <input name="volume_number"></label><label>Publisher <input name="publisher"></label><label>Publication year <input name="publication_year" inputmode="numeric"></label>
         <label>Category <input name="category"></label><label>Language <input name="language"></label>
         <label>Pages <input name="pages" inputmode="numeric"></label><label>Shelf location <input name="shelf_location" placeholder="e.g. Living room, top shelf"></label>
         <label class="wide-field">ISBN <span class="hint">optional</span><input name="isbn" inputmode="numeric" autocomplete="off"></label>
