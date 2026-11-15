@@ -11,18 +11,17 @@ async function fixture({ legacy = false, extraData = false, nine = false, reorde
   if (nine) headers.splice(9);
   let row = ['id-1', '9780306406157', 'Original', 'Author', '', '', '2026-01-01', ...(extraData ? ['occupied'] : [])];
   if (reordered) { [headers[0], headers[2]] = [headers[2], headers[0]]; [row[0], row[2]] = [row[2], row[0]]; }
-  function element(id) { return elements[id] ||= { hidden: false, value: '', textContent: '', disabled: false, children: [], addEventListener(type, fn) { handlers[id + ':' + type] = fn; }, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, setAttribute() {}, removeAttribute() {}, showModal() {}, close() {}, reset() {} }; }
+  function element(id) { return elements[id] ||= { hidden: false, value: '', textContent: '', disabled: false, children: [], addEventListener(type, fn) { handlers[id + ':' + type] = fn; this['on' + type] = fn; }, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, setAttribute() {}, removeAttribute() {}, showModal() {}, close() {}, reset() {} }; }
   const form = element('book-form'); form.elements = Object.fromEntries(['isbn','title','author','language','notes','publisher','publication_year','shelf_location','category','description','series_name','volume_number','pages'].map(k => [k, { value: '' }]));
   const localStorage = { getItem: () => 'sheet-id', setItem() {}, removeItem() {} };
   const sessionStorage = { getItem: () => JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }), setItem() {}, removeItem() {} };
-  const context = vm.createContext({ document: { getElementById: element, createElement: tag => element('created-' + tag + '-' + Math.random()) }, window: { LIBRARY_CONFIG: {}, confirm: () => true }, localStorage, sessionStorage, createLibraryScanner: () => ({ stop: async () => {} }), normalizeIsbn, crypto: { randomUUID: () => 'new-id' }, fetch: async (url, options) => { requests.push({ url, options }); return { ok: true, json: async () => url.includes('fields=properties') ? { properties: { title: 'Library' } } : url.includes('fields=sheets') ? { sheets: [{ properties: { title: 'Books', sheetId: 0 } }] } : { values: [headers, row] } }; }, console });
+  const context = vm.createContext({ document: { getElementById: element, createElement: tag => element('created-' + tag + '-' + Math.random()) }, window: { LIBRARY_CONFIG: {}, confirm: () => true }, localStorage, sessionStorage, createLibraryScanner: () => ({ stop: async () => {} }), normalizeIsbn, crypto: { randomUUID: () => 'new-id' }, fetch: async (url, options) => { requests.push({ url, options }); return { ok: true, json: async () => url.includes('fields=properties') ? { properties: { title: 'Library' }, sheets: [{ properties: { title: 'Books', gridProperties: { frozenRowCount: 1 } } }] } : url.includes('fields=sheets') ? { sheets: [{ properties: { title: 'Books', sheetId: 0 } }] } : { values: [headers, row] } }; }, console });
   vm.runInContext(fs.readFileSync('app.js', 'utf8'), context);
   await new Promise(resolve => setImmediate(resolve));
   const card = element('books').children[0];
   const edit = card.children.find(child => child.textContent === 'Edit details');
   assert.ok(edit);
-  const click = Object.entries(handlers).find(([key]) => key.startsWith('created-button-') && key.endsWith(':click'))[1];
-  click();
+  edit.onclick();
   return { handlers, form, requests, element, changeRow: value => { row = value; } };
 }
 
@@ -115,4 +114,13 @@ test('editing locates book and writes values using reordered headers', async () 
 test('cancelling book deletion does not write to the Sheet', async () => {
   const f = await fixture(); f.handlers['delete:click'](); f.handlers['cancel-delete:click']();
   assert.equal(f.requests.filter(r => r.url.includes('batchClear')).length, 0);
+});
+
+
+test('library update includes freezing the header row', async () => {
+  const f = await fixture({ nine: true });
+  f.handlers['upgrade-library:click'](); await f.handlers['confirm-upgrade:click']();
+  const write = f.requests.find(r => r.url.endsWith(':batchUpdate'));
+  const freeze = JSON.parse(write.options.body).requests.find(r => r.updateSheetProperties);
+  assert.equal(freeze.updateSheetProperties.properties.gridProperties.frozenRowCount, 1);
 });

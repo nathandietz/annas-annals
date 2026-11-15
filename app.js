@@ -5,24 +5,27 @@
   const scope = 'https://www.googleapis.com/auth/drive.file';
   const headers = ['id', 'isbn', 'title', 'author', 'language', 'notes', 'created_at', 'publisher', 'publication_year', 'shelf_location', 'category', 'description', 'series_name', 'volume_number', 'pages', 'updated_at'];
   const preferredHeaders = ['title', 'author', 'series_name', 'volume_number', 'isbn', 'publisher', 'publication_year', 'category', 'language', 'pages', 'shelf_location', 'description', 'notes', 'id', 'created_at', 'updated_at'];
-  let sheetHeaders = [];
+  let sheetHeaders = [], headerFrozen = false;
   function column(index) { let n = index + 1, out = ''; while (n) { n--; out = String.fromCharCode(65 + n % 26) + out; n = Math.floor(n / 26); } return out; }
   function readHeaders(row) {
     const names = row || [];
-    const used = names.filter(Boolean);
-    if (new Set(used).size !== used.length) throw new Error('Duplicate column headers found. Fix them in the Sheet before continuing.');
+    const positions = new Map();
+    names.forEach((name, index) => { if (name) positions.set(name, [...(positions.get(name) || []), column(index)]); });
+    const duplicates = [...positions].filter(([, cols]) => cols.length > 1);
+    if (duplicates.length) throw new Error('Duplicate column headers: ' + duplicates.map(([name, cols]) => '“' + name + '” in columns ' + cols.join(', ')).join('; ') + '. Rename or remove the duplicate headers in the Sheet, then refresh.');
     for (const key of ['id', 'title']) if (!names.includes(key)) throw new Error('Missing required column: ' + key);
     return names;
   }
   function missingHeaders() { return headers.filter(key => !sheetHeaders.includes(key)); }
   function desiredOrder(names) { return [...preferredHeaders.filter(key => names.includes(key)), ...names.filter(key => !headers.includes(key))]; }
-  function needsUpdate() { return missingHeaders().length > 0 || JSON.stringify(sheetHeaders) !== JSON.stringify(desiredOrder(sheetHeaders)); }
+  function needsUpdate() { return !headerFrozen || missingHeaders().length > 0 || JSON.stringify(sheetHeaders) !== JSON.stringify(desiredOrder(sheetHeaders)); }
   function record(row, names) { return Object.fromEntries(headers.map(key => [key, names.indexOf(key) < 0 ? '' : String(row[names.indexOf(key)] ?? '')])); }
   const storageKey = 'annas-annals-sheet-id';
   const sessionKey = 'annas-annals-google-session';
   const cacheKey = 'annas-annals-catalog-snapshot';
   let token = '', sheetId = '', books = [], pickerReady = false, busy = false, creatingLibrary = false, libraryWidth = 16;
-  let rememberedSheet = '', editingBook = null;
+  let rememberedSheet = '', editingBook = null, viewMode = 'card', sortField = '', sortDirection = 1;
+  try { const savedView = localStorage.getItem('annas-annals-view'); if (['card', 'list'].includes(savedView)) viewMode = savedView; } catch {}
   try { rememberedSheet = localStorage.getItem(storageKey) || ''; } catch {}
   const scanner = createLibraryScanner();
   const status = message => { $('status').textContent = message; };
@@ -37,9 +40,9 @@
     try { if (id) localStorage.setItem(storageKey, id); else localStorage.removeItem(storageKey); } catch {}
     updateConnect();
   }
-  function showLibrary() { $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('new-library-connected').hidden = false;  $('library-actions').hidden = false; $('search').disabled = false; }
+  function showLibrary() { $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('new-library-connected').hidden = false;  $('library-actions').hidden = false; $('filters').hidden = false; $('view-switcher').hidden = false; $('search').disabled = false; }
   updateConnect();
-  function clearSession() { try { sessionStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true;  }
+  function clearSession() { try { sessionStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('filters').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true;  }
   async function api(path, options = {}) {
     const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(sheetId) + path, {
       ...options, headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
@@ -52,23 +55,69 @@
     status('Refreshing catalog…');
     const [data, spreadsheet] = await Promise.all([
       api('/values/' + encodeURIComponent("'Books'!A:ZZ")),
-      api('?fields=properties(title)')
+      api('?fields=properties(title),sheets(properties(title,gridProperties(frozenRowCount)))')
     ]);
     const rows = data.values || [];
     const foundHeaders = rows[0] || [];
     sheetHeaders = readHeaders(foundHeaders); libraryWidth = sheetHeaders.length;
+    headerFrozen = (spreadsheet.sheets?.find(item => item.properties?.title === 'Books')?.properties?.gridProperties?.frozenRowCount || 0) >= 1;
     $('upgrade-library').hidden = !needsUpdate();
     books = rows.slice(1).map(row => record(row, sheetHeaders)).filter(book => book.title);
     $('library-name').textContent = spreadsheet.properties?.title || 'Your library';
     const updatedAt = Date.now();
-    try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title: $('library-name').textContent, books, updatedAt, sheetHeaders })); } catch {}
-    render(); status('Catalog updated ' + new Date(updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '.');
+    try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title: $('library-name').textContent, books, updatedAt, sheetHeaders, headerFrozen })); } catch {}
+    updateFilters(); render(); status('Catalog updated ' + new Date(updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '.');
+  }
+  const filterFields = [['category', 'filter-category', 'All categories'], ['language', 'filter-language', 'All languages'], ['series_name', 'filter-series', 'All series']];
+  function updateFilters() {
+    for (const [field, id, label] of filterFields) {
+      const select = $(id), previous = select.value;
+      const values = [...new Set(books.map(book => book[field].trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+      select.replaceChildren();
+      for (const value of ['', ...values]) { const option = document.createElement('option'); option.value = value; option.textContent = value || label; select.append(option); }
+      select.value = values.includes(previous) ? previous : '';
+    }
   }
   function render() {
     const query = $('search').value.trim().toLocaleLowerCase();
-    const filtered = books.filter(book => [book.title, book.author, book.isbn, book.shelf_location, book.category, book.series_name, book.description].some(value => value.toLocaleLowerCase().includes(query)));
-    $('books').replaceChildren();
+    const filtered = books.filter(book => [book.title, book.author, book.isbn, book.shelf_location, book.category, book.series_name, book.description].some(value => value.toLocaleLowerCase().includes(query)) && filterFields.every(([field, id]) => !$(id).value || book[field].trim() === $(id).value));
+    if (viewMode === 'list' && sortField) filtered.sort((a, b) => {
+      const left = a[sortField].trim(), right = b[sortField].trim();
+      if (!left || !right) return left ? -1 : right ? 1 : 0;
+      return sortDirection * left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' });
+    });
+    const container = $('books'); container.replaceChildren(); container.className = 'books view-' + viewMode;
+    for (const mode of ['card', 'list']) $('view-' + mode).setAttribute('aria-pressed', String(viewMode === mode));
+    let listBody;
+    if (viewMode === 'list') {
+      const table = document.createElement('table'); table.className = 'catalog-table';
+      const head = document.createElement('thead'), row = document.createElement('tr');
+      for (const [label, field] of [['Title','title'], ['Author','author'], ['Publisher','publisher'], ['Category','category'], ['Location','shelf_location'], ['Actions','']]) {
+        const cell = document.createElement('th'); cell.scope = 'col';
+        if (!field) cell.textContent = label;
+        else {
+          if (sortField === field) cell.setAttribute('aria-sort', sortDirection === 1 ? 'ascending' : 'descending');
+          const button = document.createElement('button'); button.type = 'button'; button.className = 'sort-button';
+          button.textContent = label;
+          const indicator = document.createElement('span'); indicator.className = 'sort-indicator' + (sortField === field ? ' active' : ''); indicator.setAttribute('aria-hidden', 'true');
+          indicator.textContent = sortField === field ? (sortDirection === 1 ? 'expand_less' : 'expand_more') : 'unfold_more'; button.append(indicator);
+          button.setAttribute('aria-label', 'Sort by ' + label + (sortField === field && sortDirection === 1 ? ', descending' : ', ascending'));
+          button.addEventListener('click', () => { sortDirection = sortField === field ? -sortDirection : 1; sortField = field; render(); });
+          cell.append(button);
+        }
+        row.append(cell);
+      }
+      head.append(row); table.append(head); listBody = document.createElement('tbody'); table.append(listBody); container.append(table);
+    }
     for (const book of filtered) {
+      if (viewMode === 'list') {
+        const row = document.createElement('tr');
+        for (const value of [book.title, book.author, book.publisher, book.category, book.shelf_location]) { const cell = document.createElement('td'); cell.textContent = value || '—'; row.append(cell); }
+        const actions = document.createElement('td'); actions.className = 'list-actions';
+        const view = document.createElement('button'); view.type = 'button'; view.className = 'secondary'; view.textContent = 'Details'; view.setAttribute('aria-label', 'View details for ' + book.title); view.addEventListener('click', () => showDetails(book)); actions.append(view);
+        const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary'; edit.textContent = book.id ? 'Edit' : 'Assign ID'; edit.setAttribute('aria-label', (book.id ? 'Edit ' : 'Assign ID to ') + book.title); edit.addEventListener('click', () => book.id ? openEditor(book) : assignBookId(book, edit)); actions.append(edit);
+        row.append(actions); listBody.append(row); continue;
+      }
       const card = document.createElement('article'); card.className = 'book';
       const content = document.createElement('div'); content.className = 'book-content';
       const cover = document.createElement('div'); cover.className = 'cover-placeholder'; cover.setAttribute('aria-hidden', 'true'); cover.textContent = '▤'; content.append(cover);
@@ -77,6 +126,7 @@
         if (value) { const el = document.createElement(tag); el.textContent = value; details.append(el); }
       }
       content.append(details); card.append(content);
+      const view = document.createElement('button'); view.type = 'button'; view.className = 'secondary book-view'; view.textContent = 'View details'; view.setAttribute('aria-label', 'View details for ' + book.title); view.addEventListener('click', () => showDetails(book)); card.append(view);
       const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary book-edit'; edit.textContent = 'Edit details'; edit.setAttribute('aria-label', 'Edit ' + book.title);
       if (!book.id) {
         edit.textContent = 'Assign ID'; edit.setAttribute('aria-label', 'Assign ID to ' + book.title);
@@ -189,8 +239,8 @@
     try {
       const snapshot = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
       if (snapshot?.sheetId === sheetId && Array.isArray(snapshot.books) && snapshot.books.every(book => headers.every(key => typeof book[key] === 'string')) && Number.isFinite(snapshot.updatedAt) && Array.isArray(snapshot.sheetHeaders)) {
-        sheetHeaders = readHeaders(snapshot.sheetHeaders); libraryWidth = sheetHeaders.length; $('upgrade-library').hidden = !needsUpdate();
-        books = snapshot.books; $('library-name').textContent = snapshot.title || 'Your library';
+        sheetHeaders = readHeaders(snapshot.sheetHeaders); headerFrozen = snapshot.headerFrozen === true; libraryWidth = sheetHeaders.length; $('upgrade-library').hidden = !needsUpdate();
+        books = snapshot.books; updateFilters(); $('library-name').textContent = snapshot.title || 'Your library';
         render(); showLibrary(); cached = true;
       }
     } catch {}
@@ -232,7 +282,8 @@
     missingHeaders().forEach(key => {
       const item = document.createElement('li'); item.textContent = 'Add ' + (labels[key] || key); list.append(item);
     });
-    const item = document.createElement('li'); item.textContent = 'Reorder library columns into the standard layout; custom columns follow.'; list.append(item);
+    if (!headerFrozen) { const item = document.createElement('li'); item.textContent = 'Freeze the header row.'; list.append(item); }
+    if (JSON.stringify(sheetHeaders) !== JSON.stringify(desiredOrder(sheetHeaders)) || missingHeaders().length) { const item = document.createElement('li'); item.textContent = 'Reorder library columns into the standard layout; custom columns follow.'; list.append(item); }
     $('upgrade-dialog').showModal();
   });
   $('cancel-upgrade').addEventListener('click', () => $('upgrade-dialog').close());
@@ -243,7 +294,7 @@
       status('Checking library columns…');
       const [data, metadata] = await Promise.all([
         api('/values/' + encodeURIComponent("'Books'!A:ZZ") + '?valueRenderOption=FORMULA'),
-        api('?fields=sheets(properties(sheetId,title))')
+        api('?fields=sheets(properties(sheetId,title,gridProperties(frozenRowCount)))')
       ]);
       const rows = data.values || [], names = readHeaders(rows[0] || []);
       if (JSON.stringify(names) !== JSON.stringify(sheetHeaders)) throw new Error('The headers changed. Refresh before updating.');
@@ -259,13 +310,31 @@
         requests.push({ moveDimension: { source: { sheetId: id, dimension: 'COLUMNS', startIndex: source, endIndex: source + 1 }, destinationIndex: target } });
         current.splice(target, 0, current.splice(source, 1)[0]);
       });
+      requests.push({ updateSheetProperties: { properties: { sheetId: id, gridProperties: { frozenRowCount: Math.max(1, sheet.properties.gridProperties?.frozenRowCount || 0) } }, fields: 'gridProperties.frozenRowCount' } });
       if (requests.length) await api(':batchUpdate', { method: 'POST', body: JSON.stringify({ requests }) });
       await refresh(); status('Library updated.');
     } catch (error) { status('Library update failed: ' + message(error)); }
     finally { busy = false; $('upgrade-library').disabled = false; }
   });
   $('refresh').addEventListener('click', () => refresh().catch(error => status(message(error))));
+  for (const mode of ['card', 'list']) $('view-' + mode).addEventListener('click', () => {
+    viewMode = mode; try { localStorage.setItem('annas-annals-view', mode); } catch {} render();
+  });
   $('search').addEventListener('input', render);
+  for (const [, id] of filterFields) $(id).addEventListener('change', render);
+  let selectedBook = null;
+  function showDetails(book) {
+    selectedBook = book; $('details-title').textContent = book.title;
+    const list = $('details-content'); list.replaceChildren();
+    for (const [key, label] of [['author','Author'], ['isbn','ISBN'], ['publisher','Publisher'], ['publication_year','Publication year'], ['language','Language'], ['category','Category'], ['series_name','Series'], ['volume_number','Volume'], ['pages','Pages'], ['shelf_location','Shelf location'], ['description','Description'], ['notes','Notes'], ['created_at','Created'], ['updated_at','Updated']]) {
+      if (!book[key]) continue;
+      const term = document.createElement('dt'); term.textContent = label;
+      const value = document.createElement('dd'); value.textContent = book[key]; list.append(term, value);
+    }
+    $('edit-from-details').hidden = !book.id; $('details-dialog').showModal();
+  }
+  $('close-details').addEventListener('click', () => $('details-dialog').close());
+  $('edit-from-details').addEventListener('click', () => { $('details-dialog').close(); if (selectedBook) openEditor(selectedBook); });
   function openEditor(book = null) {
     editingBook = book ? { ...book } : null;
     const form = $('book-form'); form.reset();

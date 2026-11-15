@@ -22,3 +22,27 @@ button.upgrade-button:hover { background: #9a4032; border-color: #9a4032; opacit
 .book { display: flex; flex-direction: column; }
 .book-edit { margin-top: auto; }
 .book-content, .book > .hint { margin-bottom: 14px; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.filters select { min-width: 130px; padding: 10px 12px; border: 1px solid #e7e5e4; border-radius: 12px; background: #fafaf9; color: #292524; font: 12px Inter, system-ui, sans-serif; }
+.book-view { width: 100%; margin-top: auto; }
+.book-edit { margin-top: 8px; }
+.details-list { display: grid; grid-template-columns: minmax(90px, 130px) 1fr; gap: 10px 16px; line-height: 1.5; overflow-wrap: anywhere; }
+.details-list dt { color: #78716c; font-weight: 600; font-size: 12px; }
+.details-list dd { margin: 0; white-space: pre-wrap; }
+.view-switcher { display: inline-flex; gap: 2px; padding: 4px; border: 1px solid #e7e5e4; border-radius: 12px; background: #f5f5f4; }
+.view-switcher button { background: transparent; border: 0; color: #78716c; padding: 7px 10px; border-radius: 8px; }
+.view-switcher button[aria-pressed="true"] { background: white; color: #1c1917; box-shadow: 0 1px 3px #1c19171a; }
+.books.view-list { display: block; overflow-x: auto; background: white; border: 1px solid #e7e5e4; border-radius: 16px; }
+.catalog-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; }
+.catalog-table th { background: #fafaf9; color: #78716c; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+.catalog-table th, .catalog-table td { padding: 12px; border-bottom: 1px solid #f5f5f4; }
+.catalog-table td:first-child { font-weight: 600; }
+.list-actions { white-space: nowrap; text-align: right; }
+.list-actions button + button { margin-left: 6px; }
+.catalog-table .sort-button { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; }
+.catalog-table .sort-button:hover { color: #1c1917; opacity: 1; }
+.catalog-table .sort-button:focus-visible { outline: 2px solid #78716c; outline-offset: 4px; }
+
+.sort-indicator { font-family: 'Material Symbols Outlined'; font-weight: normal; font-style: normal; font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased; display: inline-block; vertical-align: middle; margin-left: 6px; color: #a8a29e; font-size: 16px; line-height: 1; }
+.sort-indicator.active { color: #292524; }
+.sort-indicator { text-transform: none; letter-spacing: normal; }
