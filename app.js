@@ -2,6 +2,8 @@
 (() => {
   const $ = id => document.getElementById(id);
   const config = window.LIBRARY_CONFIG;
+  window.addEventListener('scroll', () => { $('scroll-top').hidden = window.scrollY < 300; }, { passive: true });
+  $('scroll-top').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
   if (typeof ResizeObserver !== 'undefined' && document.documentElement) {
     const toolbar = document.querySelector('.toolbar');
     if (toolbar) new ResizeObserver(() => document.documentElement.style.setProperty('--toolbar-height', toolbar.offsetHeight + 'px')).observe(toolbar);
@@ -44,9 +46,9 @@
     try { if (id) localStorage.setItem(storageKey, id); else localStorage.removeItem(storageKey); } catch {}
     updateConnect();
   }
-  function showLibrary() { $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('new-library-connected').hidden = false; $('transfer-actions').hidden = false; $('settings-open').hidden = false;  $('library-actions').hidden = false; $('filters').hidden = false; $('view-switcher').hidden = false; $('search').disabled = false; }
+  function showLibrary() { $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('new-library-connected').hidden = false; $('transfer-actions').hidden = false; $('settings-open').hidden = false;  $('library-actions').hidden = false; $('view-switcher').hidden = false; $('search').disabled = false; }
   updateConnect();
-  function clearSession() { try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('count').textContent = ''; duplicatesMode = false; $('all-books').hidden = true; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('filters').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true; $('transfer-actions').hidden = true; $('settings-open').hidden = true; if ($('settings-dialog').open) $('settings-dialog').close();  }
+  function clearSession() { try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('count').textContent = ''; duplicatesMode = false; $('all-books').hidden = true; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true; $('transfer-actions').hidden = true; $('settings-open').hidden = true; if ($('settings-dialog').open) $('settings-dialog').close();  }
   async function api(path, options = {}) {
     const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(sheetId) + path, {
       ...options, headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
@@ -70,17 +72,7 @@
     $('library-name').textContent = spreadsheet.properties?.title || 'Your library';
     const updatedAt = Date.now();
     try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title: $('library-name').textContent, books, updatedAt, sheetHeaders, headerFrozen })); } catch {}
-    updateFilters(); render(); status('Catalog updated ' + new Date(updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '.');
-  }
-  const filterFields = [['category', 'filter-category', 'All categories'], ['language', 'filter-language', 'All languages']];
-  function updateFilters() {
-    for (const [field, id, label] of filterFields) {
-      const select = $(id), previous = select.value;
-      const values = [...new Set(books.map(book => book[field].trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-      select.replaceChildren();
-      for (const value of ['', ...values]) { const option = document.createElement('option'); option.value = value; option.textContent = value || label; select.append(option); }
-      select.value = values.includes(previous) ? previous : '';
-    }
+    render(); status('Catalog updated ' + new Date(updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '.');
   }
   function render() {
     $('duplicates-toggle').setAttribute('aria-pressed', String(duplicatesMode));
@@ -91,7 +83,7 @@
       duplicateReasons.get(book).push(group.reason);
     }
     const query = $('search').value.trim().toLocaleLowerCase();
-    const filtered = books.filter(book => (!duplicatesMode || duplicateReasons.has(book)) && [book.title, book.author, book.isbn, book.shelf_location, book.category, book.series_name, book.description].some(value => value.toLocaleLowerCase().includes(query)) && filterFields.every(([field, id]) => !$(id).value || book[field].trim() === $(id).value));
+    const filtered = books.filter(book => (!duplicatesMode || duplicateReasons.has(book)) && [book.title, book.author, book.isbn, book.shelf_location, book.category, book.series_name, book.description].some(value => value.toLocaleLowerCase().includes(query)));
     if (viewMode === 'list' && sortField) filtered.sort((a, b) => {
       const left = a[sortField].trim(), right = b[sortField].trim();
       if (!left || !right) return left ? -1 : right ? 1 : 0;
@@ -255,7 +247,7 @@
       const snapshot = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
       if (snapshot?.sheetId === sheetId && Array.isArray(snapshot.books) && snapshot.books.every(book => headers.every(key => typeof book[key] === 'string')) && Number.isFinite(snapshot.updatedAt) && Array.isArray(snapshot.sheetHeaders)) {
         sheetHeaders = readHeaders(snapshot.sheetHeaders); headerFrozen = snapshot.headerFrozen === true; libraryWidth = sheetHeaders.length; $('upgrade-library').hidden = !needsUpdate();
-        books = snapshot.books; updateFilters(); $('library-name').textContent = snapshot.title || 'Your library';
+        books = snapshot.books; $('library-name').textContent = snapshot.title || 'Your library';
         render(); showLibrary(); cached = true;
       }
     } catch {}
@@ -404,7 +396,6 @@
     viewMode = mode; try { localStorage.setItem('annas-annals-view', mode); } catch {} render();
   });
   $('search').addEventListener('input', render);
-  for (const [, id] of filterFields) $(id).addEventListener('change', render);
   let editMode = false, deleteArmed = false, deleteTimer;
   function resetDelete() {
     deleteArmed = false; clearTimeout(deleteTimer);
