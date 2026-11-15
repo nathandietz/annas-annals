@@ -42,7 +42,7 @@
   }
   function showLibrary() { $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('new-library-connected').hidden = false; $('transfer-actions').hidden = false;  $('library-actions').hidden = false; $('filters').hidden = false; $('view-switcher').hidden = false; $('search').disabled = false; }
   updateConnect();
-  function clearSession() { try { sessionStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('filters').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true; $('transfer-actions').hidden = true;  }
+  function clearSession() { try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('filters').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true; $('transfer-actions').hidden = true;  }
   async function api(path, options = {}) {
     const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(sheetId) + path, {
       ...options, headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
@@ -211,7 +211,7 @@
       if (response.error) { status('Google authorization was not completed: ' + response.error); return; }
       token = response.access_token;
       try { sessionStorage.removeItem(cacheKey); } catch {}
-      try { sessionStorage.setItem(sessionKey, JSON.stringify({ token, expiresAt: Date.now() + Number(response.expires_in) * 1000 })); } catch {}
+      try { localStorage.setItem(sessionKey, JSON.stringify({ token, expiresAt: Date.now() + Number(response.expires_in) * 1000 })); } catch {}
       if (mode === 'create') {
         try { await createLibrary(libraryName); } catch (error) { status(message(error)); }
         return;
@@ -229,9 +229,9 @@
   async function restoreSession() {
     if (!rememberedSheet) { $('connect').hidden = false; status('Connect a private Google Sheet to get started.'); return; }
     let session;
-    try { session = JSON.parse(sessionStorage.getItem(sessionKey) || 'null'); } catch {}
+    try { session = JSON.parse(localStorage.getItem(sessionKey) || 'null'); } catch {}
     if (!session?.token || !Number.isFinite(session.expiresAt) || session.expiresAt <= Date.now() + 30000) {
-      try { sessionStorage.removeItem(sessionKey); } catch {}
+      try { localStorage.removeItem(sessionKey); } catch {}
       $('connect').hidden = false; status('Reconnect to your Google Sheet to continue.');
       return;
     }
@@ -275,7 +275,10 @@
   });
   $('new-library').addEventListener('click', requestNewLibrary);
   $('new-library-connected').addEventListener('click', requestNewLibrary);
-  $('disconnect').addEventListener('click', () => { clearSession(); rememberSheet(''); status('Disconnected. No catalog is stored in this browser.'); });
+  $('disconnect').addEventListener('click', () => { clearSession(); rememberSheet(''); status('Disconnected. No catalog is stored in this tab.'); });
+  window.addEventListener('storage', event => {
+    if (event.key === sessionKey && !event.newValue && token) { clearSession(); rememberSheet(''); status('Disconnected in another window.'); }
+  });
   $('upgrade-library').addEventListener('click', () => {
     if (busy || !libraryWidth || !needsUpdate()) return;
     const labels = { publisher: 'Publisher', publication_year: 'Publication year', shelf_location: 'Shelf location', category: 'Category', description: 'Description', series_name: 'Series name', volume_number: 'Volume number', pages: 'Pages', updated_at: 'Updated at' };
