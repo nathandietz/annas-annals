@@ -6,7 +6,7 @@
   const headers = ['id', 'isbn', 'title', 'author', 'language', 'notes', 'created_at'];
   const storageKey = 'annas-annals-sheet-id';
   const sessionKey = 'annas-annals-google-session';
-  let token = '', sheetId = '', books = [], pickerReady = false, busy = false;
+  let token = '', sheetId = '', books = [], pickerReady = false, busy = false, creatingLibrary = false;
   let rememberedSheet = '';
   try { rememberedSheet = localStorage.getItem(storageKey) || ''; } catch {}
   const scanner = createLibraryScanner();
@@ -24,7 +24,7 @@
   }
   function showLibrary() { $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('library-actions').hidden = false; $('search').disabled = false; }
   updateConnect();
-  function clearSession() { try { sessionStorage.removeItem(sessionKey); } catch {} token = ''; sheetId = ''; books = []; $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; }
+  function clearSession() { try { sessionStorage.removeItem(sessionKey); } catch {} token = ''; sheetId = ''; books = []; $('library-name').textContent = 'A personal library'; $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; }
   async function api(path, options = {}) {
     const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(sheetId) + path, {
       ...options, headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
@@ -35,10 +35,14 @@
   }
   async function refresh() {
     status('Loading your catalog…');
-    const data = await api('/values/' + encodeURIComponent("'Books'!A:G"));
+    const [data, spreadsheet] = await Promise.all([
+      api('/values/' + encodeURIComponent("'Books'!A:G")),
+      api('?fields=properties(title)')
+    ]);
     const rows = data.values || [];
     if (JSON.stringify(rows[0] || []) !== JSON.stringify(headers)) throw new Error('The Books tab is missing or its header does not match the required format. See the setup guide.');
     books = rows.slice(1).filter(row => row[0] && row[2]).map(row => Object.fromEntries(headers.map((key, i) => [key, row[i] || ''])));
+    $('library-name').textContent = spreadsheet.properties?.title || 'A personal library';
     render(); status('Catalog updated ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '.');
   }
   function render() {
@@ -65,14 +69,47 @@
         catch (error) { sheetId = ''; status(message(error)); }
       }).build().setVisible(true);
   }
-  function connect(chooseAnother = false) {
+  async function createLibrary(name) {
+    if (creatingLibrary) return;
+    creatingLibrary = true;
+    try {
+    status('Creating your library…');
+    let response;
+    try { response = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        properties: { title: name },
+        sheets: [{ properties: { title: 'Books', gridProperties: { frozenRowCount: 1 } },
+          data: [{ startRow: 0, startColumn: 0, rowData: [{ values: headers.map(header => ({ userEnteredValue: { stringValue: header } })) }] }] }]
+      })
+    });
+    } catch { throw new Error('Could not confirm creation. Check Google Drive before trying again.'); }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.spreadsheetId) throw new Error(data.error?.message || 'The creation result could not be confirmed. Check Google Drive before trying again.');
+    const previousSheet = sheetId;
+    sheetId = data.spreadsheetId;
+    rememberSheet(sheetId);
+    try { await refresh(); showLibrary(); status('New library created.'); }
+    catch (error) {
+      sheetId = previousSheet;
+      if (previousSheet) rememberSheet(previousSheet);
+      throw new Error('The new spreadsheet was created, but could not be opened. Find it in Google Drive and reconnect. ' + message(error));
+    }
+    } finally { creatingLibrary = false; }
+  }
+  function connect(mode = 'connect', libraryName = '') {
     if (!config.clientId || !config.apiKey || !config.appId) { status('Setup needed: add the Google Cloud identifiers to config.js. See the setup guide.'); return; }
     if (!window.google?.accounts?.oauth2 || !window.gapi) { status('Google sign-in is still loading. Please try again.'); return; }
     const client = google.accounts.oauth2.initTokenClient({ client_id: config.clientId, scope, callback: async response => {
       if (response.error) { status('Google authorization was not completed: ' + response.error); return; }
       token = response.access_token;
       try { sessionStorage.setItem(sessionKey, JSON.stringify({ token, expiresAt: Date.now() + Number(response.expires_in) * 1000 })); } catch {}
-      if (rememberedSheet && !chooseAnother) {
+      if (mode === 'create') {
+        try { await createLibrary(libraryName); } catch (error) { status(message(error)); }
+        return;
+      }
+      if (rememberedSheet && mode === 'connect') {
         sheetId = rememberedSheet;
         try { await refresh(); showLibrary(); }
         catch (error) { sheetId = ''; status('Could not open the remembered Sheet: ' + message(error) + ' You can choose a different Sheet.'); }
@@ -100,7 +137,17 @@
   }
   restoreSession();
   $('signin').addEventListener('click', () => connect());
-  $('choose-sheet').addEventListener('click', () => connect(true));
+  $('choose-sheet').addEventListener('click', () => connect('choose'));
+  function requestNewLibrary() {
+    if (creatingLibrary) return;
+    const name = window.prompt('Name your new library:', 'My Library');
+    if (name === null) return;
+    if (!name.trim()) { status('Enter a name for your new library.'); return; }
+    if (token) createLibrary(name.trim()).catch(error => status(message(error)));
+    else connect('create', name.trim());
+  }
+  $('new-library').addEventListener('click', requestNewLibrary);
+  $('new-library-connected').addEventListener('click', requestNewLibrary);
   $('disconnect').addEventListener('click', () => { clearSession(); rememberSheet(''); status('Disconnected. No catalog is stored in this browser.'); });
   $('refresh').addEventListener('click', () => refresh().catch(error => status(message(error))));
   $('search').addEventListener('input', render);

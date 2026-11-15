@@ -14,7 +14,9 @@ This is an early prototype. Google sign-in and opening a Sheet have been tried i
 
 The steps below are a one-time setup for the app and its Sheet. Each additional user will then authorize the app and select the shared Sheet once they connect.
 
-## 1. Prepare a private spreadsheet
+## 1. Prepare a private spreadsheet (optional)
+
+You can skip this step and use **Create new library** in the app after setup. The app creates a new spreadsheet with a `Books` tab and the required headers. To use an existing Sheet or prepare one manually, follow these steps:
 
 1. Create a **new** spreadsheet at [Google Sheets](https://sheets.google.com/create).
 2. Rename the first tab at the bottom to **Books**, exactly as written.
@@ -103,9 +105,9 @@ GitHub secret scanning may flag the key because it is published. If the restrict
 
 ## 6. Connect and use the library
 
-1. Open the Pages site and click **Connect Google Sheet**.
+1. Open the Pages site. Click **Create new library** to create and initialize a new Sheet, or **Connect Google Sheet** to select an existing one. A connected user can also select **New library** to create another Sheet.
 2. Choose the Google account that owns the Sheet or that the Sheet was shared with. Approve the requested access.
-3. In Google Picker, select the new spreadsheet. Each person connecting must choose the shared file for their own account. The app remembers the chosen Sheet in this browser and restores the catalog after a reload while the Google session is valid. After it expires, reconnect without selecting the Sheet again. Choose **Choose a different Sheet** if needed. If it isn't visible, look in the shared-files view and check that the correct Google account has access.
+3. If connecting an existing library, select it in Google Picker. If creating a library, enter a name and the app creates and opens it in your Google Drive. Each person connecting must choose the shared file for their own account. The app remembers the chosen Sheet in this browser and restores the catalog after a reload while the Google session is valid. After it expires, reconnect without selecting the Sheet again. Choose **Choose a different Sheet** if needed. If it isn't visible, look in the shared-files view and check that the correct Google account has access.
 4. Search the catalog or choose **Add book**. Scan or type an ISBN, optionally look it up, review the details, and save. A viewer can browse but cannot save.
 
 Google access tokens expire, so you may need to reconnect. The Sheet ID is stored in browser local storage, and the short-lived access token is stored in session storage to survive reloads in the same tab. Scripts running on this site can access that token. Catalog data is not deliberately stored in browser storage. Disconnect clears the session and forgets the Sheet but does not revoke the Google grant. To revoke it, use your [Google Account connections](https://myaccount.google.com/connections).
@@ -118,6 +120,7 @@ Google access tokens expire, so you may need to reconnect. The Sheet ID is store
 - **Sheet or header error:** select the new spreadsheet and confirm the `Books` tab and all seven headers match exactly.
 - **Can't save:** confirm the account has Editor access. If a save fails or its response is lost, refresh before retrying to avoid a duplicate.
 - **Camera doesn't start:** open the site over HTTPS and allow camera access; you can also scan a photo or enter the ISBN manually. ISBN lookup sends the ISBN to [Open Library](https://openlibrary.org/); a missing match does not prevent manual entry.
+- **Creating a library:** if a creation request fails or times out, check Google Drive before retrying; the Sheet might have been created even if the response was lost.
 - **Shared edits:** simultaneous additions can create duplicate ISBNs. Editing, deletion, conflict handling, persistent caching and migration are not implemented.
 
 ## Local development
