@@ -90,6 +90,7 @@
   }
   async function assignBookId(book, button) {
     if (busy) return;
+    if (!sheetHeaders.includes('updated_at')) { status('Update the library before assigning an ID so the update time can be recorded.'); return; }
     busy = true; button.disabled = true; status('Checking the book before assigning an ID…');
     try {
       const data = await api('/values/' + encodeURIComponent("'Books'!A:ZZ"));
@@ -102,7 +103,11 @@
       });
       if (matches.length !== 1) throw new Error(matches.length ? 'More than one matching row has no ID. Make the rows distinct in the Sheet first.' : 'This row changed or already has an ID. Refresh and try again.');
       const id = crypto.randomUUID();
-      await api('/values/' + encodeURIComponent("'Books'!" + column(sheetHeaders.indexOf('id')) + matches[0]) + '?valueInputOption=RAW', { method: 'PUT', body: JSON.stringify({ values: [[id]] }) });
+      const timestamp = new Date().toISOString();
+      await api('/values:batchUpdate', { method: 'POST', body: JSON.stringify({ valueInputOption: 'RAW', data: [
+        { range: "'Books'!" + column(sheetHeaders.indexOf('id')) + matches[0], values: [[id]] },
+        { range: "'Books'!" + column(sheetHeaders.indexOf('updated_at')) + matches[0], values: [[timestamp]] }
+      ] }) });
       try { await refresh(); status('ID assigned. You can now edit the book.'); }
       catch (error) { status('ID assigned, but refresh failed: ' + message(error)); }
     } catch (error) { status('Could not confirm ID assignment: ' + message(error) + ' Refresh before trying again.'); }
@@ -204,12 +209,19 @@
   $('choose-sheet').addEventListener('click', () => connect('choose'));
   function requestNewLibrary() {
     if (creatingLibrary) return;
-    const name = window.prompt('Name your new library:', 'My Library');
-    if (name === null) return;
-    if (!name.trim()) { status('Enter a name for your new library.'); return; }
-    if (token) createLibrary(name.trim()).catch(error => status(message(error)));
-    else connect('create', name.trim());
+    $('new-library-name').value = 'My Library';
+    $('new-library-dialog').showModal();
+    $('new-library-name').focus(); $('new-library-name').select();
   }
+  $('cancel-new-library').addEventListener('click', () => $('new-library-dialog').close());
+  $('new-library-form').addEventListener('submit', event => {
+    event.preventDefault();
+    const name = $('new-library-name').value.trim();
+    if (!name || creatingLibrary) return;
+    $('new-library-dialog').close();
+    if (token) createLibrary(name).catch(error => status(message(error)));
+    else connect('create', name);
+  });
   $('new-library').addEventListener('click', requestNewLibrary);
   $('new-library-connected').addEventListener('click', requestNewLibrary);
   $('disconnect').addEventListener('click', () => { clearSession(); rememberSheet(''); status('Disconnected. No catalog is stored in this browser.'); });
@@ -278,8 +290,15 @@
     $('editor').close(); status(label + ' Refreshing catalog…');
     try { await refresh(); } catch (error) { status(label + ' Refresh failed: ' + message(error)); }
   }
-  $('delete').addEventListener('click', async () => {
-    if (busy || !editingBook || !window.confirm('Delete “' + editingBook.title + '” from this library?')) return;
+  $('delete').addEventListener('click', () => {
+    if (busy || !editingBook) return;
+    $('delete-description').textContent = 'Delete “' + editingBook.title + '” from this library?';
+    $('delete-dialog').showModal();
+  });
+  $('cancel-delete').addEventListener('click', () => $('delete-dialog').close());
+  $('confirm-delete').addEventListener('click', async () => {
+    if (busy || !editingBook) return;
+    $('delete-dialog').close();
     busy = true; $('save').disabled = true; $('delete').disabled = true; formStatus('Checking for changes…');
     try {
       const rowNumber = await findUnchangedBook(editingBook);

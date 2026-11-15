@@ -38,7 +38,8 @@ test('editing and deletion stop when the sheet row has changed', async () => {
   const f = await fixture(); f.changeRow(['id-1', '9780306406157', 'Changed elsewhere', 'Author', '', '', '2026-01-01']);
   await f.handlers['book-form:submit']({ preventDefault() {}, currentTarget: f.form });
   assert.match(f.element('form-status').textContent, /changed in the Sheet/);
-  await f.handlers['delete:click']();
+  f.handlers['delete:click']();
+  await f.handlers['confirm-delete:click']();
   assert.match(f.element('form-status').textContent, /changed in the Sheet/);
   assert.equal(f.requests.filter(r => ['PUT', 'POST'].includes(r.options?.method)).length, 0);
 });
@@ -108,4 +109,10 @@ test('editing locates book and writes values using reordered headers', async () 
   const cells = JSON.parse(write.options.body).data;
   assert.equal(cells.find(item => item.range.endsWith('A2')).values[0][0], 'Reordered title');
   assert.equal(cells.find(item => item.range.endsWith('C2')).values[0][0], 'id-1');
+});
+
+
+test('cancelling book deletion does not write to the Sheet', async () => {
+  const f = await fixture(); f.handlers['delete:click'](); f.handlers['cancel-delete:click']();
+  assert.equal(f.requests.filter(r => r.url.includes('batchClear')).length, 0);
 });

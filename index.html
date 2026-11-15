@@ -17,6 +17,8 @@
     <section id="library" hidden>
       <p id="count" class="hint"></p><div id="books" class="books"></div>
     </section>
+    <dialog id="new-library-dialog" aria-labelledby="new-library-title"><form id="new-library-form"><h2 id="new-library-title">Create a library</h2><label>Library name <input id="new-library-name" required maxlength="200" value="My Library"></label><div class="actions dialog-actions"><button id="cancel-new-library" class="secondary" type="button">Cancel</button><button type="submit">Create library</button></div></form></dialog>
+    <dialog id="delete-dialog" aria-labelledby="delete-title" aria-describedby="delete-description"><h2 id="delete-title">Delete book?</h2><p id="delete-description"></p><div class="actions dialog-actions"><button id="cancel-delete" class="secondary" type="button">Cancel</button><button id="confirm-delete" class="upgrade-button" type="button">Delete book</button></div></dialog>
     <dialog id="upgrade-dialog" aria-labelledby="upgrade-title" aria-describedby="upgrade-description">
       <h2 id="upgrade-title">Update library</h2>
       <p id="upgrade-description">The update will make these changes to your Sheet:</p>
