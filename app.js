@@ -5,6 +5,7 @@
   const scope = 'https://www.googleapis.com/auth/drive.file';
   const headers = ['id', 'isbn', 'title', 'author', 'language', 'notes', 'created_at'];
   const storageKey = 'annas-annals-sheet-id';
+  const sessionKey = 'annas-annals-google-session';
   let token = '', sheetId = '', books = [], pickerReady = false, busy = false;
   let rememberedSheet = '';
   try { rememberedSheet = localStorage.getItem(storageKey) || ''; } catch {}
@@ -23,7 +24,7 @@
   }
   function showLibrary() { $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; }
   updateConnect();
-  function clearSession() { token = ''; sheetId = ''; books = []; $('books').replaceChildren(); $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; }
+  function clearSession() { try { sessionStorage.removeItem(sessionKey); } catch {} token = ''; sheetId = ''; books = []; $('books').replaceChildren(); $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; }
   async function api(path, options = {}) {
     const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(sheetId) + path, {
       ...options, headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
@@ -70,6 +71,7 @@
     const client = google.accounts.oauth2.initTokenClient({ client_id: config.clientId, scope, callback: async response => {
       if (response.error) { status('Google authorization was not completed: ' + response.error); return; }
       token = response.access_token;
+      try { sessionStorage.setItem(sessionKey, JSON.stringify({ token, expiresAt: Date.now() + Number(response.expires_in) * 1000 })); } catch {}
       if (rememberedSheet && !chooseAnother) {
         sheetId = rememberedSheet;
         try { await refresh(); showLibrary(); }
@@ -80,6 +82,22 @@
     }});
     client.requestAccessToken();
   }
+  async function restoreSession() {
+    if (!rememberedSheet) return;
+    let session;
+    try { session = JSON.parse(sessionStorage.getItem(sessionKey) || 'null'); } catch {}
+    if (!session?.token || !Number.isFinite(session.expiresAt) || session.expiresAt <= Date.now() + 30000) {
+      try { sessionStorage.removeItem(sessionKey); } catch {}
+      return;
+    }
+    token = session.token; sheetId = rememberedSheet;
+    try { await refresh(); showLibrary(); }
+    catch (error) {
+      clearSession();
+      status('Could not restore your session: ' + message(error) + ' Reconnect to try again.');
+    }
+  }
+  restoreSession();
   $('signin').addEventListener('click', () => connect());
   $('choose-sheet').addEventListener('click', () => connect(true));
   $('disconnect').addEventListener('click', () => { clearSession(); rememberSheet(''); status('Disconnected. No catalog is stored in this browser.'); });
