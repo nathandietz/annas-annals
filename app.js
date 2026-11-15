@@ -40,9 +40,9 @@
     try { if (id) localStorage.setItem(storageKey, id); else localStorage.removeItem(storageKey); } catch {}
     updateConnect();
   }
-  function showLibrary() { $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('new-library-connected').hidden = false;  $('library-actions').hidden = false; $('filters').hidden = false; $('view-switcher').hidden = false; $('search').disabled = false; }
+  function showLibrary() { $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('new-library-connected').hidden = false; $('transfer-actions').hidden = false;  $('library-actions').hidden = false; $('filters').hidden = false; $('view-switcher').hidden = false; $('search').disabled = false; }
   updateConnect();
-  function clearSession() { try { sessionStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('filters').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true;  }
+  function clearSession() { try { sessionStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('filters').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true; $('transfer-actions').hidden = true;  }
   async function api(path, options = {}) {
     const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(sheetId) + path, {
       ...options, headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
@@ -68,7 +68,7 @@
     try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title: $('library-name').textContent, books, updatedAt, sheetHeaders, headerFrozen })); } catch {}
     updateFilters(); render(); status('Catalog updated ' + new Date(updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '.');
   }
-  const filterFields = [['category', 'filter-category', 'All categories'], ['language', 'filter-language', 'All languages'], ['series_name', 'filter-series', 'All series']];
+  const filterFields = [['category', 'filter-category', 'All categories'], ['language', 'filter-language', 'All languages']];
   function updateFilters() {
     for (const [field, id, label] of filterFields) {
       const select = $(id), previous = select.value;
@@ -126,14 +126,15 @@
         if (value) { const el = document.createElement(tag); el.textContent = value; details.append(el); }
       }
       content.append(details); card.append(content);
-      const view = document.createElement('button'); view.type = 'button'; view.className = 'secondary book-view'; view.textContent = 'View details'; view.setAttribute('aria-label', 'View details for ' + book.title); view.addEventListener('click', () => showDetails(book)); card.append(view);
-      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary book-edit'; edit.textContent = 'Edit details'; edit.setAttribute('aria-label', 'Edit ' + book.title);
+      const view = document.createElement('button'); view.type = 'button'; view.className = 'secondary book-view'; view.textContent = 'View details'; view.setAttribute('aria-label', 'View details for ' + book.title); view.addEventListener('click', () => showDetails(book));
+      const actions = document.createElement('div'); actions.className = 'book-actions'; actions.append(view);
+      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary book-edit'; edit.title = 'Edit details'; edit.setAttribute('aria-label', 'Edit ' + book.title);
       if (!book.id) {
         edit.textContent = 'Assign ID'; edit.setAttribute('aria-label', 'Assign ID to ' + book.title);
         const hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = 'This book needs an ID before it can be edited.'; card.append(hint);
         edit.addEventListener('click', () => assignBookId(book, edit));
-      } else edit.addEventListener('click', () => openEditor(book));
-      card.append(edit);
+      } else { const icon = document.createElement('span'); icon.className = 'material-symbol'; icon.textContent = 'edit'; icon.setAttribute('aria-hidden', 'true'); edit.append(icon); edit.addEventListener('click', () => openEditor(book)); }
+      actions.append(edit); card.append(actions);
       $('books').append(card);
     }
     $('count').textContent = filtered.length + (filtered.length === 1 ? ' book' : ' books') + (query ? ' found' : ' in your catalog');
@@ -315,6 +316,67 @@
       await refresh(); status('Library updated.');
     } catch (error) { status('Library update failed: ' + message(error)); }
     finally { busy = false; $('upgrade-library').disabled = false; }
+  });
+  let importRows = [], importReading = 0;
+  $('import-open').addEventListener('click', () => {
+    importRows = []; $('import-file').value = ''; $('import-status').textContent = 'Select a CSV file.'; $('import-confirm').disabled = true; $('import-dialog').showModal();
+  });
+  $('import-cancel').addEventListener('click', () => { if (!busy) { importReading++; $('import-dialog').close(); } });
+  $('import-dialog').addEventListener('cancel', event => { if (busy) event.preventDefault(); else importReading++; });
+  $('import-file').addEventListener('change', async event => {
+    const file = event.target.files[0], request = ++importReading; importRows = []; $('import-confirm').disabled = true;
+    if (!file) { $('import-status').textContent = 'Select a CSV file.'; return; }
+    if (file.size > 2 * 1024 * 1024) { $('import-status').textContent = 'CSV must be 2 MB or smaller.'; return; }
+    try {
+      const rows = parseCsv(await file.text()); if (request !== importReading) return;
+      const columns = rows.shift()?.map(value => value.trim()) || [];
+      if (!columns.includes('title')) throw new Error('CSV must include a title column.');
+      if (new Set(columns).size !== columns.length || columns.some(key => !headers.includes(key))) throw new Error('CSV contains duplicate or unrecognized column names.');
+      if (rows.length > 1000) throw new Error('Import at most 1,000 books at a time.');
+      if (rows.some(row => row.length > columns.length)) throw new Error('A CSV row has more fields than the header.');
+      importRows = rows.map(row => Object.fromEntries(columns.map((key, i) => [key, (row[i] || '').trim()])));
+      if (!importRows.length || importRows.some(book => !book.title)) throw new Error('Every imported row needs a title.');
+      if (importRows.some(book => book.isbn && !normalizeIsbn(book.isbn))) throw new Error('A row has an invalid ISBN. Correct it or leave it blank.');
+      $('import-status').textContent = importRows.length + ' books ready to check. Existing matches will be skipped; new IDs are assigned.';
+      $('import-confirm').disabled = false;
+    } catch (error) { if (request === importReading) $('import-status').textContent = message(error); }
+  });
+  $('import-confirm').addEventListener('click', async () => {
+    if (busy || !importRows.length) return;
+    if (missingHeaders().length) { $('import-status').textContent = 'Update the library before importing.'; return; }
+    busy = true; $('import-confirm').disabled = true; $('import-cancel').disabled = true; $('import-file').disabled = true;
+    try {
+      $('import-status').textContent = 'Checking current library…';
+      const data = await api('/values/' + encodeURIComponent("'Books'!A:ZZ"));
+      const rows = data.values || [];
+      if (JSON.stringify(rows[0] || []) !== JSON.stringify(sheetHeaders)) throw new Error('Sheet headers changed. Refresh before importing.');
+      const existing = rows.slice(1).map(row => record(row, sheetHeaders));
+      const isbns = new Set(existing.map(book => normalizeIsbn(book.isbn)).filter(Boolean));
+      const titles = new Set(existing.filter(book => book.title).map(book => (book.title.trim() + '\u0000' + book.author.trim()).toLocaleLowerCase()));
+      const timestamp = new Date().toISOString(), additions = [];
+      for (const book of importRows) {
+        const isbn = book.isbn ? normalizeIsbn(book.isbn) : '';
+        const identity = (book.title + '\u0000' + (book.author || '')).toLocaleLowerCase();
+        if ((isbn && isbns.has(isbn)) || titles.has(identity)) continue;
+        if (isbn) isbns.add(isbn); titles.add(identity);
+        const values = { ...book, isbn, id: crypto.randomUUID(), created_at: timestamp, updated_at: timestamp };
+        additions.push(sheetHeaders.map(key => values[key] || ''));
+      }
+      if (!additions.length) { $('import-status').textContent = 'No new books to import; all rows match existing books or earlier rows in the file.'; return; }
+      $('import-status').textContent = 'Importing ' + additions.length + ' books…';
+      await api('/values/' + encodeURIComponent("'Books'!A:ZZ") + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', { method: 'POST', body: JSON.stringify({ values: additions }) });
+      const skipped = importRows.length - additions.length; importRows = [];
+      const result = 'Imported ' + additions.length + ' books' + (skipped ? '; skipped ' + skipped + ' matches.' : '.');
+      $('import-dialog').close();
+      status(result + ' Refreshing catalog…');
+      refresh().then(() => status(result)).catch(error => status(result + ' Catalog refresh failed: ' + message(error)));
+    } catch (error) { $('import-status').textContent = 'Import failed or could not be confirmed: ' + message(error) + ' Refresh and check the Sheet before retrying.'; }
+    finally { busy = false; $('import-confirm').disabled = !importRows.length; $('import-cancel').disabled = false; $('import-file').disabled = false; }
+  });
+  $('export-csv').addEventListener('click', () => {
+    const csv = formatCsv([headers, ...books.map(book => headers.map(key => book[key] || ''))]);
+    const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a'); link.href = url; link.download = 'library-export.csv'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
   $('refresh').addEventListener('click', () => refresh().catch(error => status(message(error))));
   for (const mode of ['card', 'list']) $('view-' + mode).addEventListener('click', () => {

@@ -19,7 +19,7 @@ async function fixture({ legacy = false, extraData = false, nine = false, reorde
   vm.runInContext(fs.readFileSync('app.js', 'utf8'), context);
   await new Promise(resolve => setImmediate(resolve));
   const card = element('books').children[0];
-  const edit = card.children.find(child => child.textContent === 'Edit details');
+  const edit = card.children.find(child => child.className === 'book-actions').children.find(child => child.className.includes('book-edit'));
   assert.ok(edit);
   edit.onclick();
   return { handlers, form, requests, element, changeRow: value => { row = value; } };
