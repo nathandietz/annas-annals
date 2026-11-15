@@ -9,7 +9,7 @@ async function fixture({ legacy = false, extraData = false } = {}) {
   const headers = ['id', 'isbn', 'title', 'author', 'language', 'notes', 'created_at', 'publisher', 'publication_year'];
   if (legacy) headers.splice(7);
   let row = ['id-1', '9780306406157', 'Original', 'Author', '', '', '2026-01-01', ...(extraData ? ['occupied'] : [])];
-  function element(id) { return elements[id] ||= { hidden: false, value: '', textContent: '', disabled: false, children: [], addEventListener(type, fn) { handlers[id + ':' + type] = fn; }, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, setAttribute() {}, showModal() {}, close() {}, reset() {} }; }
+  function element(id) { return elements[id] ||= { hidden: false, value: '', textContent: '', disabled: false, children: [], addEventListener(type, fn) { handlers[id + ':' + type] = fn; }, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, setAttribute() {}, removeAttribute() {}, showModal() {}, close() {}, reset() {} }; }
   const form = element('book-form'); form.elements = Object.fromEntries(['isbn','title','author','language','notes','publisher','publication_year'].map(k => [k, { value: '' }]));
   const localStorage = { getItem: () => 'sheet-id', setItem() {}, removeItem() {} };
   const sessionStorage = { getItem: () => JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }), setItem() {}, removeItem() {} };
@@ -17,7 +17,7 @@ async function fixture({ legacy = false, extraData = false } = {}) {
   vm.runInContext(fs.readFileSync('app.js', 'utf8'), context);
   await new Promise(resolve => setImmediate(resolve));
   const card = element('books').children[0];
-  const edit = card.children.find(child => child.textContent === 'Edit');
+  const edit = card.children.find(child => child.textContent === 'Edit details');
   assert.ok(edit);
   const click = Object.entries(handlers).find(([key]) => key.startsWith('created-button-') && key.endsWith(':click'))[1];
   click();

@@ -24,9 +24,9 @@
     try { if (id) localStorage.setItem(storageKey, id); else localStorage.removeItem(storageKey); } catch {}
     updateConnect();
   }
-  function showLibrary() { $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('library-actions').hidden = false; $('search').disabled = false; }
+  function showLibrary() { $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('library-actions').hidden = false; $('search').disabled = false; }
   updateConnect();
-  function clearSession() { try { sessionStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('library-name').textContent = 'A personal library'; $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; }
+  function clearSession() { try { sessionStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; }
   async function api(path, options = {}) {
     const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(sheetId) + path, {
       ...options, headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
@@ -47,7 +47,7 @@
     if (!legacyLibrary && JSON.stringify(foundHeaders) !== JSON.stringify(headers)) throw new Error('The Books tab headers do not match a supported library. See the setup guide.');
     $('upgrade-library').hidden = !legacyLibrary;
     books = rows.slice(1).filter(row => row[0] && row[2]).map(row => Object.fromEntries(headers.map((key, i) => [key, row[i] || ''])));
-    $('library-name').textContent = spreadsheet.properties?.title || 'A personal library';
+    $('library-name').textContent = spreadsheet.properties?.title || 'Your library';
     const updatedAt = Date.now();
     try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title: $('library-name').textContent, books, updatedAt, legacyLibrary })); } catch {}
     render(); status('Catalog updated ' + new Date(updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '.');
@@ -58,11 +58,14 @@
     $('books').replaceChildren();
     for (const book of filtered) {
       const card = document.createElement('article'); card.className = 'book';
-      const cover = document.createElement('div'); cover.className = 'cover-placeholder'; cover.setAttribute('aria-hidden', 'true'); cover.textContent = 'Book cover'; card.append(cover);
-      for (const [tag, value] of [['h3', book.title], ['p', book.author], ['p', book.isbn], ['p', book.publisher], ['p', book.publication_year], ['p', book.language], ['p', book.notes]]) {
-        if (value) { const el = document.createElement(tag); el.textContent = value; card.append(el); }
+      const content = document.createElement('div'); content.className = 'book-content';
+      const cover = document.createElement('div'); cover.className = 'cover-placeholder'; cover.setAttribute('aria-hidden', 'true'); cover.textContent = '▤'; content.append(cover);
+      const details = document.createElement('div'); details.className = 'book-details';
+      for (const [tag, value] of [['h3', book.title], ['p', book.author], ['p', book.publisher], ['p', book.publication_year], ['p', book.language], ['p', book.isbn]]) {
+        if (value) { const el = document.createElement(tag); el.textContent = value; details.append(el); }
       }
-      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary'; edit.textContent = 'Edit'; edit.setAttribute('aria-label', 'Edit ' + book.title);
+      content.append(details); card.append(content);
+      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary book-edit'; edit.textContent = 'Edit details'; edit.setAttribute('aria-label', 'Edit ' + book.title);
       edit.addEventListener('click', () => openEditor(book)); card.append(edit);
       $('books').append(card);
     }
@@ -145,7 +148,7 @@
       const snapshot = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
       if (snapshot?.sheetId === sheetId && Array.isArray(snapshot.books) && snapshot.books.every(book => headers.every(key => typeof book[key] === 'string')) && Number.isFinite(snapshot.updatedAt)) {
         legacyLibrary = snapshot.legacyLibrary === true; $('upgrade-library').hidden = !legacyLibrary;
-        books = snapshot.books; $('library-name').textContent = snapshot.title || 'A personal library';
+        books = snapshot.books; $('library-name').textContent = snapshot.title || 'Your library';
         render(); showLibrary(); cached = true;
       }
     } catch {}
