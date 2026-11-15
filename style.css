@@ -16,3 +16,9 @@ dialog { width: min(95vw, 580px); max-height: 90vh; overflow: auto; border: 1px 
 .dialog-actions { justify-content: flex-end; }
 
 #upgrade-columns { color: #44403c; line-height: 1.8; padding-left: 22px; }
+
+button.upgrade-button { background: #b9503f; border-color: #b9503f; color: #fff; }
+button.upgrade-button:hover { background: #9a4032; border-color: #9a4032; opacity: 1; }
+.book { display: flex; flex-direction: column; }
+.book-edit { margin-top: auto; }
+.book-content, .book > .hint { margin-bottom: 14px; }
