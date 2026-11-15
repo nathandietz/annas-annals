@@ -1,79 +1,93 @@
-# Home Library & Digital Archive
+# Anna’s Annals
 
-A personal library app built with Google Sheets, Google Drive, Google Apps Script, and a web frontend hosted on GitHub Pages. Based on [skd414/home-library](https://github.com/skd414/home-library).
+A simple book catalog with a GitHub Pages interface and a private, shareable Google Sheet as its database. You can browse and search, scan an ISBN with a camera or photo, look up book details, and add books.
 
-Features include multilingual cataloging, ISBN scanning, optional Gemini photo recognition, cover cropping, physical copy tracking, lending and returns, WhatsApp reminder links, PDF viewing, printable QR labels, and CSV/JSON export.
+**This version does not use Google Apps Script.** The website asks each person to authorize access with their own Google account and calls the Google Sheets API directly. The site itself is public; the Sheet stays private and controls who can read or edit it.
 
-This version uses Google's per-file permission (`drive.file`) for its database and uploads. It does not request access to all your Drive files or spreadsheets. The Apps Script timezone is **`America/Chicago`**, which automatically handles CST/CDT.
+This is an early prototype. Google sign-in, Picker, scanning and sharing still need to be tested on a live deployment. Editing and deleting books are not implemented yet.
 
-## 1. Set up Apps Script
+## What you will need
 
-1. Create a new standalone project at [script.google.com](https://script.google.com/) and name it **Home Library**. You do not need to create a spreadsheet first.
-2. Replace the default `Code.gs` contents with [backend/Code.gs](./backend/Code.gs).
-3. Open **Project Settings** and enable **Show appsscript.json manifest file in editor**.
-4. Return to the editor and replace the entire manifest with [appsscript.json](./appsscript.json). Save it **before running any function**. It includes the limited permissions, Drive and Sheets service declarations, and Chicago timezone.
-5. Leave **Google Cloud Platform (GCP) Project** set to **Default**. Apps Script enables the declared APIs automatically; no separate Cloud project or consent-screen setup is needed.
-6. Select **setupRevampedLMS** from the function dropdown and click **Run**. Authorize the requested permissions. It should request access to the files used with this app and permission to connect to external services, rather than all Drive files or all spreadsheets.
-7. Open the database and storage links in the **Execution log**.
+- A GitHub repository where you can configure GitHub Pages.
+- A Google account to own the Sheet and a [Google Cloud project](https://console.cloud.google.com/projectcreate) for the app's OAuth configuration.
+- About three configuration values from Google Cloud: a **web client ID**, a **browser API key**, and the **numeric project number**. These identify the app; they are not your Google password.
 
-Setup creates and saves the IDs for:
+The steps below are a one-time setup for the app and its Sheet. Each additional user will then authorize the app and select the shared Sheet once they connect.
 
-- **Home_Library_Database**, containing the seven library database tabs.
-- **Home_Library_LMS_Storage**, containing **LMS_Covers** and **LMS_Digital_Archive**.
+## 1. Prepare a private spreadsheet
 
-Running setup again reuses these resources.
+1. Create a **new** spreadsheet at [Google Sheets](https://sheets.google.com/create).
+2. Rename the first tab at the bottom to **Books**, exactly as written.
+3. In the first row, put the following headers in seven separate cells, in this order:
 
-## 2. Set your PIN and optional Gemini key
+   | A1 | B1 | C1 | D1 | E1 | F1 | G1 |
+   | --- | --- | --- | --- | --- | --- | --- |
+   | id | isbn | title | author | language | notes | created_at |
 
-In **Project Settings → Script Properties**, add:
+4. Keep this tab for the app's table. Do not select the old seven-tab library database: it has a different format and no migration has been built.
+5. To share the catalog, click **Share**, add the other people's Google accounts, and assign **Viewer** or **Editor** access. Under **General access**, leave the Sheet **Restricted**. [Google's sharing instructions](https://support.google.com/drive/answer/7166529)
 
-| Property | Value |
-| --- | --- |
-| `ADMIN_PIN` | Your secret librarian PIN, required for write actions. |
-| `GEMINI_API_KEY` | Optional key from [Google AI Studio](https://aistudio.google.com/apikey), used for photo recognition. |
-| `GEMINI_MODEL` | Optional model ID override. Defaults to `gemini-3.8-flash`. |
+Viewers can browse. Editors can add books through the app and can also edit the spreadsheet directly. You can change or remove access in the Sheet's Share settings.
 
-Click **Save script properties**.
+## 2. Enable Google APIs
 
-## 3. Deploy the backend
+1. Open the [Google Cloud Console](https://console.cloud.google.com/) and create or select a project. Use the same project for the following steps.
+2. Enable each of these APIs in the project:
+   - [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
+   - [Google Picker API](https://console.cloud.google.com/apis/library/picker.googleapis.com)
+   - [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com)
+3. Find the **project number** in the [project dashboard](https://console.cloud.google.com/home/dashboard). Save the numeric value for `appId` below. It is different from the project ID and the OAuth client ID.
 
-1. Click **Deploy → New deployment** and select **Web app**.
-2. Set **Execute as** to **Me** and **Who has access** to **Anyone**.
-3. Click **Deploy** and copy the web app URL ending in `/exec`.
+## 3. Configure Google authorization
 
-## 4. Host the frontend
+1. Open [Google Auth Platform](https://console.cloud.google.com/auth/overview). Configure the branding and audience as prompted. Choose an audience that permits the Google accounts you intend to use; for personal accounts this is generally **External**.
+2. If the app is in **Testing**, add your Google account and every intended user's Google account under **Audience → Test users**. Google may show an unverified-app warning during testing; publishing and verification requirements depend on your configuration. See [Google's OAuth setup guide](https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid).
+3. Open [Clients](https://console.cloud.google.com/auth/clients), create a client, and choose **Web application**.
+4. Under **Authorized JavaScript origins**, add the site's origin. For a typical Pages address `https://yourname.github.io/annas-annals/`, the origin is `https://yourname.github.io`—without the repository path or trailing slash. If testing locally, also add the exact origin and port, such as `http://localhost:8000`.
+5. Create the client and copy its **client ID** for `clientId` below. Do **not** put the client secret in this repository.
 
-1. Upload `index.html`, `manifest.json`, `sw.js`, `scanner.js`, and `icon.png` to the root of your GitHub repository.
-2. Open the repository's **Settings → Pages**.
-3. Under **Build and deployment**, select **Deploy from a branch**, then **main** and **/ (root)**. Click **Save**.
-4. Open the website URL shown on the Pages settings screen once deployment finishes.
+The app requests the [`drive.file` scope](https://developers.google.com/workspace/sheets/api/scopes), which applies to files the user chooses to use with the app, rather than all of their Drive or Sheets files. Each user must have access to the Sheet **and** authorize the app to use it.
 
-## 5. Connect the app
+## 4. Create a browser API key
 
-1. Open your website and click **Login**.
-2. Enter your Apps Script `/exec` URL and `ADMIN_PIN`, then click **Save & Connect**.
-3. Use the browser's install option to install the app if desired.
+1. Open [Google Cloud credentials](https://console.cloud.google.com/apis/credentials), choose **Create credentials → API key**, and copy the key for `apiKey` below.
+2. Edit the key and set **Application restrictions** to **Websites**. Add your site's website pattern, for example `https://yourname.github.io/*`, and `https://docs.google.com/*`, which Google Picker requires. Add a localhost pattern if you will test locally.
+3. Under **API restrictions**, restrict the key to the **Google Picker API** and, if needed by Picker, the **Google Drive API**. Follow [Google's Picker setup and key restriction guide](https://developers.google.com/workspace/drive/picker/guides/web-picker) if the Cloud Console labels change.
 
-## File access and existing data
+A browser API key is visible to site visitors; website and API restrictions limit where it can be used. It is not a substitute for the user's Google authorization.
 
-Upload covers and PDFs through the library app. Files added manually through the Drive website are not automatically authorized and will not appear in archive sync. Pasting an existing spreadsheet or folder ID into Script Properties does not grant access. To migrate catalog data, copy the data into the new database's matching tabs, preserving the headers.
+## 5. Add the configuration and publish
 
-The database and storage folders are private. Uploaded covers and PDFs retain the original app's anyone-with-the-link sharing for its public catalog and PDF viewer. Photo recognition sends the supplied photos to Gemini when used.
+1. Edit [`config.js`](./config.js) and insert the three values between the quotes:
 
-If you previously authorized the original app, revoke its old grant under [Google Account connections](https://myaccount.google.com/connections) if you no longer use it. This clone does not revoke that grant automatically.
+   ```js
+   window.LIBRARY_CONFIG = {
+     clientId: 'YOUR_WEB_CLIENT_ID',
+     apiKey: 'YOUR_BROWSER_API_KEY',
+     appId: 'YOUR_NUMERIC_PROJECT_NUMBER'
+   };
+   ```
 
-## Local checks
+2. Commit and push the files to the branch you intend to publish. Never add a Google client secret, password, or access token to the repository.
+3. On GitHub, open the repository's **Settings → Pages**. Under **Build and deployment**, choose **Deploy from a branch**, select the branch you pushed and **/ (root)**, and save. Open the displayed site URL when it is published. [GitHub Pages instructions](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
 
-Run `node --test tests/*.test.cjs` from this repository. The tests cover per-file Google access and scanner camera/photo lifecycle behavior. Google APIs and camera controls are simulated; live authorization and device camera behavior must also be checked in your browser.
+## 6. Connect and use the library
 
-## Barcode scanning
+1. Open the Pages site and click **Connect Google Sheet**.
+2. Choose the Google account that owns the Sheet or that the Sheet was shared with. Approve the requested access.
+3. In Google Picker, select the new spreadsheet. Each person connecting must choose the shared file for their own account. If it isn't visible, look in the shared-files view and check that the correct Google account has access.
+4. Search the catalog or choose **Add book**. Scan or type an ISBN, optionally look it up, review the details, and save. A viewer can browse but cannot save.
 
-Use the GitHub Pages HTTPS site and allow camera access. Keep the full barcode visible, including the blank margins at both ends, and hold steady in good light. The scanner reads the full camera frame and supports ISBN/EAN barcodes and library QR codes. If camera access fails, the scanner shows the reason; use **Restart camera**, **Scan a photo instead**, or enter the ISBN manually.
+If authorization expires, use **Disconnect**, then connect again. The app does not deliberately save catalog data or access tokens in browser storage; disconnect clears its in-memory catalog but does not revoke the Google grant. To revoke it, use your [Google Account connections](https://myaccount.google.com/connections).
 
-## Updating the Apps Script backend
+## Troubleshooting and current limitations
 
-GitHub Pages updates the frontend only. To apply backend fixes, replace your Apps Script `Code.gs` with [backend/Code.gs](./backend/Code.gs), save, then select **Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy**. Editing the existing deployment keeps your `/exec` URL and saved Script Properties. Do not rerun setup or recreate the database to apply these updates.
+- **“Setup needed”:** add all three values to `config.js` and republish.
+- **Origin mismatch:** ensure the exact site origin, without its path, is listed in the OAuth client's JavaScript origins. Check that you are using the intended Google Cloud project.
+- **Access blocked during testing:** add the person's Google account as a test user and verify that the Sheet is shared with that account.
+- **Sheet or header error:** select the new spreadsheet and confirm the `Books` tab and all seven headers match exactly.
+- **Can't save:** confirm the account has Editor access. If a save fails or its response is lost, refresh before retrying to avoid a duplicate.
+- **Camera doesn't start:** open the site over HTTPS and allow camera access; you can also scan a photo or enter the ISBN manually. ISBN lookup sends the ISBN to [Open Library](https://openlibrary.org/); a missing match does not prevent manual entry.
+- **Shared edits:** simultaneous additions can create duplicate ISBNs. Editing, deletion, conflict handling, persistent caching and migration are not implemented.
 
-Photo recognition uses `gemini-3.8-flash` by default; `GEMINI_MODEL` lets you change it without editing code. Your API key must have access and sufficient quota for the selected model. ISBN lookup works without Gemini, and usable ISBN results are kept if optional photo recognition fails.
-
-Covers fall back to Open Library using the ISBN, including for existing catalog entries. A cover is not available for every edition; use **Front cover** to upload your own if needed. [Cover images supplied by Open Library](https://openlibrary.org/).
+For local development, serve the repository root with `python3 -m http.server 8000`, open `http://localhost:8000/`, and add the matching origin to your Google Cloud configuration. Run existing scanner checks with `node --test tests/*.test.cjs`.
