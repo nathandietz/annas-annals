@@ -55,9 +55,9 @@
     try { if (id) localStorage.setItem(storageKey, id); else localStorage.removeItem(storageKey); } catch {}
     updateConnect();
   }
-  function showLibrary() { $('mode-toggle').hidden = false; checkPermission(); $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('new-library-connected').hidden = false; $('transfer-actions').hidden = false; $('settings-open').hidden = false;  $('library-actions').hidden = false; $('view-switcher').hidden = false; $('search').disabled = false; setMainView(mainView); }
+  function showLibrary() { $('mode-toggle').hidden = false; checkPermission(); $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('new-library-connected').hidden = false; $('transfer-actions').hidden = false;   $('library-actions').hidden = false; $('view-switcher').hidden = false; $('search').disabled = false; setMainView(mainView); }
   updateConnect();
-  function clearSession() { document.querySelector?.('.site-header')?.append($('status')); canEdit = false; checkSequence++; checkScanner.stop?.().catch(() => {}); $('mode-toggle').hidden = true; $('scan-view').hidden = true; try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('count').textContent = ''; duplicatesMode = false; $('all-books').hidden = true; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true; $('transfer-actions').hidden = true; $('settings-open').hidden = true; if ($('settings-dialog').open) $('settings-dialog').close();  }
+  function clearSession() { document.querySelector?.('.site-header')?.append($('status')); canEdit = false; checkSequence++; checkScanner.stop?.().catch(() => {}); $('mode-toggle').hidden = true; $('scan-view').hidden = true; setCameraOpen(false); try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('count').textContent = ''; duplicatesMode = false; $('all-books').hidden = true; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true; $('transfer-actions').hidden = true; $('settings-dialog').hidden = true;  }
   async function api(path, options = {}) {
     const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(sheetId) + path, {
       ...options, headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
@@ -77,7 +77,7 @@
     sheetHeaders = readHeaders(foundHeaders); libraryWidth = sheetHeaders.length;
     headerFrozen = (spreadsheet.sheets?.find(item => item.properties?.title === 'Books')?.properties?.gridProperties?.frozenRowCount || 0) >= 1;
     $('upgrade-library').hidden = !canEdit || !needsUpdate();
-    books = rows.slice(1).map(row => record(row, sheetHeaders)).filter(book => book.title);
+    books = rows.slice(1).map(row => record(row, sheetHeaders)).filter(book => book.title).sort((a, b) => (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0));
     $('library-name').textContent = spreadsheet.properties?.title || 'Your library';
     const updatedAt = Date.now();
     try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title: $('library-name').textContent, books, updatedAt, sheetHeaders, headerFrozen })); } catch {}
@@ -172,12 +172,13 @@
   }
   function setMainView(view) {
     mainView = view;
-    $(view === 'scan' ? 'scan-meta' : 'library-meta').append($('status'));
+    $(view === 'scan' ? 'scan-meta' : view === 'settings' ? 'settings-meta' : 'library-meta').append($('status'));
     $('scan-view').hidden = view !== 'scan';
     $('library').hidden = view !== 'library';
+    $('settings-dialog').hidden = view !== 'settings';
     const toolbar = document.querySelector?.('.toolbar'); if (toolbar) toolbar.hidden = view !== 'library';
-    for (const name of ['scan', 'library']) $('mode-' + name).setAttribute('aria-pressed', String(name === view));
-    if (view !== 'scan') { checkSequence++; checkScanner.stop?.().catch(() => {}); $('check-camera').hidden = true; }
+    for (const name of ['scan', 'library', 'settings']) $(name === 'settings' ? 'settings-open' : 'mode-' + name).setAttribute('aria-pressed', String(name === view));
+    if (view !== 'scan') { checkSequence++; checkScanner.stop?.().catch(() => {}); setCameraOpen(false); }
   }
   $('mode-scan').addEventListener('click', () => setMainView('scan'));
   $('mode-library').addEventListener('click', () => setMainView('library'));
@@ -200,7 +201,7 @@
     checkSequence++; clearTimeout(scanSearchTimer); $('check-result').hidden = true; renderScanBooks();
     const query = $('scan-search').value.trim();
     if (normalizeIsbn(query)) scanSearchTimer = setTimeout(async () => {
-      await checkScanner.stop(); $('check-camera').hidden = true;
+      await checkScanner.stop(); setCameraOpen(false);
       if ($('scan-search').value.trim() === query && mainView === 'scan') checkIsbn(query);
     }, 400);
   });
@@ -211,7 +212,9 @@
 
     let match = matchBook(isbn, null, books), metadata = null;
     if (match.kind !== 'exact') {
-      result.textContent = 'Checking book details…';
+      const heading = document.createElement('h2'); heading.textContent = 'No ISBN Match Found';
+      const detail = document.createElement('p'); detail.textContent = 'Checking Title & Author';
+      result.append(heading, detail);
       try {
         const response = await fetch('https://openlibrary.org/api/books?bibkeys=' + encodeURIComponent('ISBN:' + isbn) + '&format=json&jscmd=data');
         if (!response.ok) throw new Error('Lookup unavailable');
@@ -222,24 +225,43 @@
     }
     if (sequence !== checkSequence || mainView !== 'scan') return;
     result.replaceChildren();
-    const heading = document.createElement('h2'); heading.textContent = {exact:'Already in your library', possible:'Likely already in your library', none:'No match found', unknown:'Could not identify this book'}[match.kind]; result.append(heading);
-    const detail = document.createElement('p'); detail.textContent = match.kind === 'unknown' ? 'Search by title or author to check manually.' : match.kind === 'possible' ? 'The title and author match a book you own; this may be another edition.' : metadata ? [metadata.title, metadata.author].filter(Boolean).join(' — ') : ''; result.append(detail);
+    const heading = document.createElement('h2'); heading.textContent = {exact:'Already in your library', possible:'Likely already in your library', none:'No Book Match Found', unknown:'No ISBN Match Found'}[match.kind]; result.append(heading);
+    const detail = document.createElement('p'); detail.textContent = match.kind === 'unknown' ? 'Could not check for other editions. Search by title or author to check manually.' : match.kind === 'possible' ? 'The title and author match a book you own; this may be another edition.' : metadata ? [metadata.title, metadata.author].filter(Boolean).join(' — ') : ''; result.append(detail);
     for (const book of match.books) { const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary'; button.textContent = [book.title, book.author].filter(Boolean).join(' — '); button.addEventListener('click', () => showDetails(book)); result.append(button); }
     if (canEdit && match.kind !== 'exact') { const add = document.createElement('button'); add.type = 'button'; add.textContent = match.kind === 'possible' ? 'Add this edition anyway' : 'Add book'; add.addEventListener('click', () => { openEditor(); $('book-form').elements.isbn.value = isbn; if (metadata) { $('book-form').elements.title.value = metadata.title; $('book-form').elements.author.value = metadata.author; } }); result.append(add); }
     const again = document.createElement('button'); again.type = 'button'; again.className = 'secondary'; again.textContent = 'Scan another book'; again.addEventListener('click', startCheckScanner); result.append(again);
   }
-  async function startCheckScanner() {
-    checkSequence++;
-    $('check-camera').hidden = false; $('check-result').hidden = true;
-    try { await checkScanner.start(async value => { await checkScanner.stop(); $('check-camera').hidden = true; checkIsbn(value); }, value => { $('check-status').textContent = value; }); }
-    catch (error) { $('check-status').textContent = message(error); }
+  function setCameraOpen(open) {
+    $('check-camera').hidden = !open;
+    $('scan-start').setAttribute('aria-expanded', String(open));
   }
-  $('scan-start').addEventListener('click', startCheckScanner);
-  $('check-stop').addEventListener('click', async () => { await checkScanner.stop(); $('check-camera').hidden = true; });
+  async function closeCheckScanner() {
+    checkSequence++; setCameraOpen(false);
+    await checkScanner.stop();
+  }
+  async function startCheckScanner() {
+    const scanId = ++checkSequence;
+    setCameraOpen(true); $('check-result').hidden = true; $('check-preview').classList.remove('recognized');
+    try {
+      await checkScanner.start(async value => {
+        if (scanId !== checkSequence || $('check-camera').hidden) return;
+        $('check-preview').classList.add('recognized');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        if (scanId !== checkSequence || $('check-camera').hidden) return;
+        await checkScanner.stop();
+        if (scanId !== checkSequence || $('check-camera').hidden) return;
+        setCameraOpen(false); checkIsbn(value);
+      }, value => { $('check-status').textContent = value; });
+    } catch (error) {
+      if (scanId === checkSequence && !$('check-camera').hidden) $('check-status').textContent = message(error);
+    }
+  }
+  $('scan-start').addEventListener('click', () => $('check-camera').hidden ? startCheckScanner() : closeCheckScanner());
+  $('check-stop').addEventListener('click', closeCheckScanner);
   $('check-form').addEventListener('submit', event => { event.preventDefault(); });
-  $('check-photo').addEventListener('change', async event => { try { const value = await checkScanner.scanFile(event.target.files[0]); if (value) { await checkScanner.stop(); $('check-camera').hidden = true; checkIsbn(value); } } catch { $('check-status').textContent = 'No barcode found. Try another photo or enter the ISBN manually.'; } });
+  $('check-photo').addEventListener('change', async event => { try { const value = await checkScanner.scanFile(event.target.files[0]); if (value) { await checkScanner.stop(); setCameraOpen(false); checkIsbn(value); } } catch { $('check-status').textContent = 'No barcode found. Try another photo or enter the ISBN manually.'; } });
 
-  $('duplicates-toggle').addEventListener('click', () => { duplicatesMode = true; $('settings-dialog').close(); render(); });
+  $('duplicates-toggle').addEventListener('click', () => { duplicatesMode = true; setMainView('library'); render(); });
   $('all-books').addEventListener('click', () => { duplicatesMode = false; render(); });
   async function assignBookId(book, button) {
     if (busy) return;
@@ -376,9 +398,8 @@
     else connect('create', name);
   });
   $('new-library').addEventListener('click', requestNewLibrary);
-  $('settings-open').addEventListener('click', () => $('settings-dialog').showModal());
-  $('settings-close').addEventListener('click', () => $('settings-dialog').close());
-  $('new-library-connected').addEventListener('click', () => { $('settings-dialog').close(); requestNewLibrary(); });
+  $('settings-open').addEventListener('click', () => setMainView('settings'));
+  $('new-library-connected').addEventListener('click', requestNewLibrary);
   $('disconnect').addEventListener('click', () => { clearSession(); rememberSheet(''); status('Disconnected. No catalog is stored in this tab.'); });
   window.addEventListener('storage', event => {
     if (event.key === sessionKey && !event.newValue && token) { clearSession(); rememberSheet(''); status('Disconnected in another window.'); }
@@ -392,7 +413,6 @@
     });
     if (!headerFrozen) { const item = document.createElement('li'); item.textContent = 'Freeze the header row.'; list.append(item); }
     if (JSON.stringify(sheetHeaders) !== JSON.stringify(desiredOrder(sheetHeaders)) || missingHeaders().length) { const item = document.createElement('li'); item.textContent = 'Reorder library columns into the standard layout; custom columns follow.'; list.append(item); }
-    if ($('settings-dialog').open) $('settings-dialog').close();
     $('upgrade-dialog').showModal();
   });
   $('cancel-upgrade').addEventListener('click', () => $('upgrade-dialog').close());
@@ -427,7 +447,6 @@
   });
   let importRows = [], importReading = 0;
   $('import-open').addEventListener('click', () => {
-    if ($('settings-dialog').open) $('settings-dialog').close();
     importRows = []; $('import-file').value = ''; $('import-status').textContent = 'Select a CSV file.'; $('import-confirm').disabled = true; $('import-dialog').showModal();
   });
   $('import-cancel').addEventListener('click', () => { if (!busy) { importReading++; $('import-dialog').close(); } });
@@ -561,13 +580,23 @@
     } catch (error) { formStatus(message(error)); }
     finally { busy = false; $('save').disabled = false; $('delete').disabled = false; }
   });
-  async function stopScanner() { await scanner.stop(); $('scan-area').hidden = true; }
+  let editorScanSequence = 0;
+  async function stopScanner() { editorScanSequence++; await scanner.stop(); $('scan-area').hidden = true; }
   $('close-editor').addEventListener('click', async () => { resetDelete(); await stopScanner(); $('editor').close(); });
-  $('editor').addEventListener('cancel', () => { resetDelete(); scanner.stop().catch(() => {}); $('scan-area').hidden = true; });
+  $('editor').addEventListener('cancel', () => { editorScanSequence++; resetDelete(); scanner.stop().catch(() => {}); $('scan-area').hidden = true; });
   $('scan').addEventListener('click', async () => {
-    $('scan-area').hidden = false;
-    try { await scanner.start(async text => { $('book-form').elements.isbn.value = text; await stopScanner(); formStatus('Barcode captured. Look up the ISBN or enter the details.'); }, text => { $('scan-status').textContent = text; }); }
-    catch (error) { $('scan-status').textContent = message(error); }
+    const scanId = ++editorScanSequence;
+    $('scan-area').hidden = false; $('editor-preview').classList.remove('recognized');
+    try {
+      await scanner.start(async text => {
+        if (scanId !== editorScanSequence || $('scan-area').hidden) return;
+        $('editor-preview').classList.add('recognized');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        if (scanId !== editorScanSequence || $('scan-area').hidden) return;
+        $('book-form').elements.isbn.value = text;
+        await stopScanner(); formStatus('Barcode captured. Look up the ISBN or enter the details.');
+      }, text => { $('scan-status').textContent = text; });
+    } catch (error) { if (scanId === editorScanSequence && !$('scan-area').hidden) $('scan-status').textContent = message(error); }
   });
   $('stop-scan').addEventListener('click', () => stopScanner().catch(error => formStatus(message(error))));
   $('photo').addEventListener('change', async event => { const file = event.target.files[0]; if (!file) return; try { const result = await scanner.scanFile(file); if (result) { $('book-form').elements.isbn.value = result; await stopScanner(); formStatus('Barcode captured. Look up the ISBN or enter the details.'); } } catch { $('scan-status').textContent = 'No barcode found. Try a clearer photo or enter the ISBN manually.'; } });
@@ -627,6 +656,9 @@
         await api('/values:batchUpdate', { method: 'POST', body: JSON.stringify({ valueInputOption: 'RAW', data: headers.map(key => ({ range: "'Books'!" + column(sheetHeaders.indexOf(key)) + rowNumber, values: [[valuesByHeader[key]]] })) }) });
       } else {
         await api('/values/' + encodeURIComponent("'Books'!A:ZZ") + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', { method: 'POST', body: JSON.stringify({ values: [sheetHeaders.map(key => valuesByHeader[key] || '')] }) });
+        checkSequence++; $('check-result').hidden = true; $('check-result').replaceChildren();
+        $('scan-search').value = ''; $('search').value = ''; sortField = ''; duplicatesMode = false;
+        books.unshift(valuesByHeader); render();
       }
       await finishChange('Book saved.');
     } catch (error) { formStatus('Save failed or could not be confirmed. Refresh the catalog before retrying: ' + message(error)); }
