@@ -4,26 +4,30 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const { findDuplicateGroups } = require('../duplicates.js');
 const { normalizeIsbn } = require('../isbn.js');
+const { matchBook } = require('../book-match.js');
 
-async function fixture({ legacy = false, extraData = false, nine = false, reordered = false } = {}) {
+async function fixture({ legacy = false, extraData = false, nine = false, reordered = false, deferLookup = false } = {}) {
+  let scanTimer, resolveLookup;
+  const lookupWait = new Promise(resolve => { resolveLookup = resolve; });
   const handlers = {}, elements = {}, requests = [];
   const headers = ['id', 'isbn', 'title', 'author', 'language', 'notes', 'created_at', 'publisher', 'publication_year', 'shelf_location', 'category', 'description', 'series_name', 'volume_number', 'pages', 'updated_at'];
   if (legacy) headers.splice(7);
   if (nine) headers.splice(9);
+  const addedRows = [];
   let row = ['id-1', '9780306406157', 'Original', 'Author', '', '', '2026-01-01', ...(extraData ? ['occupied'] : [])];
   if (reordered) { [headers[0], headers[2]] = [headers[2], headers[0]]; [row[0], row[2]] = [row[2], row[0]]; }
   function element(id) { return elements[id] ||= { hidden: false, value: '', textContent: '', disabled: false, classList: { toggle() {}, add() {}, remove() {} }, children: [], addEventListener(type, fn) { handlers[id + ':' + type] = fn; this['on' + type] = fn; }, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, setAttribute() {}, removeAttribute() {}, showModal() {}, close() {}, reset() {} }; }
   const form = element('book-form'); form.elements = Object.fromEntries(['isbn','title','author','language','notes','publisher','publication_year','shelf_location','category','description','series_name','volume_number','pages'].map(k => [k, { value: '' }]));
   const localStorage = { getItem: key => key === 'annas-annals-sheet-id' ? 'sheet-id' : key === 'annas-annals-google-session' ? JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }) : null, setItem() {}, removeItem() {} };
   const sessionStorage = { getItem: () => JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }), setItem() {}, removeItem() {} };
-  const context = vm.createContext({ document: { getElementById: element, createElement: tag => element('created-' + tag + '-' + Math.random()) }, window: { LIBRARY_CONFIG: {}, confirm: () => true, addEventListener() {} }, localStorage, sessionStorage, createLibraryScanner: () => ({ stop: async () => {} }), normalizeIsbn, findDuplicateGroups, setTimeout: () => 1, clearTimeout: () => {}, crypto: { randomUUID: () => 'new-id' }, fetch: async (url, options) => { requests.push({ url, options }); return { ok: true, json: async () => url.includes('fields=properties') ? { properties: { title: 'Library' }, sheets: [{ properties: { title: 'Books', gridProperties: { frozenRowCount: 1 } } }] } : url.includes('fields=sheets') ? { sheets: [{ properties: { title: 'Books', sheetId: 0 } }] } : { values: [headers, row] } }; }, console });
+  const context = vm.createContext({ document: { getElementById: element, createElement: tag => element('created-' + tag + '-' + Math.random()) }, window: { LIBRARY_CONFIG: {}, confirm: () => true, addEventListener() {} }, localStorage, sessionStorage, createLibraryScanner: () => ({ stop: async () => {} }), normalizeIsbn, matchBook, findDuplicateGroups, setTimeout: (fn, delay) => { if (delay === 400) scanTimer = fn; return 1; }, clearTimeout: () => {}, crypto: { randomUUID: () => 'new-id' }, fetch: async (url, options) => { requests.push({ url, options }); if (deferLookup && url.includes('openlibrary.org')) return lookupWait; if (url.includes(':append') && options?.body) addedRows.push(JSON.parse(options.body).values[0]); return { ok: true, json: async () => url.includes('fields=properties') ? { properties: { title: 'Library' }, sheets: [{ properties: { title: 'Books', gridProperties: { frozenRowCount: 1 } } }] } : url.includes('fields=sheets') ? { sheets: [{ properties: { title: 'Books', sheetId: 0 } }] } : { values: [headers, row, ...addedRows] } }; }, console });
   vm.runInContext(fs.readFileSync('app.js', 'utf8'), context);
   await new Promise(resolve => setImmediate(resolve));
   const card = element('books').children[0];
   const edit = card.children.find(child => child.className === 'book-actions').children.find(child => child.className.includes('book-edit'));
   assert.ok(edit);
   edit.onclick({ stopPropagation() {} });
-  return { handlers, form, requests, element, changeRow: value => { row = value; } };
+  return { handlers, form, requests, element, runScanTimer: () => scanTimer(), resolveLookup, changeRow: value => { row = value; } };
 }
 
 test('editing checks the fresh row before writing', async () => {
@@ -124,4 +128,27 @@ test('library update includes freezing the header row', async () => {
   const write = f.requests.find(r => r.url.endsWith(':batchUpdate'));
   const freeze = JSON.parse(write.options.body).requests.find(r => r.updateSheetProperties);
   assert.equal(freeze.updateSheetProperties.properties.gridProperties.frozenRowCount, 1);
+});
+
+test('adding a book clears the scan result and shows the new book first', async () => {
+  const f = await fixture();
+  f.element('check-result').hidden = false;
+  f.handlers['add:click']();
+  f.form.elements.title.value = 'New arrival';
+  f.form.elements.author.value = 'Another author';
+  f.form.elements.isbn.value = '9780140328721';
+  await f.handlers['book-form:submit']({ preventDefault() {}, currentTarget: f.form });
+  assert.equal(f.element('check-result').hidden, true);
+  assert.equal(f.element('scan-books').children[0].children[0].textContent, 'New arrival');
+});
+
+test('shows the local ISBN result while the edition lookup is pending', async () => {
+  const f = await fixture({ deferLookup: true });
+  f.handlers['mode-scan:click']();
+  f.element('scan-search').value = '9780140328721';
+  f.handlers['scan-search:input']();
+  await f.runScanTimer();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.element('check-result').children[0].textContent, 'No ISBN Match Found');
+  f.resolveLookup({ ok: true, json: async () => ({}) });
 });

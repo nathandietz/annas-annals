@@ -26,6 +26,7 @@ function fixture(behavior = {}) {
       }
     }
   });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../isbn.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../scanner.js'), 'utf8'), context);
   return { scanner: context.createLibraryScanner(), instances, context, formats };
 }
@@ -35,7 +36,7 @@ test('live decoding examines full frame, includes ISBN format, and accepts only 
   const results = [];
   await f.scanner.start(text => results.push(text), () => {});
   const camera = f.instances[0];
-  assert(camera.config.formatsToSupport.includes(f.formats.EAN_13));
+  assert.deepEqual(Array.from(camera.config.formatsToSupport), [f.formats.EAN_13]);
   assert.equal(camera.calls[0].config.qrbox, undefined);
   assert.equal(camera.calls[0].config.videoConstraints.width.ideal, 1280);
   camera.success('9780306406157'); camera.success('9780306406157');
@@ -102,4 +103,16 @@ test('insecure pages show HTTPS guidance', async () => {
   f.context.window.isSecureContext = false;
   await assert.rejects(f.scanner.start(() => {}, () => {}), /HTTPS/);
   assert.equal(f.instances.length, 0);
+});
+
+test('keeps scanning after a non-ISBN and accepts a subsequent ISBN', async () => {
+  const f = fixture(); const results = [], statuses = [], feedback = [];
+  await f.scanner.start(value => results.push(value), value => statuses.push(value), value => feedback.push(value));
+  f.instances[0].success('12345678');
+  assert.deepEqual(results, []);
+  assert(statuses.some(value => /ISBN/.test(value)));
+  f.instances[0].success('9780306406157');
+  assert.deepEqual(results, ['9780306406157']);
+  assert.deepEqual(feedback, ['recognized']);
+  await f.scanner.stop();
 });

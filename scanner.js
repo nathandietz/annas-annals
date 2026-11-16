@@ -1,6 +1,6 @@
 /* Keep camera objects outside Alpine's reactive proxies. Serialize camera/file
  * operations so closing a modal or choosing a photo during startup is safe. */
-function createLibraryScanner() {
+function createLibraryScanner(readerId = 'universal-qr-reader') {
   let instance = null;
   let queue = Promise.resolve();
   let session = 0;
@@ -23,9 +23,8 @@ function createLibraryScanner() {
       throw new Error('Scanner could not load. Check your connection and reload this page.');
     }
     const formats = Html5QrcodeSupportedFormats;
-    return new Html5Qrcode('universal-qr-reader', {
-      formatsToSupport: [formats.QR_CODE, formats.EAN_13, formats.EAN_8,
-        formats.UPC_A, formats.UPC_E, formats.CODE_128, formats.CODE_39],
+    return new Html5Qrcode(readerId, {
+      formatsToSupport: [formats.EAN_13],
       verbose: false
     });
   }
@@ -45,7 +44,7 @@ function createLibraryScanner() {
   }
 
   return {
-    start(onDecoded, onStatus) {
+    start(onDecoded, onStatus, onFeedback = () => {}) {
       const current = ++session;
       return enqueue(async () => {
         await release();
@@ -57,11 +56,14 @@ function createLibraryScanner() {
         let accepted = false;
         const success = text => {
           if (current !== session || accepted) return;
+          const isbn = normalizeIsbn(text);
+          if (!isbn) { onStatus('That barcode is not a valid ISBN. Keep scanning the book’s ISBN barcode.'); return; }
           accepted = true;
-          onDecoded(text);
+          onFeedback('recognized');
+          onDecoded(isbn);
         };
         // No qrbox: ISBN/EAN barcodes need their entire width and quiet margins.
-        const config = { fps: 10, videoConstraints: {
+        const config = { fps: 12, videoConstraints: {
           facingMode: { ideal: 'environment' },
           width: { ideal: 1280 }, height: { ideal: 720 }
         } };

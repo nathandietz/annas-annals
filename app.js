@@ -34,7 +34,16 @@
   try { const savedView = localStorage.getItem('annas-annals-view'); if (['card', 'list'].includes(savedView)) viewMode = savedView; } catch {}
   try { rememberedSheet = localStorage.getItem(storageKey) || ''; } catch {}
   const scanner = createLibraryScanner();
-  const status = message => { $('status').textContent = message; };
+  const checkScanner = createLibraryScanner('check-qr-reader');
+  let mainView = window.matchMedia?.('(max-width: 700px)').matches ? 'scan' : 'library', canEdit = false, checkSequence = 0;
+  let lastCatalogUpdate = 0, showingUpdateAge = false;
+  const status = message => { showingUpdateAge = false; $('status').textContent = message; };
+  function showUpdateAge() {
+    if (!showingUpdateAge || !lastCatalogUpdate) return;
+    const minutes = Math.max(0, Math.floor((Date.now() - lastCatalogUpdate) / 60000));
+    $('status').textContent = minutes === 0 ? 'Updated just now' : 'Updated ' + minutes + (minutes === 1 ? ' minute ago' : ' minutes ago');
+  }
+  window.setInterval?.(showUpdateAge, 60000);
   const formStatus = message => { $('form-status').textContent = message; };
   function message(error) { return error?.message || 'Something went wrong. Please try again.'; }
   function updateConnect() {
@@ -46,9 +55,9 @@
     try { if (id) localStorage.setItem(storageKey, id); else localStorage.removeItem(storageKey); } catch {}
     updateConnect();
   }
-  function showLibrary() { $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('new-library-connected').hidden = false; $('transfer-actions').hidden = false; $('settings-open').hidden = false;  $('library-actions').hidden = false; $('view-switcher').hidden = false; $('search').disabled = false; }
+  function showLibrary() { $('mode-toggle').hidden = false; checkPermission(); $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('new-library-connected').hidden = false; $('transfer-actions').hidden = false; $('settings-open').hidden = false;  $('library-actions').hidden = false; $('view-switcher').hidden = false; $('search').disabled = false; setMainView(mainView); }
   updateConnect();
-  function clearSession() { try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('count').textContent = ''; duplicatesMode = false; $('all-books').hidden = true; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true; $('transfer-actions').hidden = true; $('settings-open').hidden = true; if ($('settings-dialog').open) $('settings-dialog').close();  }
+  function clearSession() { document.querySelector?.('.site-header')?.append($('status')); canEdit = false; checkSequence++; checkScanner.stop?.().catch(() => {}); $('mode-toggle').hidden = true; $('scan-view').hidden = true; try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('count').textContent = ''; duplicatesMode = false; $('all-books').hidden = true; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true; $('transfer-actions').hidden = true; $('settings-open').hidden = true; if ($('settings-dialog').open) $('settings-dialog').close();  }
   async function api(path, options = {}) {
     const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(sheetId) + path, {
       ...options, headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
@@ -67,12 +76,12 @@
     const foundHeaders = rows[0] || [];
     sheetHeaders = readHeaders(foundHeaders); libraryWidth = sheetHeaders.length;
     headerFrozen = (spreadsheet.sheets?.find(item => item.properties?.title === 'Books')?.properties?.gridProperties?.frozenRowCount || 0) >= 1;
-    $('upgrade-library').hidden = !needsUpdate();
-    books = rows.slice(1).map(row => record(row, sheetHeaders)).filter(book => book.title);
+    $('upgrade-library').hidden = !canEdit || !needsUpdate();
+    books = rows.slice(1).map(row => record(row, sheetHeaders)).filter(book => book.title).sort((a, b) => (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0));
     $('library-name').textContent = spreadsheet.properties?.title || 'Your library';
     const updatedAt = Date.now();
     try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title: $('library-name').textContent, books, updatedAt, sheetHeaders, headerFrozen })); } catch {}
-    render(); status('Catalog updated ' + new Date(updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '.');
+    render(); lastCatalogUpdate = updatedAt; showingUpdateAge = true; showUpdateAge();
   }
   function render() {
     $('duplicates-toggle').setAttribute('aria-pressed', String(duplicatesMode));
@@ -123,7 +132,7 @@
           row.append(cell);
         }
         const actions = document.createElement('td'); actions.className = 'list-actions';
-        const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary' + (book.id ? ' icon-button' : ''); edit.title = book.id ? 'Edit details' : 'Assign ID'; edit.setAttribute('aria-label', (book.id ? 'Edit ' : 'Assign ID to ') + book.title);
+        const edit = document.createElement('button'); edit.hidden = !canEdit; edit.type = 'button'; edit.className = 'secondary' + (book.id ? ' icon-button' : ''); edit.title = book.id ? 'Edit details' : 'Assign ID'; edit.setAttribute('aria-label', (book.id ? 'Edit ' : 'Assign ID to ') + book.title);
         if (book.id) { const icon = document.createElement('span'); icon.className = 'material-symbol'; icon.textContent = 'edit'; icon.setAttribute('aria-hidden', 'true'); edit.append(icon); } else edit.textContent = 'Assign ID';
         edit.addEventListener('click', event => { event.stopPropagation(); if (book.id) openEditor(book); else assignBookId(book, edit); }); actions.append(edit);
         row.append(actions); listBody.append(row); continue;
@@ -138,7 +147,7 @@
       if (duplicatesMode) { const reason = document.createElement('p'); reason.className = 'duplicate-reason'; reason.textContent = duplicateReasons.get(book).join(' · '); details.append(reason); }
       content.append(details); card.append(content);
       const actions = document.createElement('div'); actions.className = 'book-actions';
-      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary book-edit'; edit.title = 'Edit details'; edit.setAttribute('aria-label', 'Edit ' + book.title);
+      const edit = document.createElement('button'); edit.hidden = !canEdit; edit.type = 'button'; edit.className = 'secondary book-edit'; edit.title = 'Edit details'; edit.setAttribute('aria-label', 'Edit ' + book.title);
       if (!book.id) {
         edit.textContent = 'Assign ID'; edit.setAttribute('aria-label', 'Assign ID to ' + book.title);
         const hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = 'This book needs an ID before it can be edited.'; card.append(hint);
@@ -147,8 +156,92 @@
       actions.append(edit); card.append(actions);
       $('books').append(card);
     }
-    $('count').textContent = filtered.length + (filtered.length === 1 ? ' Book' : ' Books');
+    $('count').textContent = filtered.length + (filtered.length === 1 ? ' Book' : ' Books'); renderScanBooks();
   }
+
+  async function checkPermission() {
+    const currentSheet = sheetId;
+    canEdit = false; $('add').hidden = true; $('import-open').hidden = true; $('upgrade-library').hidden = true;
+    try {
+      const response = await fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(currentSheet) + '?fields=capabilities(canEdit)', { headers: { Authorization: 'Bearer ' + token } });
+      const data = await response.json();
+      if (sheetId !== currentSheet) return;
+      canEdit = response.ok && data.capabilities?.canEdit === true;
+      $('add').hidden = !canEdit; $('import-open').hidden = !canEdit; $('upgrade-library').hidden = !canEdit || !needsUpdate(); render();
+    } catch { if (sheetId === currentSheet) status('Could not check editing access. You can still browse and scan.'); }
+  }
+  function setMainView(view) {
+    mainView = view;
+    $(view === 'scan' ? 'scan-meta' : 'library-meta').append($('status'));
+    $('scan-view').hidden = view !== 'scan';
+    $('library').hidden = view !== 'library';
+    const toolbar = document.querySelector?.('.toolbar'); if (toolbar) toolbar.hidden = view !== 'library';
+    for (const name of ['scan', 'library']) $('mode-' + name).setAttribute('aria-pressed', String(name === view));
+    if (view !== 'scan') { checkSequence++; checkScanner.stop?.().catch(() => {}); $('check-camera').hidden = true; }
+  }
+  $('mode-scan').addEventListener('click', () => setMainView('scan'));
+  $('mode-library').addEventListener('click', () => setMainView('library'));
+  $('library-scan').addEventListener('click', () => setMainView('scan'));
+  function renderScanBooks() {
+    const container = $('scan-books'); container.replaceChildren();
+    const query = $('scan-search').value.trim().toLocaleLowerCase();
+    const isbnQuery = query.replace(/[\s-]/g, '');
+    const filtered = books.filter(book => [book.title, book.author].some(value => (value || '').toLocaleLowerCase().includes(query)) || (isbnQuery && (book.isbn || '').toLocaleLowerCase().replace(/[\s-]/g, '').includes(isbnQuery)));
+    $('scan-count').textContent = filtered.length + (filtered.length === 1 ? ' book' : ' books');
+    for (const book of filtered) {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'scan-book';
+      const title = document.createElement('strong'); title.textContent = book.title;
+      const author = document.createElement('span'); author.textContent = book.author || 'Unknown author';
+      button.append(title, author); button.addEventListener('click', () => showDetails(book)); container.append(button);
+    }
+  }
+  let scanSearchTimer;
+  $('scan-search').addEventListener('input', () => {
+    checkSequence++; clearTimeout(scanSearchTimer); $('check-result').hidden = true; renderScanBooks();
+    const query = $('scan-search').value.trim();
+    if (normalizeIsbn(query)) scanSearchTimer = setTimeout(async () => {
+      await checkScanner.stop(); $('check-camera').hidden = true;
+      if ($('scan-search').value.trim() === query && mainView === 'scan') checkIsbn(query);
+    }, 400);
+  });
+  async function checkIsbn(value) {
+    const sequence = ++checkSequence, isbn = normalizeIsbn(value);
+    const result = $('check-result'); result.hidden = false; result.replaceChildren();
+    if (!isbn) { result.textContent = 'Enter a valid ISBN-10 or ISBN-13.'; return; }
+
+    let match = matchBook(isbn, null, books), metadata = null;
+    if (match.kind !== 'exact') {
+      const heading = document.createElement('h2'); heading.textContent = 'No ISBN Match Found';
+      const detail = document.createElement('p'); detail.textContent = 'Checking Title & Author';
+      result.append(heading, detail);
+      try {
+        const response = await fetch('https://openlibrary.org/api/books?bibkeys=' + encodeURIComponent('ISBN:' + isbn) + '&format=json&jscmd=data');
+        if (!response.ok) throw new Error('Lookup unavailable');
+        const data = (await response.json())['ISBN:' + isbn];
+        if (data) metadata = { title: data.title || '', author: (data.authors || []).map(a => a.name).filter(Boolean).join(', ') };
+        match = matchBook(isbn, metadata, books);
+      } catch { match = { kind: 'unknown', books: [] }; }
+    }
+    if (sequence !== checkSequence || mainView !== 'scan') return;
+    result.replaceChildren();
+    const heading = document.createElement('h2'); heading.textContent = {exact:'Already in your library', possible:'Likely already in your library', none:'No Book Match Found', unknown:'No ISBN Match Found'}[match.kind]; result.append(heading);
+    const detail = document.createElement('p'); detail.textContent = match.kind === 'unknown' ? 'Could not check for other editions. Search by title or author to check manually.' : match.kind === 'possible' ? 'The title and author match a book you own; this may be another edition.' : metadata ? [metadata.title, metadata.author].filter(Boolean).join(' — ') : ''; result.append(detail);
+    for (const book of match.books) { const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary'; button.textContent = [book.title, book.author].filter(Boolean).join(' — '); button.addEventListener('click', () => showDetails(book)); result.append(button); }
+    if (canEdit && match.kind !== 'exact') { const add = document.createElement('button'); add.type = 'button'; add.textContent = match.kind === 'possible' ? 'Add this edition anyway' : 'Add book'; add.addEventListener('click', () => { openEditor(); $('book-form').elements.isbn.value = isbn; if (metadata) { $('book-form').elements.title.value = metadata.title; $('book-form').elements.author.value = metadata.author; } }); result.append(add); }
+    const again = document.createElement('button'); again.type = 'button'; again.className = 'secondary'; again.textContent = 'Scan another book'; again.addEventListener('click', startCheckScanner); result.append(again);
+  }
+  async function startCheckScanner() {
+    checkSequence++;
+    const scanId = checkSequence;
+    $('check-camera').hidden = false; $('check-result').hidden = true; $('check-preview').classList.remove('recognized');
+    try { await checkScanner.start(async value => { await new Promise(resolve => setTimeout(resolve, 500)); if (scanId !== checkSequence || $('check-camera').hidden) return; await checkScanner.stop(); $('check-camera').hidden = true; checkIsbn(value); }, value => { $('check-status').textContent = value; }, () => { $('check-preview').classList.add('recognized'); }); }
+    catch (error) { $('check-status').textContent = message(error); }
+  }
+  $('scan-start').addEventListener('click', startCheckScanner);
+  $('check-stop').addEventListener('click', async () => { checkSequence++; await checkScanner.stop(); $('check-camera').hidden = true; });
+  $('check-form').addEventListener('submit', event => { event.preventDefault(); });
+  $('check-photo').addEventListener('change', async event => { try { const value = await checkScanner.scanFile(event.target.files[0]); if (value && normalizeIsbn(value)) { await checkScanner.stop(); $('check-camera').hidden = true; checkIsbn(value); } else $('check-status').textContent = 'No valid ISBN barcode found. Try another photo or enter the ISBN manually.'; } catch { $('check-status').textContent = 'No barcode found. Try another photo or enter the ISBN manually.'; } });
+
   $('duplicates-toggle').addEventListener('click', () => { duplicatesMode = true; $('settings-dialog').close(); render(); });
   $('all-books').addEventListener('click', () => { duplicatesMode = false; render(); });
   async function assignBookId(book, button) {
@@ -252,7 +345,7 @@
     try {
       const snapshot = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
       if (snapshot?.sheetId === sheetId && Array.isArray(snapshot.books) && snapshot.books.every(book => headers.every(key => typeof book[key] === 'string')) && Number.isFinite(snapshot.updatedAt) && Array.isArray(snapshot.sheetHeaders)) {
-        sheetHeaders = readHeaders(snapshot.sheetHeaders); headerFrozen = snapshot.headerFrozen === true; libraryWidth = sheetHeaders.length; $('upgrade-library').hidden = !needsUpdate();
+        sheetHeaders = readHeaders(snapshot.sheetHeaders); headerFrozen = snapshot.headerFrozen === true; libraryWidth = sheetHeaders.length; $('upgrade-library').hidden = !canEdit || !needsUpdate();
         books = snapshot.books; $('library-name').textContent = snapshot.title || 'Your library';
         render(); showLibrary(); cached = true;
       }
@@ -420,7 +513,7 @@
     $('save').hidden = !editable;
     $('cancel-edit').hidden = !editable || !editingBook;
     $('delete').hidden = !editable || !editingBook?.id;
-    $('edit-from-details').hidden = editable || !editingBook?.id;
+    $('edit-from-details').hidden = !canEdit || editable || !editingBook?.id;
   }
   function showDetails(book) { openEditor(book, false); }
   $('edit-from-details').addEventListener('click', () => setEditorMode(true));
@@ -476,11 +569,12 @@
   $('editor').addEventListener('cancel', () => { resetDelete(); scanner.stop().catch(() => {}); $('scan-area').hidden = true; });
   $('scan').addEventListener('click', async () => {
     $('scan-area').hidden = false;
-    try { await scanner.start(async text => { $('book-form').elements.isbn.value = text; await stopScanner(); formStatus('Barcode captured. Look up the ISBN or enter the details.'); }, text => { $('scan-status').textContent = text; }); }
+    $('editor-preview').classList.remove('recognized');
+    try { await scanner.start(async text => { await new Promise(resolve => setTimeout(resolve, 500)); if ($('scan-area').hidden) return; $('book-form').elements.isbn.value = text; await stopScanner(); formStatus('Barcode captured. Look up the ISBN or enter the details.'); }, text => { $('scan-status').textContent = text; }, () => { $('editor-preview').classList.add('recognized'); }); }
     catch (error) { $('scan-status').textContent = message(error); }
   });
   $('stop-scan').addEventListener('click', () => stopScanner().catch(error => formStatus(message(error))));
-  $('photo').addEventListener('change', async event => { const file = event.target.files[0]; if (!file) return; try { const result = await scanner.scanFile(file); if (result) { $('book-form').elements.isbn.value = result; await stopScanner(); formStatus('Barcode captured. Look up the ISBN or enter the details.'); } } catch { $('scan-status').textContent = 'No barcode found. Try a clearer photo or enter the ISBN manually.'; } });
+  $('photo').addEventListener('change', async event => { const file = event.target.files[0]; if (!file) return; try { const result = await scanner.scanFile(file); if (result && normalizeIsbn(result)) { $('book-form').elements.isbn.value = normalizeIsbn(result); await stopScanner(); formStatus('Barcode captured. Look up the ISBN or enter the details.'); } else $('scan-status').textContent = 'No valid ISBN barcode found. Try another photo or enter the ISBN manually.'; } catch { $('scan-status').textContent = 'No barcode found. Try a clearer photo or enter the ISBN manually.'; } });
   $('lookup').addEventListener('click', async () => {
     const form = $('book-form');
     const isbn = normalizeIsbn(form.elements.isbn.value);
@@ -537,6 +631,9 @@
         await api('/values:batchUpdate', { method: 'POST', body: JSON.stringify({ valueInputOption: 'RAW', data: headers.map(key => ({ range: "'Books'!" + column(sheetHeaders.indexOf(key)) + rowNumber, values: [[valuesByHeader[key]]] })) }) });
       } else {
         await api('/values/' + encodeURIComponent("'Books'!A:ZZ") + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', { method: 'POST', body: JSON.stringify({ values: [sheetHeaders.map(key => valuesByHeader[key] || '')] }) });
+        checkSequence++; $('check-result').hidden = true; $('check-result').replaceChildren();
+        $('scan-search').value = ''; $('search').value = ''; sortField = ''; duplicatesMode = false;
+        books.unshift(valuesByHeader); render();
       }
       await finishChange('Book saved.');
     } catch (error) { formStatus('Save failed or could not be confirmed. Refresh the catalog before retrying: ' + message(error)); }
