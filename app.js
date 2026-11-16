@@ -55,9 +55,9 @@
     try { if (id) localStorage.setItem(storageKey, id); else localStorage.removeItem(storageKey); } catch {}
     updateConnect();
   }
-  function showLibrary() { $('mode-toggle').hidden = false; checkPermission(); $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('new-library-connected').hidden = false; $('transfer-actions').hidden = false; $('settings-open').hidden = false;  $('library-actions').hidden = false; $('view-switcher').hidden = false; $('search').disabled = false; setMainView(mainView); }
+  function showLibrary() { $('mode-toggle').hidden = false; checkPermission(); $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('new-library-connected').hidden = false; $('transfer-actions').hidden = false;   $('library-actions').hidden = false; $('view-switcher').hidden = false; $('search').disabled = false; setMainView(mainView); }
   updateConnect();
-  function clearSession() { document.querySelector?.('.site-header')?.append($('status')); canEdit = false; checkSequence++; checkScanner.stop?.().catch(() => {}); $('mode-toggle').hidden = true; $('scan-view').hidden = true; try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('count').textContent = ''; duplicatesMode = false; $('all-books').hidden = true; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true; $('transfer-actions').hidden = true; $('settings-open').hidden = true; if ($('settings-dialog').open) $('settings-dialog').close();  }
+  function clearSession() { document.querySelector?.('.site-header')?.append($('status')); canEdit = false; checkSequence++; checkScanner.stop?.().catch(() => {}); $('mode-toggle').hidden = true; $('scan-view').hidden = true; try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('count').textContent = ''; duplicatesMode = false; $('all-books').hidden = true; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true; $('transfer-actions').hidden = true; $('settings-dialog').hidden = true;  }
   async function api(path, options = {}) {
     const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(sheetId) + path, {
       ...options, headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
@@ -172,11 +172,12 @@
   }
   function setMainView(view) {
     mainView = view;
-    $(view === 'scan' ? 'scan-meta' : 'library-meta').append($('status'));
+    $(view === 'scan' ? 'scan-meta' : view === 'settings' ? 'settings-meta' : 'library-meta').append($('status'));
     $('scan-view').hidden = view !== 'scan';
     $('library').hidden = view !== 'library';
+    $('settings-dialog').hidden = view !== 'settings';
     const toolbar = document.querySelector?.('.toolbar'); if (toolbar) toolbar.hidden = view !== 'library';
-    for (const name of ['scan', 'library']) $('mode-' + name).setAttribute('aria-pressed', String(name === view));
+    for (const name of ['scan', 'library', 'settings']) $(name === 'settings' ? 'settings-open' : 'mode-' + name).setAttribute('aria-pressed', String(name === view));
     if (view !== 'scan') { checkSequence++; checkScanner.stop?.().catch(() => {}); $('check-camera').hidden = true; }
   }
   $('mode-scan').addEventListener('click', () => setMainView('scan'));
@@ -242,7 +243,7 @@
   $('check-form').addEventListener('submit', event => { event.preventDefault(); });
   $('check-photo').addEventListener('change', async event => { try { const value = await checkScanner.scanFile(event.target.files[0]); if (value && normalizeIsbn(value)) { await checkScanner.stop(); $('check-camera').hidden = true; checkIsbn(value); } else $('check-status').textContent = 'No valid ISBN barcode found. Try another photo or enter the ISBN manually.'; } catch { $('check-status').textContent = 'No barcode found. Try another photo or enter the ISBN manually.'; } });
 
-  $('duplicates-toggle').addEventListener('click', () => { duplicatesMode = true; $('settings-dialog').close(); render(); });
+  $('duplicates-toggle').addEventListener('click', () => { duplicatesMode = true; setMainView('library'); render(); });
   $('all-books').addEventListener('click', () => { duplicatesMode = false; render(); });
   async function assignBookId(book, button) {
     if (busy) return;
@@ -379,9 +380,8 @@
     else connect('create', name);
   });
   $('new-library').addEventListener('click', requestNewLibrary);
-  $('settings-open').addEventListener('click', () => $('settings-dialog').showModal());
-  $('settings-close').addEventListener('click', () => $('settings-dialog').close());
-  $('new-library-connected').addEventListener('click', () => { $('settings-dialog').close(); requestNewLibrary(); });
+  $('settings-open').addEventListener('click', () => setMainView('settings'));
+  $('new-library-connected').addEventListener('click', requestNewLibrary);
   $('disconnect').addEventListener('click', () => { clearSession(); rememberSheet(''); status('Disconnected. No catalog is stored in this tab.'); });
   window.addEventListener('storage', event => {
     if (event.key === sessionKey && !event.newValue && token) { clearSession(); rememberSheet(''); status('Disconnected in another window.'); }
@@ -395,7 +395,6 @@
     });
     if (!headerFrozen) { const item = document.createElement('li'); item.textContent = 'Freeze the header row.'; list.append(item); }
     if (JSON.stringify(sheetHeaders) !== JSON.stringify(desiredOrder(sheetHeaders)) || missingHeaders().length) { const item = document.createElement('li'); item.textContent = 'Reorder library columns into the standard layout; custom columns follow.'; list.append(item); }
-    if ($('settings-dialog').open) $('settings-dialog').close();
     $('upgrade-dialog').showModal();
   });
   $('cancel-upgrade').addEventListener('click', () => $('upgrade-dialog').close());
@@ -430,7 +429,6 @@
   });
   let importRows = [], importReading = 0;
   $('import-open').addEventListener('click', () => {
-    if ($('settings-dialog').open) $('settings-dialog').close();
     importRows = []; $('import-file').value = ''; $('import-status').textContent = 'Select a CSV file.'; $('import-confirm').disabled = true; $('import-dialog').showModal();
   });
   $('import-cancel').addEventListener('click', () => { if (!busy) { importReading++; $('import-dialog').close(); } });

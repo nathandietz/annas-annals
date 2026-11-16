@@ -116,12 +116,11 @@ button.upgrade-button:hover { background: #9a4032; border-color: #9a4032; opacit
 .sort-indicator.descending { background-image: linear-gradient(to bottom, #a8a29e 50%, #292524 50%); }
 
 .duplicate-reason { margin-top: 5px; color: #9a4032; font-size: 11px; font-weight: 500; }
-#settings-dialog { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(420px, 100vw); height: 100dvh; max-width: none; max-height: none; border-radius: 0; padding: 0; overflow-y: auto; }
-.settings-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; position: sticky; top: 0; background: white; padding: 22px 24px; border-bottom: 1px solid #e7e5e4; z-index: 1; }
-.settings-content { padding: 16px 24px 24px; }
+#settings-dialog { max-width: 540px; margin: 20px auto; }
+.settings-header { padding: 0; }
+.settings-content { padding: 0; }
 .settings-actions { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
 .settings-actions button { width: 100%; text-align: left; }
-@media (max-width: 600px) { #settings-dialog { width: 100vw; } }
 .toolbar { position: sticky; top: 0; z-index: 5; }
 
 .books.view-list { overflow: visible; }
@@ -203,13 +202,12 @@ button.upgrade-button:hover { background: #9a4032; border-color: #9a4032; opacit
 
 /* Keep view navigation with settings and catalog status with the book count. */
 .site-header .mode-toggle { margin: 0; }
-.site-header #settings-open { margin-left: auto; }
 .catalog-meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 16px; margin: 16px 0; }
 .catalog-meta #status, .catalog-meta .hint { margin: 0; }
 @media (max-width: 700px) { .site-header .mode-toggle { margin: 0; } }
 
 .catalog-meta { gap: 6px; }
-.catalog-meta #status:not(:empty)::before { content: "|"; padding-right: 6px; color: #a8a29e; }
+.catalog-meta:not(#settings-meta) #status:not(:empty)::before { content: "|"; padding-right: 6px; color: #a8a29e; }
 
 /* A wide, shallow camera window with a clear ISBN aiming guide. */
 .scanner-preview { position: relative; overflow: hidden; border-radius: 12px; background: #1c1917; height: clamp(180px, 52vw, 260px); }
