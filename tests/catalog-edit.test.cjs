@@ -6,7 +6,7 @@ const { findDuplicateGroups } = require('../duplicates.js');
 const { normalizeIsbn } = require('../isbn.js');
 const { matchBook } = require('../book-match.js');
 
-async function fixture({ legacy = false, extraData = false, nine = false, reordered = false, deferLookup = false } = {}) {
+async function fixture({ legacy = false, extraData = false, nine = false, reordered = false, deferLookup = false, bookData = null, editionData = null, workData = null } = {}) {
   let scanTimer, resolveLookup;
   const lookupWait = new Promise(resolve => { resolveLookup = resolve; });
   const handlers = {}, elements = {}, requests = [];
@@ -16,11 +16,11 @@ async function fixture({ legacy = false, extraData = false, nine = false, reorde
   const addedRows = [];
   let row = ['id-1', '9780306406157', 'Original', 'Author', '', '', '2026-01-01', ...(extraData ? ['occupied'] : [])];
   if (reordered) { [headers[0], headers[2]] = [headers[2], headers[0]]; [row[0], row[2]] = [row[2], row[0]]; }
-  function element(id) { return elements[id] ||= { hidden: false, value: '', textContent: '', disabled: false, classList: { toggle() {}, add() {}, remove() {} }, children: [], addEventListener(type, fn) { handlers[id + ':' + type] = fn; this['on' + type] = fn; }, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, setAttribute() {}, removeAttribute() {}, showModal() {}, close() {}, reset() {} }; }
+  function element(id) { return elements[id] ||= { hidden: false, value: '', textContent: '', disabled: false, classList: { toggle() {}, add() {}, remove() {} }, children: [], addEventListener(type, fn) { handlers[id + ':' + type] = fn; this['on' + type] = fn; }, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, setAttribute() {}, removeAttribute() {}, showModal() { this.open = true; }, close() { this.open = false; }, reset() {} }; }
   const form = element('book-form'); form.elements = Object.fromEntries(['isbn','title','author','language','notes','publisher','publication_year','shelf_location','category','description','series_name','volume_number','pages'].map(k => [k, { value: '' }]));
   const localStorage = { getItem: key => key === 'annas-annals-sheet-id' ? 'sheet-id' : key === 'annas-annals-google-session' ? JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }) : null, setItem() {}, removeItem() {} };
   const sessionStorage = { getItem: () => JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }), setItem() {}, removeItem() {} };
-  const context = vm.createContext({ document: { getElementById: element, createElement: tag => element('created-' + tag + '-' + Math.random()) }, window: { LIBRARY_CONFIG: {}, confirm: () => true, addEventListener() {} }, localStorage, sessionStorage, createLibraryScanner: () => ({ stop: async () => {} }), normalizeIsbn, matchBook, findDuplicateGroups, setTimeout: (fn, delay) => { if (delay === 400) scanTimer = fn; return 1; }, clearTimeout: () => {}, crypto: { randomUUID: () => 'new-id' }, fetch: async (url, options) => { requests.push({ url, options }); if (deferLookup && url.includes('openlibrary.org')) return lookupWait; if (url.includes(':append') && options?.body) addedRows.push(JSON.parse(options.body).values[0]); return { ok: true, json: async () => url.includes('fields=properties') ? { properties: { title: 'Library' }, sheets: [{ properties: { title: 'Books', gridProperties: { frozenRowCount: 1 } } }] } : url.includes('fields=sheets') ? { sheets: [{ properties: { title: 'Books', sheetId: 0 } }] } : { values: [headers, row, ...addedRows] } }; }, console });
+  const context = vm.createContext({ document: { getElementById: element, createElement: tag => element('created-' + tag + '-' + Math.random()) }, window: { LIBRARY_CONFIG: {}, confirm: () => true, addEventListener() {} }, localStorage, sessionStorage, createLibraryScanner: () => ({ stop: async () => {} }), normalizeIsbn, matchBook, findDuplicateGroups, setTimeout: (fn, delay) => { if (delay === 400) scanTimer = fn; return 1; }, clearTimeout: () => {}, crypto: { randomUUID: () => 'new-id' }, fetch: async (url, options) => { requests.push({ url, options }); if (deferLookup && url.includes('openlibrary.org')) return lookupWait; if (url.includes(':append') && options?.body) addedRows.push(JSON.parse(options.body).values[0]); return { ok: true, json: async () => url.includes('openlibrary.org/api/books') ? { 'ISBN:9780140328721': bookData } : url.includes('openlibrary.org/books/') ? editionData : url.includes('openlibrary.org/works/') ? workData : url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: true } } : url.includes('fields=properties') ? { properties: { title: 'Library' }, sheets: [{ properties: { title: 'Books', gridProperties: { frozenRowCount: 1 } } }] } : url.includes('fields=sheets') ? { sheets: [{ properties: { title: 'Books', sheetId: 0 } }] } : { values: [headers, row, ...addedRows] } }; }, console });
   vm.runInContext(fs.readFileSync('app.js', 'utf8'), context);
   await new Promise(resolve => setImmediate(resolve));
   const card = element('books').children[0];
@@ -151,4 +151,32 @@ test('shows the local ISBN result while the edition lookup is pending', async ()
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(f.element('check-result').children[0].textContent, 'No ISBN Match Found');
   f.resolveLookup({ ok: true, json: async () => ({}) });
+});
+
+test('adding a scanned book fills available edition details from the existing lookup', async () => {
+  const f = await fixture({ bookData: { title:'Matilda', authors:[{name:'Roald Dahl'}], publishers:[{name:'Puffin'}], publish_date:'1988', languages:[{key:'/languages/eng'}], number_of_pages:240, subjects:[{name:'Fiction'}] } });
+  f.handlers['mode-scan:click']();
+  f.element('scan-search').value = '9780140328721';
+  f.handlers['scan-search:input']();
+  await f.runScanTimer();
+  await new Promise(resolve => setImmediate(resolve));
+  const add = f.element('check-result').children.find(child => child.textContent === 'Add book');
+  assert.ok(add); add.onclick();
+  for (const [key, value] of Object.entries({isbn:'9780140328721', title:'Matilda', author:'Roald Dahl', publisher:'Puffin', publication_year:'1988', language:'eng', pages:'240', category:'Fiction'})) assert.equal(f.form.elements[key].value, value);
+  assert.equal(f.form.elements.shelf_location.value, '');
+  assert.equal(f.requests.filter(r => r.url.includes('openlibrary.org/api/books')).length, 1);
+});
+
+test('edition and work details fill asynchronously without replacing what the user typed', async () => {
+  const f = await fixture({ bookData: { title:'Matilda', authors:[{name:'Roald Dahl'}], url:'https://openlibrary.org/books/OL123M/Matilda' }, editionData: { series:['Children’s books'], works:[{key:'/works/OL12W'}] }, workData: { description:{value:'A young reader discovers her powers.'} } });
+  f.handlers['mode-scan:click']();
+  f.element('scan-search').value = '9780140328721';
+  f.handlers['scan-search:input'](); await f.runScanTimer();
+  await new Promise(resolve => setImmediate(resolve));
+  f.element('check-result').children.find(child => child.textContent === 'Add book').onclick();
+  f.form.elements.description.value = 'My own description';
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.form.elements.series_name.value, 'Children’s books');
+  assert.equal(f.form.elements.description.value, 'My own description');
+  assert.equal(f.requests.filter(r => r.url.includes('/works/OL12W.json')).length, 1);
 });

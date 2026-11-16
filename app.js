@@ -206,12 +206,46 @@
       if ($('scan-search').value.trim() === query && mainView === 'scan') checkIsbn(query);
     }, 400);
   });
+  function bookMetadata(data) {
+    return {
+      title: data.title || '',
+      author: (data.authors || []).map(a => a.name).filter(Boolean).join(', '),
+      publisher: (data.publishers || []).map(p => p.name).filter(Boolean).join(', '),
+      publication_year: (data.publish_date || '').match(/\b(?:1[0-9]{3}|20[0-9]{2})\b/)?.[0] || '',
+      language: (data.languages || []).map(language => language.name || language.key?.split('/').pop() || '').filter(Boolean).join(', '),
+      pages: data.number_of_pages ? String(data.number_of_pages) : '',
+      category: (data.subjects || []).map(subject => subject.name).filter(Boolean).join(', ')
+    };
+  }
+  let editorGeneration = 0;
+  function fillEmptyBookFields(values, generation, isbn) {
+    const form = $('book-form');
+    if (generation !== editorGeneration || !$('editor').open || normalizeIsbn(form.elements.isbn.value) !== isbn) return;
+    for (const [key, value] of Object.entries(values)) if (value && form.elements[key] && !form.elements[key].value.trim()) form.elements[key].value = value;
+  }
+  async function enrichScannedBook(data, generation, isbn) {
+    const editionId = String(data?.url || '').match(/^https?:\/\/openlibrary\.org\/books\/(OL\d+M)(?:\/|$)/)?.[1];
+    if (!editionId) return;
+    try {
+      const response = await fetch('https://openlibrary.org/books/' + editionId + '.json');
+      if (!response.ok) return;
+      const edition = await response.json();
+      const text = value => typeof value === 'string' ? value : value?.value || '';
+      fillEmptyBookFields({ description: text(edition.description), series_name: (edition.series || []).filter(value => typeof value === 'string').join(', ') }, generation, isbn);
+      const workKey = edition.works?.[0]?.key;
+      if (!/^\/works\/OL\d+W$/.test(workKey || '')) return;
+      const workResponse = await fetch('https://openlibrary.org' + workKey + '.json');
+      if (!workResponse.ok) return;
+      const work = await workResponse.json();
+      fillEmptyBookFields({ description: text(work.description) }, generation, isbn);
+    } catch { /* Details are optional; the existing lookup remains usable. */ }
+  }
   async function checkIsbn(value) {
     const sequence = ++checkSequence, isbn = normalizeIsbn(value);
     const result = $('check-result'); result.hidden = false; result.replaceChildren();
     if (!isbn) { result.textContent = 'Enter a valid ISBN-10 or ISBN-13.'; return; }
 
-    let match = matchBook(isbn, null, books), metadata = null;
+    let match = matchBook(isbn, null, books), metadata = null, bookData = null;
     if (match.kind !== 'exact') {
       const heading = document.createElement('h2'); heading.textContent = 'No ISBN Match Found';
       const detail = document.createElement('p'); detail.textContent = 'Checking Title & Author';
@@ -220,7 +254,7 @@
         const response = await fetch('https://openlibrary.org/api/books?bibkeys=' + encodeURIComponent('ISBN:' + isbn) + '&format=json&jscmd=data');
         if (!response.ok) throw new Error('Lookup unavailable');
         const data = (await response.json())['ISBN:' + isbn];
-        if (data) metadata = { title: data.title || '', author: (data.authors || []).map(a => a.name).filter(Boolean).join(', ') };
+        if (data) { bookData = data; metadata = bookMetadata(data); }
         match = matchBook(isbn, metadata, books);
       } catch { match = { kind: 'unknown', books: [] }; }
     }
@@ -229,7 +263,7 @@
     const heading = document.createElement('h2'); heading.textContent = {exact:'Already in your library', possible:'Likely already in your library', none:'No Book Match Found', unknown:'No ISBN Match Found'}[match.kind]; result.append(heading);
     const detail = document.createElement('p'); detail.textContent = match.kind === 'unknown' ? 'Could not check for other editions. Search by title or author to check manually.' : match.kind === 'possible' ? 'The title and author match a book you own; this may be another edition.' : metadata ? [metadata.title, metadata.author].filter(Boolean).join(' — ') : ''; result.append(detail);
     for (const book of match.books) { const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary'; button.textContent = [book.title, book.author].filter(Boolean).join(' — '); button.addEventListener('click', () => showDetails(book)); result.append(button); }
-    if (canEdit && match.kind !== 'exact') { const add = document.createElement('button'); add.type = 'button'; add.textContent = match.kind === 'possible' ? 'Add this edition anyway' : 'Add book'; add.addEventListener('click', () => { openEditor(); $('book-form').elements.isbn.value = isbn; if (metadata) { $('book-form').elements.title.value = metadata.title; $('book-form').elements.author.value = metadata.author; } }); result.append(add); }
+    if (canEdit && match.kind !== 'exact') { const add = document.createElement('button'); add.type = 'button'; add.textContent = match.kind === 'possible' ? 'Add this edition anyway' : 'Add book'; add.addEventListener('click', () => { openEditor(); const form = $('book-form'); form.elements.isbn.value = isbn; if (metadata) for (const [key, value] of Object.entries(metadata)) if (value) form.elements[key].value = value; if (bookData) enrichScannedBook(bookData, editorGeneration, isbn); }); result.append(add); }
     const again = document.createElement('button'); again.type = 'button'; again.className = 'secondary'; again.textContent = 'Scan another book'; again.addEventListener('click', startCheckScanner); result.append(again);
   }
   let cameraOpen = false;
@@ -548,6 +582,7 @@
     $('lookup-suggestions').replaceChildren(); formStatus(''); setEditorMode(false);
   });
   function openEditor(book = null, editable = true) {
+    editorGeneration++;
     editingBook = book ? { ...book } : null;
     const form = $('book-form'); form.reset();
     for (const key of editableFields) form.elements[key].value = book?.[key] || '';
@@ -629,7 +664,9 @@
         ['author', 'Author', (data.authors || []).map(a => a.name).filter(Boolean).join(', ')],
         ['publisher', 'Publisher', (data.publishers || []).map(p => p.name).filter(Boolean).join(', ')],
         ['publication_year', 'Publication year', (data.publish_date || '').match(/\b(?:1[0-9]{3}|20[0-9]{2})\b/)?.[0] || ''],
-        ['language', 'Language', (data.languages || []).map(language => language.name || language.key?.split('/').pop() || '').filter(Boolean).join(', ')]
+        ['language', 'Language', (data.languages || []).map(language => language.name || language.key?.split('/').pop() || '').filter(Boolean).join(', ')],
+        ['pages', 'Pages', data.number_of_pages ? String(data.number_of_pages) : ''],
+        ['category', 'Category', (data.subjects || []).map(subject => subject.name).filter(Boolean).join(', ')]
       ];
       let filled = 0, alternatives = 0;
       for (const [key, label, value] of values) {
