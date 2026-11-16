@@ -248,8 +248,7 @@
         $('check-preview').classList.add('recognized');
         await new Promise(resolve => setTimeout(resolve, 500));
         if (scanId !== checkSequence || $('check-camera').hidden) return;
-        await checkScanner.stop();
-        if (scanId !== checkSequence || $('check-camera').hidden) return;
+        checkScanner.hold(30000);
         setCameraOpen(false); checkIsbn(value);
       }, value => { $('check-status').textContent = value; });
     } catch (error) {
@@ -258,6 +257,9 @@
   }
   $('scan-start').addEventListener('click', () => $('check-camera').hidden ? startCheckScanner() : closeCheckScanner());
   $('check-stop').addEventListener('click', closeCheckScanner);
+  document.addEventListener?.('visibilitychange', () => {
+    if (document.hidden) { checkSequence++; setCameraOpen(false); checkScanner.stop().catch(() => {}); }
+  });
   $('check-form').addEventListener('submit', event => { event.preventDefault(); });
   $('check-photo').addEventListener('change', async event => { try { const value = await checkScanner.scanFile(event.target.files[0]); if (value) { await checkScanner.stop(); setCameraOpen(false); checkIsbn(value); } } catch { $('check-status').textContent = 'No barcode found. Try another photo or enter the ISBN manually.'; } });
 

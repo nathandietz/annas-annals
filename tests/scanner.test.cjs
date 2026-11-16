@@ -6,9 +6,12 @@ const path = require('node:path');
 
 function fixture(behavior = {}) {
   const instances = [];
+  const timers = new Map(); let nextTimer = 0;
   const formats = { QR_CODE: 0, EAN_13: 1, EAN_8: 2, UPC_A: 3, UPC_E: 4, CODE_128: 5, CODE_39: 6 };
   const context = vm.createContext({
     window: { isSecureContext: true }, navigator: { mediaDevices: { getUserMedia() {} } },
+    setTimeout(fn, delay) { const id = ++nextTimer; timers.set(id, { fn, delay }); return id; },
+    clearTimeout(id) { timers.delete(id); },
     Html5QrcodeSupportedFormats: formats,
     Html5Qrcode: class {
       constructor(id, config) { this.config = config; this.calls = []; instances.push(this); }
@@ -18,6 +21,8 @@ function fixture(behavior = {}) {
         this.isScanning = true;
       }
       async stop() { assert(this.isScanning); this.isScanning = false; this.stopped = true; }
+      pause(pauseVideo) { assert(this.isScanning); assert.equal(pauseVideo, false); this.paused = true; }
+      resume() { assert(this.paused); this.paused = false; }
       clear() { assert(!this.isScanning); this.cleared = true; }
       async scanFile(file) {
         assert(!this.isScanning);
@@ -27,8 +32,39 @@ function fixture(behavior = {}) {
     }
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../scanner.js'), 'utf8'), context);
-  return { scanner: context.createLibraryScanner(), instances, context, formats };
+  return { scanner: context.createLibraryScanner(), instances, context, formats, timers };
 }
+
+test('a retained camera is reused for the next scan and stops when its hold expires', async () => {
+  const f = fixture(); const results = [];
+  await f.scanner.start(value => results.push(value), () => {});
+  f.instances[0].success('first');
+  f.scanner.hold(30000);
+  assert.equal(f.instances[0].isScanning, true);
+  assert.equal(f.instances[0].paused, true);
+  await f.scanner.start(value => results.push(value), () => {});
+  assert.equal(f.instances.length, 1);
+  assert.equal(f.instances[0].paused, false);
+  assert.equal(f.timers.size, 0);
+  f.instances[0].success('second');
+  assert.deepEqual(results, ['first', 'second']);
+  f.scanner.hold(30000);
+  const timer = [...f.timers.values()][0];
+  assert.equal(timer.delay, 30000);
+  timer.fn();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.instances[0].isScanning, false);
+  assert(f.instances[0].cleared);
+});
+
+test('stopping a retained camera cancels its expiry timer', async () => {
+  const f = fixture();
+  await f.scanner.start(() => {}, () => {});
+  f.scanner.hold(30000);
+  await f.scanner.stop();
+  assert.equal(f.timers.size, 0);
+  assert.equal(f.instances[0].isScanning, false);
+});
 
 test('live decoding examines full frame, includes ISBN format, and accepts only one result', async () => {
   const f = fixture();

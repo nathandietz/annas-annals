@@ -4,6 +4,13 @@ function createLibraryScanner(readerId = 'universal-qr-reader') {
   let instance = null;
   let queue = Promise.resolve();
   let session = 0;
+  let holdTimer = null, retained = false, deliver = () => {};
+
+  function cancelHold() {
+    if (holdTimer !== null) clearTimeout(holdTimer);
+    holdTimer = null;
+    retained = false;
+  }
 
   function enqueue(work) {
     const result = queue.then(work);
@@ -47,19 +54,28 @@ function createLibraryScanner(readerId = 'universal-qr-reader') {
   return {
     start(onDecoded, onStatus) {
       const current = ++session;
+      const reuse = retained;
+      cancelHold();
       return enqueue(async () => {
+        if (current !== session) return;
+        let accepted = false;
+        deliver = text => {
+          if (current !== session || accepted) return;
+          accepted = true;
+          onDecoded(text);
+        };
+        if (reuse && instance?.isScanning) {
+          instance.resume();
+          onStatus('Keep the entire barcode in view, including blank space at both ends. Hold steady in good light.');
+          return;
+        }
         await release();
         if (current !== session) return;
         if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
           throw new Error('Camera scanning needs HTTPS and a supported browser. Open the GitHub Pages site, or scan a photo below.');
         }
         instance = create();
-        let accepted = false;
-        const success = text => {
-          if (current !== session || accepted) return;
-          accepted = true;
-          onDecoded(text);
-        };
+        const success = text => deliver(text);
         // No qrbox: ISBN/EAN barcodes need their entire width and quiet margins.
         const config = { fps: 10, videoConstraints: {
           facingMode: { ideal: 'environment' },
@@ -84,6 +100,7 @@ function createLibraryScanner(readerId = 'universal-qr-reader') {
     },
 
     scanFile(file) {
+      cancelHold();
       const current = ++session;
       return enqueue(async () => {
         await release();
@@ -94,7 +111,16 @@ function createLibraryScanner(readerId = 'universal-qr-reader') {
       });
     },
 
+    hold(duration) {
+      cancelHold();
+      if (!instance?.isScanning) return;
+      instance.pause(false);
+      retained = true;
+      holdTimer = setTimeout(() => { this.stop().catch(() => {}); }, duration);
+    },
+
     stop() {
+      cancelHold();
       ++session;
       return enqueue(release);
     }
