@@ -38,6 +38,7 @@ Viewers can browse. Editors can add books through the app and can also edit the 
    - [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
    - [Google Picker API](https://console.cloud.google.com/apis/library/picker.googleapis.com)
    - [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com)
+   - [Google Books API](https://console.cloud.google.com/apis/library/books.googleapis.com) for book metadata lookup
 3. Find the **project number** in the [project dashboard](https://console.cloud.google.com/home/dashboard). Save the numeric value for `appId` below. It is different from the project ID and the OAuth client ID.
 
 ## 3. Configure Google authorization
@@ -72,7 +73,7 @@ The app requests the [`drive.file` scope](https://developers.google.com/workspac
 ## 4. Create a browser API key
 
 1. Open [Google Cloud credentials](https://console.cloud.google.com/apis/credentials), select the same project, and choose **Create credentials → API key**.
-2. Name the key, for example `Anna’s Annals Picker`. Under **Select API restrictions**, choose **Google Picker API**. If it is missing, first enable it in the [API Library](https://console.cloud.google.com/apis/library/picker.googleapis.com). Include **Google Drive API** if needed by Picker.
+2. Name the key, for example `Anna’s Annals Picker`. Under **Select API restrictions**, choose **Google Picker API** and **Books API**. If either is missing, first enable it in the API Library. Include **Google Drive API** if needed by Picker. For an existing restricted key, add Books API to its allowed APIs; until then, book lookups fall back to Open Library.
 3. Under **Application restrictions**, choose **Websites** and add the following entries for your GitHub Pages site and Google Picker, replacing `YOUR-GITHUB-USERNAME` with your GitHub username:
 
    ```text
@@ -103,12 +104,37 @@ GitHub secret scanning may flag the key because it is published. If the restrict
 3. Commit and push the files to the branch you intend to publish. Never add a Google client secret, password, or access token to the repository.
 4. On GitHub, open the repository's **Settings → Pages**. Under **Build and deployment**, choose **Deploy from a branch**, select the branch you pushed and **/ (root)**, and save. Open the repository’s **Actions** tab and check that the latest **pages build and deployment** run succeeds for that branch and commit. Open the displayed site URL when it is published. If an older version appears, check the deployed commit and try a private window or hard refresh. [GitHub Pages instructions](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
 
+### Alternative: host the static site with Caddy
+
+The app is static HTML, CSS, and JavaScript; it does not need an application server or Google Apps Script. You can serve the published files from your own site instead of GitHub Pages. Browsers connect directly to Google and Open Library, so the existing Sheet can remain in Google Drive.
+
+For example, copy the app's public files to `/srv/annas-annals` and serve them on a dedicated HTTPS subdomain:
+
+```caddyfile
+books.example.com {
+    root * /srv/annas-annals
+    file_server
+}
+```
+
+Include `index.html`, `style.css`, the JavaScript files (including `config.js` and `service-worker.js`), `manifest.webmanifest`, and the `icons/` directory. Use the actual directory and domain for your server. Caddy must be able to read the files, and the domain and server must be configured for HTTPS. If you already serve the files with another web server, Caddy can reverse-proxy to it instead; a reverse proxy is not required for Caddy's own static file server.
+
+Before using the new address:
+
+1. Add its **origin**, such as `https://books.example.com`, to the web OAuth client's **Authorized JavaScript origins** in Google Cloud. An origin has no path or trailing slash.
+2. Add the corresponding website restriction, such as `https://books.example.com/*`, to the browser API key. Keep any existing allowed origins and restrictions that you still use.
+3. Open the new HTTPS address, sign in, and select the existing Sheet. Each user must still authorize the app and have access to that Sheet.
+
+The public `config.js` contains the browser client ID, project number, and restricted API key; do not put a client secret or access token in the served files. Camera access and the service worker require a secure context, normally HTTPS. A new origin has separate browser storage, so users will need to reconnect and choose their preferences again; saved sessions and cached covers do not automatically move from the old address. The PWA cover cache does not make the catalog fully offline.
+
 ## 6. Connect and use the library
 
 1. Open the Pages site. Click **Create new library** to create and initialize a new Sheet, or **Connect Google Sheet** to select an existing one. A connected user can also select **New library** to create another Sheet.
 2. Choose the Google account that owns the Sheet or that the Sheet was shared with. Approve the requested access.
 3. If connecting an existing library, select it in Google Picker. If creating a library, enter a name and the app creates and opens it in your Google Drive. Each person connecting must choose the shared file for their own account. The app remembers the chosen Sheet in this browser and restores the catalog after a reload while the Google session is valid. After it expires, reconnect without selecting the Sheet again. Choose **Choose a different Sheet** if needed. If it isn't visible, look in the shared-files view and check that the correct Google account has access.
 4. Search the catalog or choose **Add book**. Scan or type an ISBN, optionally look it up, review the details, and save. Choose **Edit** on a book to change or delete it. A viewer can browse but cannot save changes.
+
+ISBN lookups use Google Books first and fill missing details from Open Library. The app uses Google’s main category when available, otherwise one Open Library subject; it does not change existing category values. Both sources may have incomplete or inaccurate data, so review the results before saving.
 
 Book covers are loaded from Open Library by ISBN in card view, list view, and book details when available. In **Settings**, turn off **Show book covers** to hide cover previews and stop requesting them; this preference is stored in your current browser on this device. Images are not saved in your Google Sheet or Drive. The app caches up to 300 cover image files on this device for later visits; different image sizes count separately. Settings shows the cached image count and, when available, the browser’s estimate of site or cache storage (not necessarily the exact size of covers). Use **Settings → Clear cached covers** to remove this app-managed cache; covers can be downloaded again when displayed. Browsers may also maintain their own HTTP cache.
 

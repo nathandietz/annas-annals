@@ -129,6 +129,7 @@ button.upgrade-button:hover { background: #9a4032; border-color: #9a4032; opacit
 .settings-group h3 { margin:0 0 14px; font-size:15px; }
 .settings-group .hint { margin:8px 0; }
 .settings-group > button { margin-top:6px; }
+.lookup-results .lookup-source { margin:0 0 8px; color:#78716c; font-size:11px; }
 .cover-setting { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:0; text-transform:none; letter-spacing:normal; font-size:13px; color:#292524; cursor:pointer; }
 .cover-setting .hint { display:block; margin:4px 0 0; font-weight:400; }
 .cover-setting input { appearance:none; -webkit-appearance:none; display:block; flex:0 0 42px; width:42px; height:24px; padding:2px; margin:0; border:0; border-radius:999px; background:#d6d3d1; cursor:pointer; }

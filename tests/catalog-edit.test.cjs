@@ -6,7 +6,7 @@ const { findDuplicateGroups } = require('../duplicates.js');
 const { normalizeIsbn } = require('../isbn.js');
 const { matchBook } = require('../book-match.js');
 
-async function fixture({ legacy = false, extraData = false, nine = false, reordered = false, deferLookup = false, bookData = null, editionData = null, workData = null } = {}) {
+async function fixture({ legacy = false, extraData = false, nine = false, reordered = false, deferLookup = false, bookData = null, editionData = null, workData = null, googleData = null, googleFails = false } = {}) {
   let scanTimer, resolveLookup;
   const lookupWait = new Promise(resolve => { resolveLookup = resolve; });
   const handlers = {}, elements = {}, requests = [];
@@ -20,7 +20,7 @@ async function fixture({ legacy = false, extraData = false, nine = false, reorde
   const form = element('book-form'); form.elements = Object.fromEntries(['isbn','title','author','language','notes','publisher','publication_year','shelf_location','category','description','series_name','volume_number','pages'].map(k => [k, { value: '' }]));
   const localStorage = { getItem: key => key === 'annas-annals-show-covers' ? 'true' : key === 'annas-annals-sheet-id' ? 'sheet-id' : key === 'annas-annals-google-session' ? JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }) : null, setItem() {}, removeItem() {} };
   const sessionStorage = { getItem: () => JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }), setItem() {}, removeItem() {} };
-  const context = vm.createContext({ document: { getElementById: element, createElement: tag => element('created-' + tag + '-' + Math.random()) }, window: { LIBRARY_CONFIG: {}, confirm: () => true, addEventListener() {} }, localStorage, sessionStorage, createLibraryScanner: () => ({ stop: async () => {} }), normalizeIsbn, matchBook, findDuplicateGroups, setTimeout: (fn, delay) => { if (delay === 400) scanTimer = fn; return 1; }, clearTimeout: () => {}, crypto: { randomUUID: () => 'new-id' }, fetch: async (url, options) => { requests.push({ url, options }); if (deferLookup && url.includes('openlibrary.org')) return lookupWait; if (url.includes(':append') && options?.body) addedRows.push(JSON.parse(options.body).values[0]); return { ok: true, json: async () => url.includes('openlibrary.org/api/books') ? { 'ISBN:9780140328721': bookData } : url.includes('openlibrary.org/books/') ? editionData : url.includes('openlibrary.org/works/') ? workData : url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: true } } : url.includes('fields=properties') ? { properties: { title: 'Library' }, sheets: [{ properties: { title: 'Books', gridProperties: { frozenRowCount: 1 } } }] } : url.includes('fields=sheets') ? { sheets: [{ properties: { title: 'Books', sheetId: 0 } }] } : { values: [headers, row, ...addedRows] } }; }, console });
+  const context = vm.createContext({ document: { getElementById: element, createElement: tag => element('created-' + tag + '-' + Math.random()) }, window: { LIBRARY_CONFIG: {apiKey:'test-key'}, confirm: () => true, addEventListener() {} }, localStorage, sessionStorage, createLibraryScanner: () => ({ stop: async () => {} }), normalizeIsbn, matchBook, findDuplicateGroups, setTimeout: (fn, delay) => { if (delay === 400) scanTimer = fn; return 1; }, clearTimeout: () => {}, crypto: { randomUUID: () => 'new-id' }, fetch: async (url, options) => { requests.push({ url, options }); if (googleFails && url.includes('googleapis.com/books/')) throw new Error('unavailable'); if (deferLookup && url.includes('openlibrary.org')) return lookupWait; if (url.includes(':append') && options?.body) addedRows.push(JSON.parse(options.body).values[0]); return { ok: true, json: async () => url.includes('googleapis.com/books/') ? {items:googleData ? [{volumeInfo:googleData}] : []} : url.includes('openlibrary.org/api/books') ? { 'ISBN:9780140328721': bookData } : url.includes('openlibrary.org/books/') ? editionData : url.includes('openlibrary.org/works/') ? workData : url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: true } } : url.includes('fields=properties') ? { properties: { title: 'Library' }, sheets: [{ properties: { title: 'Books', gridProperties: { frozenRowCount: 1 } } }] } : url.includes('fields=sheets') ? { sheets: [{ properties: { title: 'Books', sheetId: 0 } }] } : { values: [headers, row, ...addedRows] } }; }, console });
   vm.runInContext(fs.readFileSync('app.js', 'utf8'), context);
   await new Promise(resolve => setImmediate(resolve));
   const card = element('books').children[0];
@@ -196,6 +196,55 @@ test('adding a scanned book fills available edition details from the existing lo
   assert.equal(f.form.elements.shelf_location.value, '');
   assert.match(f.element('book-cover-image').src, /covers\.openlibrary\.org\/b\/isbn\/9780140328721-M\.jpg/);
   assert.equal(f.requests.filter(r => r.url.includes('openlibrary.org/api/books')).length, 1);
+});
+
+test('scan lookup prefers Google Books and keeps one category', async () => {
+  const f = await fixture({ googleData: { industryIdentifiers:[{type:'ISBN_13',identifier:'9780140328721'}], title:'Google title', authors:['Roald Dahl'], mainCategory:'Juvenile Fiction', categories:['Juvenile Fiction','Fantasy'], pageCount:240 }, bookData: {title:'Other title', authors:[{name:'Roald Dahl'}], publishers:[{name:'Puffin'}], subjects:[{name:'Children'},{name:'Fiction'}]} });
+  f.handlers['mode-scan:click'](); f.element('scan-search').value = '9780140328721'; f.handlers['scan-search:input'](); await f.runScanTimer();
+  await new Promise(resolve => setImmediate(resolve));
+  f.element('check-result').children.find(child => child.textContent === 'Add book').onclick();
+  assert.equal(f.form.elements.title.value, 'Google title');
+  assert.equal(f.form.elements.category.value, 'Juvenile Fiction');
+  assert.equal(f.form.elements.publisher.value, 'Puffin');
+});
+
+test('scan lookup uses one Open Library subject if Google Books fails', async () => {
+  const f = await fixture({ googleFails:true, bookData:{title:'Matilda', authors:[{name:'Roald Dahl'}], subjects:[{name:'Fantasy, juvenile fiction'},{name:'Children'}]} });
+  f.handlers['mode-scan:click'](); f.element('scan-search').value = '9780140328721'; f.handlers['scan-search:input'](); await f.runScanTimer();
+  await new Promise(resolve => setImmediate(resolve));
+  f.element('check-result').children.find(child => child.textContent === 'Add book').onclick();
+  assert.equal(f.form.elements.category.value, 'Fantasy, juvenile fiction');
+});
+
+test('manual lookup identifies the source of each suggestion and retains user-entered values', async () => {
+  const f = await fixture({ googleData:{industryIdentifiers:[{identifier:'9780140328721'}], title:'Google title', authors:['Roald Dahl'], mainCategory:'Fiction'}, bookData:{title:'Open Library title', publishers:[{name:'Open publisher'}]} });
+  f.handlers['add:click']();
+  f.form.elements.isbn.value = '9780140328721';
+  f.form.elements.title.value = 'My title';
+  f.form.elements.publisher.value = 'My publisher';
+  f.form.elements.category.value = '';
+  await f.handlers['lookup:click']();
+  assert.equal(f.form.elements.title.value, 'My title');
+  assert.equal(f.form.elements.category.value, 'Fiction');
+  const title = f.element('lookup-suggestions').children.find(child => child.children[0].textContent === 'Title: Google title');
+  const publisher = f.element('lookup-suggestions').children.find(child => child.children[0].textContent === 'Publisher: Open publisher');
+  assert.equal(title.children[1].textContent, 'Source: Google Books');
+  assert.equal(publisher.children[1].textContent, 'Source: Open Library');
+  assert.match(f.element('lookup-status').textContent, /Google Books.*Open Library/);
+});
+
+test('manual lookup shows Google results before a slow Open Library response and preserves edits', async () => {
+  const f = await fixture({ deferLookup:true, googleData:{industryIdentifiers:[{identifier:'9780140328721'}], title:'Google title', authors:['Roald Dahl'], mainCategory:'Fiction'} });
+  f.handlers['add:click'](); f.form.elements.isbn.value = '9780140328721'; f.form.elements.title.value = ''; f.form.elements.category.value = '';
+  const pending = f.handlers['lookup:click']();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.form.elements.title.value, 'Google title');
+  assert.match(f.element('lookup-status').textContent, /Google Books/);
+  f.form.elements.title.value = 'My corrected title';
+  f.resolveLookup({ ok:true, json:async () => ({'ISBN:9780140328721':{title:'Other title', publishers:[{name:'Puffin'}]}}) });
+  await pending;
+  assert.equal(f.form.elements.title.value, 'My corrected title');
+  assert.equal(f.form.elements.publisher.value, 'Puffin');
 });
 
 test('edition and work details fill asynchronously without replacing what the user typed', async () => {

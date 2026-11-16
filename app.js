@@ -276,8 +276,45 @@
       publication_year: (data.publish_date || '').match(/\b(?:1[0-9]{3}|20[0-9]{2})\b/)?.[0] || '',
       language: (data.languages || []).map(language => language.name || language.key?.split('/').pop() || '').filter(Boolean).join(', '),
       pages: data.number_of_pages ? String(data.number_of_pages) : '',
-      category: (data.subjects || []).map(subject => subject.name).filter(Boolean).join(', ')
+      category: (data.subjects || []).map(subject => subject.name).find(Boolean) || ''
     };
+  }
+  async function fetchLookup(url) {
+    const controller = typeof AbortController === 'undefined' ? null : new AbortController();
+    let timer;
+    try {
+      const response = await Promise.race([
+        fetch(url, controller ? {signal: controller.signal} : undefined),
+        new Promise((_, reject) => { timer = setTimeout(() => { controller?.abort(); reject(new Error('Lookup timed out')); }, 5000); })
+      ]);
+      if (!response.ok) throw new Error('Lookup unavailable');
+      return await response.json();
+    } finally { clearTimeout(timer); }
+  }
+  function googleBookMetadata(google) {
+    return {
+      title: google.title || '', author: (google.authors || []).join(', '), publisher: google.publisher || '',
+      publication_year: (google.publishedDate || '').match(/\b(?:1[0-9]{3}|20[0-9]{2})\b/)?.[0] || '',
+      language: google.language || '', pages: google.pageCount ? String(google.pageCount) : '',
+      category: google.mainCategory || google.categories?.[0] || ''
+    };
+  }
+  async function lookupBookMetadata(isbn, onGoogle) {
+    const openLibrary = fetchLookup('https://openlibrary.org/api/books?bibkeys=' + encodeURIComponent('ISBN:' + isbn) + '&format=json&jscmd=data')
+      .then(data => data['ISBN:' + isbn] || null);
+    const googleBooks = config.apiKey ? fetchLookup('https://www.googleapis.com/books/v1/volumes?q=' + encodeURIComponent('isbn:' + isbn) + '&key=' + encodeURIComponent(config.apiKey))
+      .then(data => (data.items || []).find(item => (item.volumeInfo?.industryIdentifiers || []).some(id => normalizeIsbn(id.identifier) === isbn))?.volumeInfo || null)
+      .then(google => { if (google && onGoogle) { const metadata = googleBookMetadata(google), fieldSources = {}; for (const [key, value] of Object.entries(metadata)) if (value) fieldSources[key] = 'Google Books'; onGoogle({metadata, fieldSources}); } return google; }) : Promise.resolve(null);
+    const [openResult, googleResult] = await Promise.allSettled([openLibrary, googleBooks]);
+    if (openResult.status === 'rejected' && (googleResult.status === 'rejected' || !googleResult.value)) throw new Error('Book lookup unavailable. You can enter the details manually.');
+    const openData = openResult.status === 'fulfilled' ? openResult.value : null;
+    const google = googleResult.status === 'fulfilled' ? googleResult.value : null;
+    const fallback = openData ? bookMetadata(openData) : {};
+    const preferred = google ? googleBookMetadata(google) : {};
+    const metadata = {...fallback}, fieldSources = {};
+    for (const [key, value] of Object.entries(fallback)) if (value) fieldSources[key] = 'Open Library';
+    for (const [key, value] of Object.entries(preferred)) if (value) { metadata[key] = value; fieldSources[key] = 'Google Books'; }
+    return { metadata: openData || google ? metadata : null, bookData: openData, fieldSources };
   }
   let editorGeneration = 0;
   function fillEmptyBookFields(values, generation, isbn) {
@@ -313,10 +350,7 @@
       const detail = document.createElement('p'); detail.textContent = 'Checking Title & Author';
       result.append(heading, detail);
       try {
-        const response = await fetch('https://openlibrary.org/api/books?bibkeys=' + encodeURIComponent('ISBN:' + isbn) + '&format=json&jscmd=data');
-        if (!response.ok) throw new Error('Lookup unavailable');
-        const data = (await response.json())['ISBN:' + isbn];
-        if (data) { bookData = data; metadata = bookMetadata(data); }
+        ({metadata, bookData} = await lookupBookMetadata(isbn));
         match = matchBook(isbn, metadata, books);
       } catch { match = { kind: 'unknown', books: [] }; }
     }
@@ -728,37 +762,44 @@
     if (!isbn) { resultStatus.textContent = 'Enter a valid ISBN-10 or ISBN-13.'; return; }
     form.elements.isbn.value = isbn;
     resultStatus.textContent = 'Looking up book details…'; $('lookup').disabled = true;
-    const currentBook = editingBook;
-    try {
-      const response = await fetch('https://openlibrary.org/api/books?bibkeys=' + encodeURIComponent('ISBN:' + isbn) + '&format=json&jscmd=data');
-      if (!response.ok) throw new Error('Lookup unavailable. You can enter the details manually.');
-      const data = (await response.json())['ISBN:' + isbn];
-      if (editingBook !== currentBook || normalizeIsbn(form.elements.isbn.value) !== isbn || !$('editor').open) return;
-      if (!data) { resultStatus.textContent = 'No match found. You can enter the details manually.'; return; }
+    const currentBook = editingBook, generation = editorGeneration, autoFilled = {}, userChanged = new Set();
+    const isCurrent = () => editingBook === currentBook && editorGeneration === generation && normalizeIsbn(form.elements.isbn.value) === isbn && $('editor').open;
+    function showLookupResult({metadata, fieldSources}, pending) {
+      if (!isCurrent() || !metadata) return;
+      suggestions.replaceChildren();
       const values = [
-        ['title', 'Title', data.title || ''],
-        ['author', 'Author', (data.authors || []).map(a => a.name).filter(Boolean).join(', ')],
-        ['publisher', 'Publisher', (data.publishers || []).map(p => p.name).filter(Boolean).join(', ')],
-        ['publication_year', 'Publication year', (data.publish_date || '').match(/\b(?:1[0-9]{3}|20[0-9]{2})\b/)?.[0] || ''],
-        ['language', 'Language', (data.languages || []).map(language => language.name || language.key?.split('/').pop() || '').filter(Boolean).join(', ')],
-        ['pages', 'Pages', data.number_of_pages ? String(data.number_of_pages) : ''],
-        ['category', 'Category', (data.subjects || []).map(subject => subject.name).filter(Boolean).join(', ')]
+        ['title', 'Title', metadata.title], ['author', 'Author', metadata.author],
+        ['publisher', 'Publisher', metadata.publisher], ['publication_year', 'Publication year', metadata.publication_year],
+        ['language', 'Language', metadata.language], ['pages', 'Pages', metadata.pages], ['category', 'Category', metadata.category]
       ];
       let filled = 0, alternatives = 0;
       for (const [key, label, value] of values) {
         if (!value) continue;
-        if (!form.elements[key].value.trim()) { form.elements[key].value = value; filled++; continue; }
+        const current = form.elements[key].value.trim();
+        if (autoFilled[key] !== undefined && current !== autoFilled[key]) { delete autoFilled[key]; userChanged.add(key); }
+        if (!userChanged.has(key) && (!current || current === autoFilled[key])) { form.elements[key].value = value; autoFilled[key] = value; filled++; continue; }
+        if (!current) continue;
         if (form.elements[key].value.trim() === value) continue;
         alternatives++;
         const item = document.createElement('div'); item.className = 'lookup-suggestion';
         const description = document.createElement('p'); description.textContent = label + ': ' + value;
+        const source = document.createElement('p'); source.className = 'lookup-source'; source.textContent = 'Source: ' + fieldSources[key];
         const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary'; button.textContent = 'Use this ' + label.toLowerCase();
         button.addEventListener('click', () => { form.elements[key].value = value; item.remove(); });
-        item.append(description, button); suggestions.append(item);
+        item.append(description); item.append(source); item.append(button); suggestions.append(item);
       }
       resultStatus.textContent = filled ? 'Filled ' + filled + (filled === 1 ? ' empty field.' : ' empty fields.') + ' Review the details and save.' : 'No empty fields were filled. Review the details and save.';
-      if (alternatives) resultStatus.textContent += ' Open Library also suggested alternatives below.';
-    } catch (error) { resultStatus.textContent = message(error); } finally { $('lookup').disabled = false; }
+      if (alternatives) resultStatus.textContent += ' The lookup also suggested alternatives below.';
+      const usedSources = ['Google Books', 'Open Library'].filter(source => Object.values(fieldSources).includes(source));
+      if (usedSources.length) resultStatus.textContent += ' Sources: ' + usedSources.join(' and ') + '.';
+      if (pending) resultStatus.textContent += ' Checking Open Library for missing details…';
+    }
+    try {
+      const result = await lookupBookMetadata(isbn, partial => showLookupResult(partial, true));
+      if (!isCurrent()) return;
+      if (!result.metadata) { resultStatus.textContent = 'No match found. You can enter the details manually.'; return; }
+      showLookupResult(result, false);
+    } catch (error) { if (isCurrent()) resultStatus.textContent = message(error); } finally { $('lookup').disabled = false; }
   });
   $('book-form').addEventListener('submit', async event => {
     event.preventDefault(); if (busy || !editMode) return;
