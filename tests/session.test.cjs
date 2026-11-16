@@ -6,7 +6,7 @@ const headers = ['id','isbn','title','author','language','notes','created_at','p
 function storage(initial = {}) { const data = new Map(Object.entries(initial)); return { getItem: k => data.get(k) ?? null, setItem: (k,v) => data.set(k,String(v)), removeItem: k => data.delete(k) }; }
 async function openWindow(shared, responseStatus = 200, mobile = false, editable = true) {
   const elements = {}, handlers = {}, requests = [], scanners = [], timers = [];
-  const el = id => elements[id] ||= { hidden: false, value: '', textContent: '', children: [], classList: { values: new Set(), toggle() {}, remove(name) { this.values.delete(name); }, add(name) { this.values.add(name); }, contains(name) { return this.values.has(name); } }, addEventListener(type, fn) { handlers[id + ':' + type] = fn; }, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute() {}, append(child) { this.children.push(child); }, replaceChildren() { this.children = []; } };
+  const el = id => elements[id] ||= { hidden: false, value: '', textContent: '', children: [], classList: { values: new Set(), toggle(name, force) { if (force) this.values.add(name); else this.values.delete(name); }, remove(name) { this.values.delete(name); }, add(name) { this.values.add(name); }, contains(name) { return this.values.has(name); } }, addEventListener(type, fn) { handlers[id + ':' + type] = fn; }, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute() {}, append(child) { this.children.push(child); }, replaceChildren() { this.children = []; } };
   const window = { LIBRARY_CONFIG: {}, matchMedia: () => ({ matches: mobile }), addEventListener: (type, fn) => { handlers['window:' + type] = fn; } };
   const context = vm.createContext({ document: { getElementById: el, createElement: () => ({ textContent: '', setAttribute() {}, addEventListener() {}, append() {} }) }, window, localStorage: shared, sessionStorage: storage(), findDuplicateGroups: () => [], normalizeIsbn: require('../isbn.js').normalizeIsbn, matchBook: () => ({kind:'exact', books:[]}), createLibraryScanner: () => { const scanner = { stops: 0, start: async (callback, onStatus) => { scanner.decoded = callback; onStatus('Starting camera…'); }, hold: duration => { scanner.holdDuration = duration; }, stop: async () => { scanner.stops++; } }; scanners.push(scanner); return scanner; }, setTimeout: fn => { timers.push(fn); }, fetch: async (url, options) => { requests.push({url, options}); return { ok: responseStatus === 200, status: responseStatus, json: async () => url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: editable } } : url.includes('fields=properties') ? { properties: {title: 'My library'}, sheets: [{properties: {title:'Books', gridProperties:{frozenRowCount:1}}}] } : { values: [headers] } }; }, console });
   vm.runInContext(fs.readFileSync('app.js', 'utf8'), context);
@@ -91,7 +91,12 @@ test('a successful scan holds the camera briefly and leaving scan releases it', 
   await done;
   assert.equal(view.scanners[1].holdDuration, 30000);
   assert.equal(view.scanners[1].stops, 0);
-  assert.equal(view.el('check-camera').hidden, true);
+  assert.equal(view.el('check-camera').hidden, false);
+  assert.equal(view.el('check-camera').classList.contains('camera-standby'), true);
+  assert.equal(view.el('scan-start').attributes['aria-expanded'], 'false');
+  await view.handlers['scan-start:click']();
+  assert.equal(view.el('check-camera').classList.contains('camera-standby'), false);
+  assert.equal(view.el('scan-start').attributes['aria-expanded'], 'true');
   view.handlers['mode-library:click']();
   assert.equal(view.scanners[1].stops, 1);
 });

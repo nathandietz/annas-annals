@@ -232,8 +232,12 @@
     if (canEdit && match.kind !== 'exact') { const add = document.createElement('button'); add.type = 'button'; add.textContent = match.kind === 'possible' ? 'Add this edition anyway' : 'Add book'; add.addEventListener('click', () => { openEditor(); $('book-form').elements.isbn.value = isbn; if (metadata) { $('book-form').elements.title.value = metadata.title; $('book-form').elements.author.value = metadata.author; } }); result.append(add); }
     const again = document.createElement('button'); again.type = 'button'; again.className = 'secondary'; again.textContent = 'Scan another book'; again.addEventListener('click', startCheckScanner); result.append(again);
   }
-  function setCameraOpen(open) {
-    $('check-camera').hidden = !open;
+  let cameraOpen = false;
+  function setCameraOpen(open, standby = false) {
+    cameraOpen = open;
+    $('check-camera').hidden = !open && !standby;
+    $('check-camera').classList.toggle('camera-standby', standby);
+    $('check-camera').inert = standby;
     $('scan-start').setAttribute('aria-expanded', String(open));
   }
   async function closeCheckScanner() {
@@ -250,14 +254,14 @@
         await new Promise(resolve => setTimeout(resolve, 500));
         if (scanId !== checkSequence || $('check-camera').hidden) return;
         checkScanner.hold(30000);
-        setCameraOpen(false); checkIsbn(value);
+        setCameraOpen(false, true); checkIsbn(value);
       }, value => { if (value !== 'Starting camera…') $('check-status').textContent = value; });
       if (scanId === checkSequence) $('check-preview').classList.remove('loading');
     } catch (error) {
       if (scanId === checkSequence && !$('check-camera').hidden) { $('check-preview').classList.remove('loading'); $('check-status').textContent = message(error); }
     }
   }
-  $('scan-start').addEventListener('click', () => $('check-camera').hidden ? startCheckScanner() : closeCheckScanner());
+  $('scan-start').addEventListener('click', () => cameraOpen ? closeCheckScanner() : startCheckScanner());
   $('check-stop').addEventListener('click', closeCheckScanner);
   document.addEventListener?.('visibilitychange', () => {
     if (document.hidden) { checkSequence++; setCameraOpen(false); checkScanner.stop().catch(() => {}); }
