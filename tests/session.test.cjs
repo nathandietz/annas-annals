@@ -8,11 +8,12 @@ async function openWindow(shared, responseStatus = 200, mobile = false, editable
   const elements = {}, handlers = {}, requests = [], scanners = [], timers = [];
   const el = id => elements[id] ||= { hidden: false, value: '', textContent: '', children: [], classList: { values: new Set(), toggle(name, force) { if (force) this.values.add(name); else this.values.delete(name); }, remove(name) { this.values.delete(name); }, add(name) { this.values.add(name); }, contains(name) { return this.values.has(name); } }, addEventListener(type, fn) { handlers[id + ':' + type] = fn; }, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute() {}, append(child) { this.children.push(child); }, replaceChildren() { this.children = []; } };
   let deletedCache;
-  const window = { LIBRARY_CONFIG: {}, caches: { keys: async () => deletedCache ? [] : ['annas-annals-covers-v1'], open: async () => ({ keys: async () => [{}, {}] }), delete: async name => { deletedCache = name; } }, navigator: { storage: { estimate: async () => ({usage: 1048576}) } }, matchMedia: () => ({ matches: mobile }), addEventListener: (type, fn) => { handlers['window:' + type] = fn; } };
-  const context = vm.createContext({ document: { getElementById: el, createElement: () => ({ textContent: '', setAttribute() {}, addEventListener() {}, append() {} }) }, window, localStorage: shared, sessionStorage: storage(), findDuplicateGroups: () => [], normalizeIsbn: require('../isbn.js').normalizeIsbn, matchBook: () => ({kind:'exact', books:[]}), createLibraryScanner: () => { const scanner = { stops: 0, start: async (callback, onStatus) => { scanner.decoded = callback; onStatus('Starting camera…'); }, hold: duration => { scanner.holdDuration = duration; }, stop: async () => { scanner.stops++; } }; scanners.push(scanner); return scanner; }, setTimeout: fn => { timers.push(fn); }, fetch: async (url, options) => { requests.push({url, options}); return { ok: responseStatus === 200, status: responseStatus, json: async () => url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: editable } } : url.includes('fields=properties') ? { properties: {title: 'My library'}, sheets: [{properties: {title:'Books', gridProperties:{frozenRowCount:1}}}] } : { values: [headers] } }; }, console });
+  let navigatedTo;
+  const window = { LIBRARY_CONFIG: {}, location: { href:'https://example.com/annals/?view=library', replace: value => { navigatedTo = value; } }, caches: { keys: async () => deletedCache ? [] : ['annas-annals-covers-v1'], open: async () => ({ keys: async () => [{}, {}] }), delete: async name => { deletedCache = name; } }, navigator: { storage: { estimate: async () => ({usage: 1048576}) } }, matchMedia: () => ({ matches: mobile }), addEventListener: (type, fn) => { handlers['window:' + type] = fn; } };
+  const context = vm.createContext({ URL, document: { getElementById: el, createElement: () => ({ textContent: '', setAttribute() {}, addEventListener() {}, append() {} }) }, window, localStorage: shared, sessionStorage: storage(), findDuplicateGroups: () => [], normalizeIsbn: require('../isbn.js').normalizeIsbn, matchBook: () => ({kind:'exact', books:[]}), createLibraryScanner: () => { const scanner = { stops: 0, start: async (callback, onStatus) => { scanner.decoded = callback; onStatus('Starting camera…'); }, hold: duration => { scanner.holdDuration = duration; }, stop: async () => { scanner.stops++; } }; scanners.push(scanner); return scanner; }, setTimeout: fn => { timers.push(fn); }, fetch: async (url, options) => { requests.push({url, options}); return { ok: responseStatus === 200, status: responseStatus, json: async () => url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: editable } } : url.includes('fields=properties') ? { properties: {title: 'My library'}, sheets: [{properties: {title:'Books', gridProperties:{frozenRowCount:1}}}] } : { values: [headers] } }; }, console });
   vm.runInContext(fs.readFileSync('app.js', 'utf8'), context);
   await new Promise(resolve => setImmediate(resolve));
-  return { el, handlers, requests, scanners, timers, cacheDeleted: () => deletedCache };
+  return { el, handlers, requests, scanners, timers, window, navigatedTo: () => navigatedTo, cacheDeleted: () => deletedCache };
 }
 const sheetKey = 'annas-annals-sheet-id', sessionKey = 'annas-annals-google-session';
 test('a new window restores a valid session without reconnecting', async () => {
@@ -91,6 +92,31 @@ test('clear cover cache deletes stored covers and reports completion', async () 
   await view.handlers['clear-cover-cache:click']();
   assert.equal(view.cacheDeleted(), 'annas-annals-covers-v1');
   assert.match(view.el('cover-cache-status').textContent, /cleared/i);
+});
+
+test('update app checks the worker and reloads the same URL without a stale document', async () => {
+  const view = await openWindow(storage()); let updated = false;
+  view.window.navigator.serviceWorker = { getRegistration: async () => ({update: async () => { updated = true; }}) };
+  await view.handlers['update-app:click']();
+  assert.equal(updated, true);
+  const url = new URL(view.navigatedTo());
+  assert.equal(url.pathname, '/annals/'); assert.equal(url.searchParams.get('view'), 'library');
+  assert.ok(url.searchParams.has('_update'));
+});
+
+test('update app reports a worker update failure without navigating', async () => {
+  const view = await openWindow(storage());
+  view.window.navigator.serviceWorker = { getRegistration: async () => ({update: async () => { throw new Error('offline'); }}) };
+  await view.handlers['update-app:click']();
+  assert.equal(view.navigatedTo(), undefined);
+  assert.match(view.el('update-app-status').textContent, /could not/i);
+  assert.equal(view.el('update-app').disabled, false);
+});
+
+test('update app reloads even without a service worker', async () => {
+  const view = await openWindow(storage());
+  await view.handlers['update-app:click']();
+  assert.ok(new URL(view.navigatedTo()).searchParams.has('_update'));
 });
 
 test('scan button opens and closes its connected panel', async () => {

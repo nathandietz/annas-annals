@@ -125,7 +125,7 @@ Before using the new address:
 2. Add the corresponding website restriction, such as `https://books.example.com/*`, to the browser API key. Keep any existing allowed origins and restrictions that you still use.
 3. Open the new HTTPS address, sign in, and select the existing Sheet. Each user must still authorize the app and have access to that Sheet.
 
-The public `config.js` contains the browser client ID, project number, and restricted API key; do not put a client secret or access token in the served files. Camera access and the service worker require a secure context, normally HTTPS. A new origin has separate browser storage, so users will need to reconnect and choose their preferences again; saved sessions and cached covers do not automatically move from the old address. The PWA cover cache does not make the catalog fully offline.
+The public `config.js` contains the browser client ID, project number, and restricted API key; do not put a client secret or access token in the served files. Camera access and the service worker require a secure context, normally HTTPS. A new origin has separate browser storage, so users will need to reconnect and choose their preferences again; saved sessions and cached covers do not automatically move from the old address. The PWA cover cache does not make the catalog fully offline. In the app, use **Settings → App → Update app** to check for a service-worker update and reload the current page with a fresh URL; cached covers and saved preferences are not cleared.
 
 ## 6. Connect and use the library
 

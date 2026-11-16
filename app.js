@@ -183,6 +183,21 @@
     if ($('editor').open) updateBookCover();
     render();
   });
+  $('update-app').addEventListener('click', async () => {
+    const button = $('update-app'), status = $('update-app-status');
+    button.disabled = true; status.textContent = 'Checking for updates…';
+    try {
+      const registration = await window.navigator?.serviceWorker?.getRegistration();
+      if (registration) await registration.update();
+      const url = new URL(window.location.href);
+      url.searchParams.set('_update', String(Date.now()));
+      status.textContent = 'Reloading app…';
+      window.location.replace(url.href);
+    } catch {
+      status.textContent = 'Could not check for updates. Check your connection and try again.';
+      button.disabled = false;
+    }
+  });
   $('clear-cover-cache').addEventListener('click', async () => {
     const button = $('clear-cover-cache'), status = $('cover-cache-status');
     button.disabled = true; status.textContent = 'Clearing cached covers…';

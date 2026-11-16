@@ -6,7 +6,7 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://apis.google.com/js/api.js" async defer></script>
   <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js" async></script>
-  <script src="scanner.js?v=canvas-preview-1" defer></script><script src="isbn.js?v=017c5b1b32ae" defer></script><script src="book-match.js?v=017c5b1b32ae" defer></script><script src="duplicates.js?v=017c5b1b32ae" defer></script><script src="csv.js?v=017c5b1b32ae" defer></script><script src="config.js?v=017c5b1b32ae" defer></script><script src="app.js?v=lookup-progress-1" defer></script>
+  <script src="scanner.js?v=canvas-preview-1" defer></script><script src="isbn.js?v=017c5b1b32ae" defer></script><script src="book-match.js?v=017c5b1b32ae" defer></script><script src="duplicates.js?v=017c5b1b32ae" defer></script><script src="csv.js?v=017c5b1b32ae" defer></script><script src="config.js?v=017c5b1b32ae" defer></script><script src="app.js?v=app-update-1" defer></script>
 </head>
 <body>
   <main>
@@ -35,6 +35,12 @@
         <section class="settings-group" aria-labelledby="connection-title">
           <h3 id="connection-title">Library connection</h3>
           <div class="settings-actions"><button id="new-library-connected" class="secondary" hidden>New library</button><button id="disconnect" class="secondary" hidden>Disconnect</button></div>
+        </section>
+        <section class="settings-group" aria-labelledby="app-title">
+          <h3 id="app-title">App</h3>
+          <p class="hint">Check for updates and reload the app.</p>
+          <button id="update-app" class="secondary" type="button">Update app</button>
+          <p id="update-app-status" class="hint" role="status"></p>
         </section>
       </div>
     </section>
