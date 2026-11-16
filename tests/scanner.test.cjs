@@ -139,3 +139,20 @@ test('insecure pages show HTTPS guidance', async () => {
   await assert.rejects(f.scanner.start(() => {}, () => {}), /HTTPS/);
   assert.equal(f.instances.length, 0);
 });
+
+test('canvas preview crops a portrait camera frame to fill the wide view and stops cleanly', () => {
+  const f = fixture(); const draws = []; const frames = new Map(); let frameId = 0;
+  const video = { videoWidth: 720, videoHeight: 1280, readyState: 2 };
+  const preview = { clientWidth: 320, clientHeight: 200, classList: { add() {}, remove() {} }, append() {} };
+  const canvas = { className: '', width: 0, height: 0, getContext: () => ({ drawImage: (...args) => draws.push(args) }), remove() {} };
+  f.context.document = { getElementById: () => ({ parentElement: preview, querySelector: () => video }), createElement: () => canvas };
+  f.context.requestAnimationFrame = fn => { frames.set(++frameId, fn); return frameId; };
+  f.context.cancelAnimationFrame = id => frames.delete(id);
+  const renderer = f.context.createCameraPreview('check-qr-reader');
+  renderer.start();
+  const callback = frames.get(1); frames.delete(1); callback();
+  assert.equal(draws.length, 1);
+  assert.deepEqual(draws[0].slice(1), [0, 415, 720, 450, 0, 0, 720, 450]);
+  renderer.stop();
+  assert.equal(frames.size, 0);
+});

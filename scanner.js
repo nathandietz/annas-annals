@@ -1,3 +1,42 @@
+function createCameraPreview(readerId) {
+  let frame = null, canvas = null, preview = null;
+  function stop() {
+    if (frame !== null) cancelAnimationFrame(frame);
+    frame = null;
+    preview?.classList.remove('canvas-ready');
+    canvas?.remove(); canvas = null; preview = null;
+  }
+  function start() {
+    stop();
+    if (typeof document === 'undefined' || typeof requestAnimationFrame === 'undefined') return;
+    const reader = document.getElementById(readerId);
+    preview = reader?.parentElement;
+    if (!preview) return;
+    canvas = document.createElement('canvas');
+    canvas.className = 'camera-canvas';
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { canvas = null; preview = null; return; }
+    preview.append(canvas);
+    const draw = () => {
+      const video = reader.querySelector('video');
+      const width = preview.clientWidth, height = preview.clientHeight;
+      if (video?.readyState >= 2 && video.videoWidth && video.videoHeight && width && height) {
+        const ratio = width / height, sourceWidth = Math.min(video.videoWidth, video.videoHeight * ratio);
+        const sourceHeight = Math.min(video.videoHeight, video.videoWidth / ratio);
+        const outWidth = Math.round(sourceWidth), outHeight = Math.round(sourceHeight);
+        if (canvas.width !== outWidth || canvas.height !== outHeight) { canvas.width = outWidth; canvas.height = outHeight; }
+        try {
+          ctx.drawImage(video, (video.videoWidth - sourceWidth) / 2, (video.videoHeight - sourceHeight) / 2, sourceWidth, sourceHeight, 0, 0, outWidth, outHeight);
+          preview.classList.add('canvas-ready');
+        } catch { preview.classList.remove('canvas-ready'); }
+      }
+      frame = requestAnimationFrame(draw);
+    };
+    frame = requestAnimationFrame(draw);
+  }
+  return { start, stop };
+}
+
 /* Keep camera objects outside Alpine's reactive proxies. Serialize camera/file
  * operations so closing a modal or choosing a photo during startup is safe. */
 function createLibraryScanner(readerId = 'universal-qr-reader') {
@@ -5,6 +44,7 @@ function createLibraryScanner(readerId = 'universal-qr-reader') {
   let queue = Promise.resolve();
   let session = 0;
   let holdTimer = null, retained = false, deliver = () => {};
+  const preview = createCameraPreview(readerId);
 
   function cancelHold() {
     if (holdTimer !== null) clearTimeout(holdTimer);
@@ -19,6 +59,7 @@ function createLibraryScanner(readerId = 'universal-qr-reader') {
   }
 
   async function release() {
+    preview.stop();
     if (!instance) return;
     if (instance.isScanning) await instance.stop();
     instance.clear();
@@ -66,6 +107,7 @@ function createLibraryScanner(readerId = 'universal-qr-reader') {
         };
         if (reuse && instance?.isScanning) {
           instance.resume();
+          preview.start();
           onStatus('Keep the entire barcode in view, including blank space at both ends. Hold steady in good light.');
           return;
         }
@@ -91,6 +133,7 @@ function createLibraryScanner(readerId = 'universal-qr-reader') {
           await instance.start({ facingMode: 'user' }, { fps: 10 }, success, () => {});
         }
         if (current !== session) { await release(); return; }
+        preview.start();
         onStatus('Keep the entire barcode in view, including blank space at both ends. Hold steady in good light.');
       }).catch(async error => {
         if (current !== session) return;
@@ -114,6 +157,7 @@ function createLibraryScanner(readerId = 'universal-qr-reader') {
     hold(duration) {
       cancelHold();
       if (!instance?.isScanning) return;
+      preview.stop();
       instance.pause(false);
       retained = true;
       holdTimer = setTimeout(() => { this.stop().catch(() => {}); }, duration);
