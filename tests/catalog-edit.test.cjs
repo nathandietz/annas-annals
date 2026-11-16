@@ -18,7 +18,7 @@ async function fixture({ legacy = false, extraData = false, nine = false, reorde
   if (reordered) { [headers[0], headers[2]] = [headers[2], headers[0]]; [row[0], row[2]] = [row[2], row[0]]; }
   function element(id) { return elements[id] ||= { hidden: false, value: '', textContent: '', disabled: false, classList: { toggle() {}, add() {}, remove() {} }, children: [], addEventListener(type, fn) { handlers[id + ':' + type] = fn; this['on' + type] = fn; }, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, setAttribute() {}, removeAttribute() {}, showModal() { this.open = true; }, close() { this.open = false; }, reset() {} }; }
   const form = element('book-form'); form.elements = Object.fromEntries(['isbn','title','author','language','notes','publisher','publication_year','shelf_location','category','description','series_name','volume_number','pages'].map(k => [k, { value: '' }]));
-  const localStorage = { getItem: key => key === 'annas-annals-sheet-id' ? 'sheet-id' : key === 'annas-annals-google-session' ? JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }) : null, setItem() {}, removeItem() {} };
+  const localStorage = { getItem: key => key === 'annas-annals-show-covers' ? 'true' : key === 'annas-annals-sheet-id' ? 'sheet-id' : key === 'annas-annals-google-session' ? JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }) : null, setItem() {}, removeItem() {} };
   const sessionStorage = { getItem: () => JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }), setItem() {}, removeItem() {} };
   const context = vm.createContext({ document: { getElementById: element, createElement: tag => element('created-' + tag + '-' + Math.random()) }, window: { LIBRARY_CONFIG: {}, confirm: () => true, addEventListener() {} }, localStorage, sessionStorage, createLibraryScanner: () => ({ stop: async () => {} }), normalizeIsbn, matchBook, findDuplicateGroups, setTimeout: (fn, delay) => { if (delay === 400) scanTimer = fn; return 1; }, clearTimeout: () => {}, crypto: { randomUUID: () => 'new-id' }, fetch: async (url, options) => { requests.push({ url, options }); if (deferLookup && url.includes('openlibrary.org')) return lookupWait; if (url.includes(':append') && options?.body) addedRows.push(JSON.parse(options.body).values[0]); return { ok: true, json: async () => url.includes('openlibrary.org/api/books') ? { 'ISBN:9780140328721': bookData } : url.includes('openlibrary.org/books/') ? editionData : url.includes('openlibrary.org/works/') ? workData : url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: true } } : url.includes('fields=properties') ? { properties: { title: 'Library' }, sheets: [{ properties: { title: 'Books', gridProperties: { frozenRowCount: 1 } } }] } : url.includes('fields=sheets') ? { sheets: [{ properties: { title: 'Books', sheetId: 0 } }] } : { values: [headers, row, ...addedRows] } }; }, console });
   vm.runInContext(fs.readFileSync('app.js', 'utf8'), context);
@@ -87,6 +87,36 @@ test('saving a book includes its shelf location', async () => {
   await f.handlers['book-form:submit']({ preventDefault() {}, currentTarget: f.form });
   const write = f.requests.find(r => r.url.includes('values:batchUpdate'));
   assert.equal(JSON.parse(write.options.body).data.find(item => item.range.endsWith('J2')).values[0][0], 'Living room, top shelf');
+});
+
+test('cards show identification and shelf information while details retain the other fields', async () => {
+  const f = await fixture();
+  f.changeRow(['id-1','9780306406157','Original','Author','English','Notes','2026-01-01','Publisher','1991','Top shelf','Fiction','Description','Series','2','240','2026-01-01']);
+  await f.handlers['refresh:click']();
+  const details = f.element('books').children[0].children[0].children.find(child => child.className === 'book-details');
+  assert.deepEqual(details.children.map(child => child.children[0]?.textContent || child.textContent), ['Original','Author','Series · Vol. 2','Top shelf']);
+  f.element('books').children[0].onclick();
+  assert.equal(f.form.elements.publisher.value, 'Publisher');
+  assert.equal(f.form.elements.category.value, 'Fiction');
+  assert.equal(f.form.elements.pages.value, '240');
+});
+
+test('cover setting controls book images in cards, list, and details', async () => {
+  const f = await fixture();
+  const card = f.element('books').children[0];
+  const cover = card.children[0].children[0];
+  assert.match(cover.children[0].src, /covers\.openlibrary\.org\/b\/isbn\/9780306406157-S\.jpg/);
+  f.handlers['view-list:click']();
+  const table = f.element('books').children[0];
+  const titleCell = table.children[1].children[0].children[0];
+  assert.match(titleCell.children[0].src, /9780306406157-S\.jpg/);
+  f.element('show-covers').checked = false;
+  f.handlers['show-covers:change']();
+  assert.equal(f.element('book-cover-image').hidden, true);
+  assert.equal(f.element('book-cover-panel').hidden, true);
+  assert.equal(f.element('books').children[0].children[1].children[0].children[0].children[0].className, 'book-title-button');
+  f.handlers['view-card:click']();
+  assert.equal(f.element('books').children[0].children[0].children[0].className, 'book-details');
 });
 
 
@@ -164,6 +194,7 @@ test('adding a scanned book fills available edition details from the existing lo
   assert.ok(add); add.onclick();
   for (const [key, value] of Object.entries({isbn:'9780140328721', title:'Matilda', author:'Roald Dahl', publisher:'Puffin', publication_year:'1988', language:'eng', pages:'240', category:'Fiction'})) assert.equal(f.form.elements[key].value, value);
   assert.equal(f.form.elements.shelf_location.value, '');
+  assert.match(f.element('book-cover-image').src, /covers\.openlibrary\.org\/b\/isbn\/9780140328721-M\.jpg/);
   assert.equal(f.requests.filter(r => r.url.includes('openlibrary.org/api/books')).length, 1);
 });
 

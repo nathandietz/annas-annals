@@ -7,11 +7,12 @@ function storage(initial = {}) { const data = new Map(Object.entries(initial)); 
 async function openWindow(shared, responseStatus = 200, mobile = false, editable = true) {
   const elements = {}, handlers = {}, requests = [], scanners = [], timers = [];
   const el = id => elements[id] ||= { hidden: false, value: '', textContent: '', children: [], classList: { values: new Set(), toggle(name, force) { if (force) this.values.add(name); else this.values.delete(name); }, remove(name) { this.values.delete(name); }, add(name) { this.values.add(name); }, contains(name) { return this.values.has(name); } }, addEventListener(type, fn) { handlers[id + ':' + type] = fn; }, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute() {}, append(child) { this.children.push(child); }, replaceChildren() { this.children = []; } };
-  const window = { LIBRARY_CONFIG: {}, matchMedia: () => ({ matches: mobile }), addEventListener: (type, fn) => { handlers['window:' + type] = fn; } };
+  let deletedCache;
+  const window = { LIBRARY_CONFIG: {}, caches: { keys: async () => deletedCache ? [] : ['annas-annals-covers-v1'], open: async () => ({ keys: async () => [{}, {}] }), delete: async name => { deletedCache = name; } }, navigator: { storage: { estimate: async () => ({usage: 1048576}) } }, matchMedia: () => ({ matches: mobile }), addEventListener: (type, fn) => { handlers['window:' + type] = fn; } };
   const context = vm.createContext({ document: { getElementById: el, createElement: () => ({ textContent: '', setAttribute() {}, addEventListener() {}, append() {} }) }, window, localStorage: shared, sessionStorage: storage(), findDuplicateGroups: () => [], normalizeIsbn: require('../isbn.js').normalizeIsbn, matchBook: () => ({kind:'exact', books:[]}), createLibraryScanner: () => { const scanner = { stops: 0, start: async (callback, onStatus) => { scanner.decoded = callback; onStatus('Starting camera…'); }, hold: duration => { scanner.holdDuration = duration; }, stop: async () => { scanner.stops++; } }; scanners.push(scanner); return scanner; }, setTimeout: fn => { timers.push(fn); }, fetch: async (url, options) => { requests.push({url, options}); return { ok: responseStatus === 200, status: responseStatus, json: async () => url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: editable } } : url.includes('fields=properties') ? { properties: {title: 'My library'}, sheets: [{properties: {title:'Books', gridProperties:{frozenRowCount:1}}}] } : { values: [headers] } }; }, console });
   vm.runInContext(fs.readFileSync('app.js', 'utf8'), context);
   await new Promise(resolve => setImmediate(resolve));
-  return { el, handlers, requests, scanners, timers };
+  return { el, handlers, requests, scanners, timers, cacheDeleted: () => deletedCache };
 }
 const sheetKey = 'annas-annals-sheet-id', sessionKey = 'annas-annals-google-session';
 test('a new window restores a valid session without reconnecting', async () => {
@@ -42,6 +43,15 @@ test('mobile opens scan view and viewers cannot add books', async () => {
   assert.equal(view.el('scan-view').hidden, true);
 });
 
+test('book covers default to off and an explicit preference is respected', async () => {
+  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
+  const first = await openWindow(shared);
+  assert.equal(first.el('show-covers').checked, false);
+  shared.setItem('annas-annals-show-covers', 'true');
+  const second = await openWindow(shared);
+  assert.equal(second.el('show-covers').checked, true);
+});
+
 test('settings is a view and switching back restores the library', async () => {
   const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
   const view = await openWindow(shared);
@@ -52,6 +62,35 @@ test('settings is a view and switching back restores the library', async () => {
   view.handlers['mode-library:click']();
   assert.equal(view.el('settings-dialog').hidden, true);
   assert.equal(view.el('library').hidden, false);
+});
+
+test('the selected main view is restored when the page is reopened', async () => {
+  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
+  const first = await openWindow(shared, 200, true);
+  first.handlers['mode-library:click']();
+  const second = await openWindow(shared, 200, true);
+  assert.equal(second.el('library').hidden, false);
+  assert.equal(second.el('scan-view').hidden, true);
+  second.handlers['settings-open:click']();
+  const third = await openWindow(shared, 200, true);
+  assert.equal(third.el('settings-dialog').hidden, false);
+});
+
+test('settings shows cached image count and estimated site storage', async () => {
+  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
+  const view = await openWindow(shared);
+  view.handlers['settings-open:click']();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(view.el('cover-cache-info').textContent, /2 cached images/);
+  assert.match(view.el('cover-cache-info').textContent, /1(?:\.0)? MB.*site storage/i);
+});
+
+test('clear cover cache deletes stored covers and reports completion', async () => {
+  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
+  const view = await openWindow(shared);
+  await view.handlers['clear-cover-cache:click']();
+  assert.equal(view.cacheDeleted(), 'annas-annals-covers-v1');
+  assert.match(view.el('cover-cache-status').textContent, /cleared/i);
 });
 
 test('scan button opens and closes its connected panel', async () => {

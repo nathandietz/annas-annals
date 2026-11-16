@@ -62,7 +62,10 @@ button.upgrade-button:hover { background: #9a4032; border-color: #9a4032; opacit
 #editor .editor-body { padding: 0 24px 24px; overflow-y: auto; min-height: 0; }
 
 .details-cover { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 110px; height: 150px; margin: 20px 0 4px; border: 1px solid #e7e5e4; border-radius: 10px; background: #fafaf9; color: #a8a29e; font-size: 11px; }
+.details-cover #book-cover-placeholder { display:flex; flex-direction:column; align-items:center; gap:8px; }
+.details-cover #book-cover-placeholder[hidden] { display:none; }
 .details-cover span:first-child { font-size: 28px; color: #d6d3d1; }
+.details-cover img { width:100%; height:100%; object-fit:contain; border-radius:inherit; }
 
 .book-intro { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 20px; align-items: start; margin-top: 20px; }
 .book-intro .details-cover { width: 150px; height: 210px; margin: 0; }
@@ -121,6 +124,22 @@ button.upgrade-button:hover { background: #9a4032; border-color: #9a4032; opacit
 .settings-content { padding: 0; }
 .settings-actions { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
 .settings-actions button { width: 100%; text-align: left; }
+.settings-description { margin:8px 0 20px; color:#78716c; line-height:1.5; }
+.settings-group { margin:0 0 14px; padding:18px; border:1px solid #e7e5e4; border-radius:16px; background:white; }
+.settings-group h3 { margin:0 0 14px; font-size:15px; }
+.settings-group .hint { margin:8px 0; }
+.settings-group > button { margin-top:6px; }
+.cover-setting { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:0; text-transform:none; letter-spacing:normal; font-size:13px; color:#292524; cursor:pointer; }
+.cover-setting .hint { display:block; margin:4px 0 0; font-weight:400; }
+.cover-setting input { appearance:none; -webkit-appearance:none; display:block; flex:0 0 42px; width:42px; height:24px; padding:2px; margin:0; border:0; border-radius:999px; background:#d6d3d1; cursor:pointer; }
+.cover-setting input::before { content:''; display:block; width:20px; height:20px; border-radius:50%; background:white; box-shadow:0 1px 3px #0003; transition:transform .15s ease; }
+.cover-setting input:checked { background:#292524; }
+.cover-setting input:checked::before { transform:translateX(18px); }
+.cover-setting input:focus-visible { outline:2px solid #78716c; outline-offset:3px; }
+.book-intro.no-cover { grid-template-columns:minmax(0, 1fr); }
+#editor .book-intro.no-cover .intro-fields { min-height:0; }
+.card-cover { width:100%; height:100%; object-fit:contain; border-radius:inherit; }
+.list-cover { width:30px; height:42px; object-fit:contain; vertical-align:middle; margin-right:8px; border-radius:3px; }
 .toolbar { position: sticky; top: 0; z-index: 5; }
 
 .books.view-list { overflow: visible; }
