@@ -62,8 +62,11 @@ function createLibraryScanner(readerId = 'universal-qr-reader') {
           onFeedback('recognized');
           onDecoded(isbn);
         };
-        // No qrbox: ISBN/EAN barcodes need their entire width and quiet margins.
-        const config = { fps: 12, videoConstraints: {
+        // Match the visible guide; leave room for both ISBN and price barcodes.
+        const config = { fps: 6, qrbox: (width, height) => {
+          const boxWidth = Math.floor(Math.min(width * 0.78, 620, height * 0.9 * 7 / 4));
+          return { width: boxWidth, height: Math.floor(boxWidth * 4 / 7) };
+        }, videoConstraints: {
           facingMode: { ideal: 'environment' },
           width: { ideal: 1280 }, height: { ideal: 720 }
         } };

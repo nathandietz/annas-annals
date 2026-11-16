@@ -57,7 +57,7 @@
   }
   function showLibrary() { $('mode-toggle').hidden = false; checkPermission(); $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('new-library-connected').hidden = false; $('transfer-actions').hidden = false;   $('library-actions').hidden = false; $('view-switcher').hidden = false; $('search').disabled = false; setMainView(mainView); }
   updateConnect();
-  function clearSession() { document.querySelector?.('.site-header')?.append($('status')); canEdit = false; checkSequence++; checkScanner.stop?.().catch(() => {}); $('mode-toggle').hidden = true; $('scan-view').hidden = true; try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('count').textContent = ''; duplicatesMode = false; $('all-books').hidden = true; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true; $('transfer-actions').hidden = true; $('settings-dialog').hidden = true;  }
+  function clearSession() { document.querySelector?.('.site-header')?.append($('status')); canEdit = false; checkSequence++; checkScanner.stop?.().catch(() => {}); $('mode-toggle').hidden = true; $('scan-view').hidden = true; setCameraOpen(false); try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('count').textContent = ''; duplicatesMode = false; $('all-books').hidden = true; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true; $('transfer-actions').hidden = true; $('settings-dialog').hidden = true;  }
   async function api(path, options = {}) {
     const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(sheetId) + path, {
       ...options, headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
@@ -178,7 +178,7 @@
     $('settings-dialog').hidden = view !== 'settings';
     const toolbar = document.querySelector?.('.toolbar'); if (toolbar) toolbar.hidden = view !== 'library';
     for (const name of ['scan', 'library', 'settings']) $(name === 'settings' ? 'settings-open' : 'mode-' + name).setAttribute('aria-pressed', String(name === view));
-    if (view !== 'scan') { checkSequence++; checkScanner.stop?.().catch(() => {}); $('check-camera').hidden = true; }
+    if (view !== 'scan') { checkSequence++; checkScanner.stop?.().catch(() => {}); setCameraOpen(false); }
   }
   $('mode-scan').addEventListener('click', () => setMainView('scan'));
   $('mode-library').addEventListener('click', () => setMainView('library'));
@@ -201,7 +201,7 @@
     checkSequence++; clearTimeout(scanSearchTimer); $('check-result').hidden = true; renderScanBooks();
     const query = $('scan-search').value.trim();
     if (normalizeIsbn(query)) scanSearchTimer = setTimeout(async () => {
-      await checkScanner.stop(); $('check-camera').hidden = true;
+      await checkScanner.stop(); setCameraOpen(false);
       if ($('scan-search').value.trim() === query && mainView === 'scan') checkIsbn(query);
     }, 400);
   });
@@ -231,17 +231,25 @@
     if (canEdit && match.kind !== 'exact') { const add = document.createElement('button'); add.type = 'button'; add.textContent = match.kind === 'possible' ? 'Add this edition anyway' : 'Add book'; add.addEventListener('click', () => { openEditor(); $('book-form').elements.isbn.value = isbn; if (metadata) { $('book-form').elements.title.value = metadata.title; $('book-form').elements.author.value = metadata.author; } }); result.append(add); }
     const again = document.createElement('button'); again.type = 'button'; again.className = 'secondary'; again.textContent = 'Scan another book'; again.addEventListener('click', startCheckScanner); result.append(again);
   }
+  function setCameraOpen(open) {
+    $('check-camera').hidden = !open;
+    $('scan-start').setAttribute('aria-expanded', String(open));
+  }
+  async function closeCheckScanner() {
+    checkSequence++; setCameraOpen(false);
+    await checkScanner.stop();
+  }
   async function startCheckScanner() {
     checkSequence++;
     const scanId = checkSequence;
-    $('check-camera').hidden = false; $('check-result').hidden = true; $('check-preview').classList.remove('recognized');
-    try { await checkScanner.start(async value => { await new Promise(resolve => setTimeout(resolve, 500)); if (scanId !== checkSequence || $('check-camera').hidden) return; await checkScanner.stop(); $('check-camera').hidden = true; checkIsbn(value); }, value => { $('check-status').textContent = value; }, () => { $('check-preview').classList.add('recognized'); }); }
+    setCameraOpen(true); $('check-result').hidden = true; $('check-preview').classList.remove('recognized');
+    try { await checkScanner.start(async value => { await new Promise(resolve => setTimeout(resolve, 500)); if (scanId !== checkSequence || $('check-camera').hidden) return; await checkScanner.stop(); setCameraOpen(false); checkIsbn(value); }, value => { $('check-status').textContent = value; }, () => { $('check-preview').classList.add('recognized'); }); }
     catch (error) { $('check-status').textContent = message(error); }
   }
-  $('scan-start').addEventListener('click', startCheckScanner);
-  $('check-stop').addEventListener('click', async () => { checkSequence++; await checkScanner.stop(); $('check-camera').hidden = true; });
+  $('scan-start').addEventListener('click', () => $('check-camera').hidden ? startCheckScanner() : closeCheckScanner());
+  $('check-stop').addEventListener('click', closeCheckScanner);
   $('check-form').addEventListener('submit', event => { event.preventDefault(); });
-  $('check-photo').addEventListener('change', async event => { try { const value = await checkScanner.scanFile(event.target.files[0]); if (value && normalizeIsbn(value)) { await checkScanner.stop(); $('check-camera').hidden = true; checkIsbn(value); } else $('check-status').textContent = 'No valid ISBN barcode found. Try another photo or enter the ISBN manually.'; } catch { $('check-status').textContent = 'No barcode found. Try another photo or enter the ISBN manually.'; } });
+  $('check-photo').addEventListener('change', async event => { try { const value = await checkScanner.scanFile(event.target.files[0]); if (value && normalizeIsbn(value)) { await checkScanner.stop(); setCameraOpen(false); checkIsbn(value); } else $('check-status').textContent = 'No valid ISBN barcode found. Try another photo or enter the ISBN manually.'; } catch { $('check-status').textContent = 'No barcode found. Try another photo or enter the ISBN manually.'; } });
 
   $('duplicates-toggle').addEventListener('click', () => { duplicatesMode = true; setMainView('library'); render(); });
   $('all-books').addEventListener('click', () => { duplicatesMode = false; render(); });

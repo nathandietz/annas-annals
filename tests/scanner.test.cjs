@@ -31,13 +31,15 @@ function fixture(behavior = {}) {
   return { scanner: context.createLibraryScanner(), instances, context, formats };
 }
 
-test('live decoding examines full frame, includes ISBN format, and accepts only one result', async () => {
+test('live decoding uses a barcode-shaped region and accepts only one result', async () => {
   const f = fixture();
   const results = [];
   await f.scanner.start(text => results.push(text), () => {});
   const camera = f.instances[0];
   assert.deepEqual(Array.from(camera.config.formatsToSupport), [f.formats.EAN_13]);
-  assert.equal(camera.calls[0].config.qrbox, undefined);
+  const region = camera.calls[0].config.qrbox(800, 1200);
+  assert.equal(region.width, 620);
+  assert.ok(Math.abs(region.height - 620 * 4 / 7) < 1);
   assert.equal(camera.calls[0].config.videoConstraints.width.ideal, 1280);
   camera.success('9780306406157'); camera.success('9780306406157');
   assert.deepEqual(results, ['9780306406157']);
