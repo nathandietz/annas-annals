@@ -35,6 +35,7 @@
   try { rememberedSheet = localStorage.getItem(storageKey) || ''; } catch {}
   const scanner = createLibraryScanner();
   const checkScanner = createLibraryScanner('check-qr-reader');
+  const scanGuidance = 'Keep the entire barcode in view, including blank space at both ends. Hold steady in good light.';
   let mainView = window.matchMedia?.('(max-width: 700px)').matches ? 'scan' : 'library', canEdit = false, checkSequence = 0;
   let lastCatalogUpdate = 0, showingUpdateAge = false;
   const status = message => { showingUpdateAge = false; $('status').textContent = message; };
@@ -241,7 +242,7 @@
   }
   async function startCheckScanner() {
     const scanId = ++checkSequence;
-    setCameraOpen(true); $('check-result').hidden = true; $('check-preview').classList.remove('recognized');
+    setCameraOpen(true); $('check-result').hidden = true; $('check-status').textContent = scanGuidance; $('check-preview').classList.remove('recognized'); $('check-preview').classList.add('loading');
     try {
       await checkScanner.start(async value => {
         if (scanId !== checkSequence || $('check-camera').hidden) return;
@@ -250,9 +251,10 @@
         if (scanId !== checkSequence || $('check-camera').hidden) return;
         checkScanner.hold(30000);
         setCameraOpen(false); checkIsbn(value);
-      }, value => { $('check-status').textContent = value; });
+      }, value => { if (value !== 'Starting camera…') $('check-status').textContent = value; });
+      if (scanId === checkSequence) $('check-preview').classList.remove('loading');
     } catch (error) {
-      if (scanId === checkSequence && !$('check-camera').hidden) $('check-status').textContent = message(error);
+      if (scanId === checkSequence && !$('check-camera').hidden) { $('check-preview').classList.remove('loading'); $('check-status').textContent = message(error); }
     }
   }
   $('scan-start').addEventListener('click', () => $('check-camera').hidden ? startCheckScanner() : closeCheckScanner());
@@ -588,7 +590,7 @@
   $('editor').addEventListener('cancel', () => { editorScanSequence++; resetDelete(); scanner.stop().catch(() => {}); $('scan-area').hidden = true; });
   $('scan').addEventListener('click', async () => {
     const scanId = ++editorScanSequence;
-    $('scan-area').hidden = false; $('editor-preview').classList.remove('recognized');
+    $('scan-area').hidden = false; $('scan-status').textContent = scanGuidance; $('editor-preview').classList.remove('recognized'); $('editor-preview').classList.add('loading');
     try {
       await scanner.start(async text => {
         if (scanId !== editorScanSequence || $('scan-area').hidden) return;
@@ -597,8 +599,9 @@
         if (scanId !== editorScanSequence || $('scan-area').hidden) return;
         $('book-form').elements.isbn.value = text;
         await stopScanner(); formStatus('Barcode captured. Look up the ISBN or enter the details.');
-      }, text => { $('scan-status').textContent = text; });
-    } catch (error) { if (scanId === editorScanSequence && !$('scan-area').hidden) $('scan-status').textContent = message(error); }
+      }, text => { if (text !== 'Starting camera…') $('scan-status').textContent = text; });
+      if (scanId === editorScanSequence) $('editor-preview').classList.remove('loading');
+    } catch (error) { if (scanId === editorScanSequence && !$('scan-area').hidden) { $('editor-preview').classList.remove('loading'); $('scan-status').textContent = message(error); } }
   });
   $('stop-scan').addEventListener('click', () => stopScanner().catch(error => formStatus(message(error))));
   $('photo').addEventListener('change', async event => { const file = event.target.files[0]; if (!file) return; try { const result = await scanner.scanFile(file); if (result) { $('book-form').elements.isbn.value = result; await stopScanner(); formStatus('Barcode captured. Look up the ISBN or enter the details.'); } } catch { $('scan-status').textContent = 'No barcode found. Try a clearer photo or enter the ISBN manually.'; } });
