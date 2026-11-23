@@ -2,6 +2,19 @@
 
 A minimal & opinionated book catalog / library management system (LMS) website that can be statically hosted and uses a private, shareable Google Sheet as its database. 
 
+## Why Google Cloud instead of Apps Script?
+Google Cloud gives the website access only to the spreadsheets you choose and lets you use familiar Google tools to sign in and control who can view or edit them.
+
+| | Google Cloud Project | Google Apps Script |
+| --- | --- | --- |
+| **What can the website access in Google Drive?** | 🟢 Only the spreadsheet(s) you select or create. | 🔴 Drive-wide read and write access. |
+| **Who Can View Spreadsheet Data in the website?** | 🟢 Visitors must connect with a Google account that has access to the spreadsheet. | 🟡 In the public deployment, visitors can browse the catalog without having access to the spreadsheet itself. || **Who Can Edit?** | 🟢 The owner and anyone granted Editor access in Google Sheets. | 🔴 Anyone with the shared admin PIN, when one is configured. |
+| **How Do You Share It?** | 🟢 Invite people through Google Sheets and assign them Viewer or Editor access. | 🔴 Share the website link for public browsing and the shared PIN for admin edits. |
+| **How Do Users Connect?** | 🟢 Each user connects with their own Google account. | 🔴 The owner authorizes the script with their Google account. Visitors can browse without signing in. |
+| **How Do You Choose a Spreadsheet?** | 🟢 Choose a spreadsheet with Google’s file picker. | 🟡 Paste the website URL (`/exec`) to connect to its configured spreadsheet. |
+| **How Do You Create a Spreadsheet?** | 🟢 Create a spreadsheet directly in the website. | 🟡 Create a spreadsheet in Google Sheets, then run the script to set up the library tabs and Drive folders. |
+| **How Do You Publish Updates?** | 🟢 Publish the updated website on GitHub Pages. | 🟡 For backend changes, create a new script version and update the existing deployment in the Apps Script editor. |
+
 ## What you will need
 
 1. **A Google account** to create the Google Sheet and to create [Google Cloud Project](https://console.cloud.google.com/projectcreate)
@@ -31,14 +44,14 @@ A minimal & opinionated book catalog / library management system (LMS) website t
 
 1. Open [Google Auth Platform → Overview](https://console.cloud.google.com/auth/overview). Make sure your **Home Library Catalog** project is selected.
 2. If you see **Google Auth Platform not configured yet**, click **Get started**.
-3. Under **App Information**, enter **Home Library Catalog** as the **App name**. This is the name users will see on the consent screen. Select your email for **User support email**, then click **Next**.
+3. Under **App Information**, enter **Home Library Catalog** as the **App name**. Select your email for **User support email**, then click **Next**.
 4. Under **Audience**, choose **External** if you’ll sign in with a personal Google account. Your spreadsheet’s sharing settings still control who can open it. Click **Next**.
 5. Under **Contact information**, enter your email address. Continue to the final screen, review your settings, and click **Create**.
 
 ### Add test users
 
 1. Open [Google Auth Platform → Audience](https://console.cloud.google.com/auth/audience) and check the **Publishing status**.
-2. If the status is **Testing**, scroll to **Test users** and click **Add users**.
+2. Keep the status set to **Testing**, then scroll to **Test users** and click **Add users**.
 3. Enter the email address of the Google account you’ll use to connect to the website. Add anyone else who will use the website, then click **Save**.
 
 While the project is in **Testing**, each person needs to be on the test user list and have access to the spreadsheet. Share the spreadsheet with any test users who need access. Google will show an unverified-app warning during sign-in. [Google’s OAuth setup guide](https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid)
@@ -54,74 +67,7 @@ The web client tells Google which website can ask users for permission to access
 5. Leave **Authorized redirect URIs** empty and **Use this client for an AI-powered agent** unchecked. Click **Create**.
 6. Copy the **Client ID** ending in `.apps.googleusercontent.com`. You’ll paste it into the website’s `clientId` setting later. You can find it again on the **Clients** page.
 
-## Why Google Cloud instead of Apps Script?
-Google Cloud gives the website access only to the spreadsheets you choose and lets you use familiar Google tools to sign in and control who can view or edit them.
-
-| | Google Cloud Project | Google Apps Script |
-| --- | --- | --- |
-| **What can the website access in Google Drive?** | 🟢 Only the spreadsheet(s) you select or create. | 🔴 Drive-wide read and write access. |
-| **Who Can View Spreadsheet Data in the website?** | 🟢 Visitors must connect with a Google account that has access to the spreadsheet. | 🟡 In the public deployment, visitors can browse the catalog without having access to the spreadsheet itself. || **Who Can Edit?** | 🟢 The owner and anyone granted Editor access in Google Sheets. | 🔴 Anyone with the shared admin PIN, when one is configured. |
-| **How Do You Share It?** | 🟢 Invite people through Google Sheets and assign them Viewer or Editor access. | 🔴 Share the website link for public browsing and the shared PIN for admin edits. |
-| **How Do Users Connect?** | 🟢 Each user connects with their own Google account. | 🔴 The owner authorizes the script with their Google account. Visitors can browse without signing in. |
-| **How Do You Choose a Spreadsheet?** | 🟢 Choose a spreadsheet with Google’s file picker. | 🟡 Paste the website URL (`/exec`) to connect to its configured spreadsheet. |
-| **How Do You Create a Spreadsheet?** | 🟢 Create a spreadsheet directly in the website. | 🟡 Create a spreadsheet in Google Sheets, then run the script to set up the library tabs and Drive folders. |
-| **How Do You Publish Updates?** | 🟢 Publish the updated website on GitHub Pages. | 🟡 For backend changes, create a new script version and update the existing deployment in the Apps Script editor. |
- 
-
-## What you will need
-
-- A GitHub repository where you can configure GitHub Pages.
-- A Google account to own the Sheet and a [Google Cloud project](https://console.cloud.google.com/projectcreate) for the app's OAuth configuration.
-- About three configuration values from Google Cloud: a **web client ID**, a **browser API key**, and the **numeric project number**. The client ID and project number identify the app. The browser API key is a publicly exposed credential and must be restricted as described below.
-
-The steps below are a one-time setup for the app and its Sheet. Each additional user will then authorize the app and select the shared Sheet once they connect.
-
-## 1. Prepare a private spreadsheet (optional)
-
-You can skip this step and use **Create new library** in the app after setup. The app creates a new spreadsheet with a `Books` tab and the required headers. To use an existing Sheet or prepare one manually, follow these steps:
-
-1. Create a **new** spreadsheet at [Google Sheets](https://sheets.google.com/create).
-2. Rename the first tab at the bottom to **Books**, exactly as written.
-3. In the first row, put the following headers in sixteen separate cells, in this order:
-
-   | A1 | B1 | C1 | D1 | E1 | F1 | G1 | H1 | I1 | J1 | K1 | L1 | M1 | N1 | O1 | P1 |
-   | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-   | id | isbn | title | author | language | notes | created_at | publisher | publication_year | shelf_location | category | description | series_name | volume_number | pages | updated_at |
-
-4. Keep this tab for the app's table. Do not select the old seven-tab library database: it has a different format and no migration has been built.
-5. To share the catalog, click **Share**, add the other people's Google accounts, and assign **Viewer** or **Editor** access. Under **General access**, leave the Sheet **Restricted**. [Google's sharing instructions](https://support.google.com/drive/answer/7166529)
-
-Viewers can browse. Editors can add books through the app and can also edit the spreadsheet directly. You can change or remove access in the Sheet's Share settings.
-
-## 2. Enable Google APIs
-
-1. Open the [Google Cloud Console](https://console.cloud.google.com/) and create or select a project. Use the same project for the following steps.
-2. Enable each of these APIs in the project:
-   - [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
-   - [Google Picker API](https://console.cloud.google.com/apis/library/picker.googleapis.com)
-   - [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com)
-   - [Google Books API](https://console.cloud.google.com/apis/library/books.googleapis.com) for book metadata lookup
-3. Find the **project number** in the [project dashboard](https://console.cloud.google.com/home/dashboard). Save the numeric value for `appId` below. It is different from the project ID and the OAuth client ID.
-
-
-### Create the web client
-
-1. On the OAuth Overview page, click **Create OAuth client**, or open [Clients](https://console.cloud.google.com/auth/clients) and click **Create client**.
-2. Set **Application type** to **websitelication**. Name it, for example, `Anna’s Annals Website`.
-3. Under **Authorized JavaScript origins**, click **Add URI** and enter the website origin. For a Pages address like `https://YOUR-GITHUB-USERNAME.github.io/annas-annals/`, enter:
-
-   ```text
-   https://YOUR-GITHUB-USERNAME.github.io
-   ```
-
-   The origin has no repository path or trailing slash. Replace `YOUR-GITHUB-USERNAME` with your GitHub username. If you use a custom domain, use that site's origin instead.
-4. To test on your own computer, click **Add URI** again and enter `http://localhost:8000`. Use this exact address and port when opening the local app.
-5. Leave **Authorized redirect URIs** empty and leave **Use this client for an AI-powered agent** unchecked. Click **Create**.
-6. Copy the **client ID** for `clientId` below. You can find it again in [Credentials](https://console.cloud.google.com/apis/credentials), under **OAuth 2.0 Client IDs**, using the copy icon. It ends in `.apps.googleusercontent.com`. Do **not** put the client secret in the repository.
-
-The app requests the [`drive.file` scope](https://developers.google.com/workspace/sheets/api/scopes), which applies to files the user chooses to use with the app, rather than all of their Drive or Sheets files. Each user must have access to the Sheet **and** authorize the app to use it.
-
-## 4. Create a browser API key
+## Create a browser API key
 
 1. Open [Google Cloud credentials](https://console.cloud.google.com/apis/credentials), select the same project, and choose **Create credentials → API key**.
 2. Name the key, for example `Anna’s Annals Picker`. Under **Select API restrictions**, choose **Google Picker API** and **Books API**. If either is missing, first enable it in the API Library. Include **Google Drive API** if needed by Picker. For an existing restricted key, add Books API to its allowed APIs; until then, book lookups fall back to Open Library.
@@ -139,7 +85,7 @@ The app requests the [`drive.file` scope](https://developers.google.com/workspac
 
 GitHub secret scanning may flag the key because it is published. If the restrictions were in place before publication and usage is expected, decide whether to resolve the alert as an intentionally exposed restricted browser key. If the key was unrestricted or usage is suspicious, create and restrict a replacement, update and test the app, then delete the old key. The replacement will also be public and may trigger another alert. See [Google's API key security guidance](https://docs.cloud.google.com/docs/authentication/api-keys-best-practices).
 
-## 5. Add the configuration and publish
+## 4. Add the configuration and publish
 
 1. Edit [`config.js`](./config.js) and insert the three values between the quotes:
 
@@ -155,30 +101,7 @@ GitHub secret scanning may flag the key because it is published. If the restrict
 3. Commit and push the files to the branch you intend to publish. Never add a Google client secret, password, or access token to the repository.
 4. On GitHub, open the repository's **Settings → Pages**. Under **Build and deployment**, choose **Deploy from a branch**, select the branch you pushed and **/ (root)**, and save. Open the repository’s **Actions** tab and check that the latest **pages build and deployment** run succeeds for that branch and commit. Open the displayed site URL when it is published. If an older version appears, check the deployed commit and try a private window or hard refresh. [GitHub Pages instructions](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
 
-### Alternative: host the static site with Caddy
-
-The app is static HTML, CSS, and JavaScript; it does not need an application server or Google Apps Script. You can serve the published files from your own site instead of GitHub Pages. Browsers connect directly to Google and Open Library, so the existing Sheet can remain in Google Drive.
-
-For example, copy the app's public files to `/srv/annas-annals` and serve them on a dedicated HTTPS subdomain:
-
-```caddyfile
-books.example.com {
-    root * /srv/annas-annals
-    file_server
-}
-```
-
-Include `index.html`, `style.css`, the JavaScript files (including `config.js` and `service-worker.js`), `manifest.webmanifest`, and the `icons/` directory. Use the actual directory and domain for your server. Caddy must be able to read the files, and the domain and server must be configured for HTTPS. If you already serve the files with another web server, Caddy can reverse-proxy to it instead; a reverse proxy is not required for Caddy's own static file server.
-
-Before using the new address:
-
-1. Add its **origin**, such as `https://books.example.com`, to the web OAuth client's **Authorized JavaScript origins** in Google Cloud. An origin has no path or trailing slash.
-2. Add the corresponding website restriction, such as `https://books.example.com/*`, to the browser API key. Keep any existing allowed origins and restrictions that you still use.
-3. Open the new HTTPS address, sign in, and select the existing Sheet. Each user must still authorize the app and have access to that Sheet.
-
-The public `config.js` contains the browser client ID, project number, and restricted API key; do not put a client secret or access token in the served files. Camera access and the service worker require a secure context, normally HTTPS. A new origin has separate browser storage, so users will need to reconnect and choose their preferences again; saved sessions and cached covers do not automatically move from the old address. The PWA cover cache does not make the catalog fully offline. In the app, use **Settings → App → Update app** to check for a service-worker update and reload the current page with a fresh URL; cached covers and saved preferences are not cleared.
-
-## 6. Connect and use the library
+## 5. Connect and use the library
 
 1. Open the Pages site. Click **Create new library** to create and initialize a new Sheet, or **Connect Google Sheet** to select an existing one. A connected user can also select **New library** to create another Sheet.
 2. Choose the Google account that owns the Sheet or that the Sheet was shared with. Approve the requested access.
