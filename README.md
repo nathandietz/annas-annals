@@ -1,28 +1,41 @@
 # Anna’s Annals
 
-A minimal book catalog / library management system (LMS) app that can be statically hosted and uses a private, shareable Google Sheet as its database. You can browse and search, scan an ISBN with a camera or photo, look up book details, and add, edit, or delete books.
+A minimal & opinionated book catalog / library management system (LMS) website that can be statically hosted and uses a private, shareable Google Sheet as its database. 
 
+## What you will need
 
-## Why a Google Cloud Project instead of an AppScript?
-You only need to give the web app access to a individual google sheet (e.g., home_library_database.gsheet) instead of giving access to your entire Google Drive.
+1. **A Google account** to create the Google Sheet and to create [Google Cloud Project](https://console.cloud.google.com/projectcreate)
 
+2. **A GitHub Account** to clone this repo & publish front end using GitHub Pages
 
+## Create Google Cloud Project & Enable APIs
+
+1. Open the [Google Cloud Console](https://console.cloud.google.com/) and create new project called something like `Home Library Catalog`
+
+2. Visit each link and Enable APIs for the newly created project:
+   - [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
+     - <small>Create and modify spreadsheets data in Google Sheets.</small>
+   - [Google Picker API](https://console.cloud.google.com/apis/library/picker.googleapis.com)
+     - <small>Select photos, videos, maps and documents stored in Google Drive.</small>
+   - [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com)
+     - <small>Access resources from Google Drive, manage file sharing, and search for files and folders.</small>
+   - [Google Books API](https://console.cloud.google.com/apis/library/books.googleapis.com)
+     - <small>Allows clients to access the Google Books repository.</small> 
+4. Find the **project number** in the [project dashboard](https://console.cloud.google.com/home/dashboard). Save the numeric value for `appId` below. It is different from the project ID and the OAuth client ID.
+
+## Why Google Cloud instead of Apps Script?
+Google Cloud gives the website access only to the spreadsheets you choose and lets you use familiar Google tools to sign in and control who can view or edit them.
 
 | | Google Cloud Project | Google Apps Script |
 | --- | --- | --- |
-| **Google Drive Permission** | 🟢 Only the spreadsheets you select or create | 🔴 Drive-wide read and write access |
-| **Who Can Authentication** | 	🟢 Each user connects with their own Google account | 🔴 Apps Script Property Field |
-| **Creation** | 🟢 Create a spreadsheet directly in the web app | 🟡 Create a spreadsheet in Google Sheets, then run the script to set up the library tabs and Drive folders. |
-| **Selection** | 🟢 Choose a spreadsheet with Google’s file picker | 🟡 Paste the web app URL (/exec) to connect to its configured spreadsheet |
-| **Who Can View?** | 	🟢 The spreadsheet is private by default. You choose who can view it in Google Sheets. | 🟡 In the documented public setup, anyone with the web app link can browse. |
-| **Who Can Edit?** | 🟢 The owner and anyone granted Editor access in Google Sheets. | 🔴 Anyone with the shared admin PIN, when one is configured. |
-| **Sharing** | 🟢 Google Sheets’ built-in Viewer and Editor Roles. | 🔴 App Script uses a shared PIN for admin access |
-
-A Google Cloud project takes a few extra steps to set up and gives you these benefits.
-- **Google Sign-In:** Use your existing Google account.
-- **Google File Picker:** Easily select your own spreadsheet or one shared with you.
-- **Google File Sharing:** Share your library using Google Sheets’ built-in viewing and editing permissions. 
-- **Single File Access:** Google gives the app access only to the spreadsheets you pick or create, keeping the rest of your Drive private.
+| **What can the website access in Google Drive?** | 🟢 Only the spreadsheet(s) you select or create. | 🔴 Drive-wide read and write access. |
+| **Who Can View Spreadsheet Data in the website?** | 🟢 Visitors must connect with a Google account that has access to the spreadsheet. | 🟡 In the public deployment, visitors can browse the catalog without having access to the spreadsheet itself. || **Who Can Edit?** | 🟢 The owner and anyone granted Editor access in Google Sheets. | 🔴 Anyone with the shared admin PIN, when one is configured. |
+| **How Do You Share It?** | 🟢 Invite people through Google Sheets and assign them Viewer or Editor access. | 🔴 Share the website link for public browsing and the shared PIN for admin edits. |
+| **How Do Users Connect?** | 🟢 Each user connects with their own Google account. | 🔴 The owner authorizes the script with their Google account. Visitors can browse without signing in. |
+| **How Do You Choose a Spreadsheet?** | 🟢 Choose a spreadsheet with Google’s file picker. | 🟡 Paste the website URL (`/exec`) to connect to its configured spreadsheet. |
+| **How Do You Create a Spreadsheet?** | 🟢 Create a spreadsheet directly in the website. | 🟡 Create a spreadsheet in Google Sheets, then run the script to set up the library tabs and Drive folders. |
+| **How Do You Publish Updates?** | 🟢 Publish the updated website on GitHub Pages. | 🟡 For backend changes, create a new script version and update the existing deployment in the Apps Script editor. |
+ 
 
 ## What you will need
 
@@ -74,7 +87,7 @@ A Google account needs to be both a test user and a Sheet collaborator while the
 ### Create the web client
 
 1. On the OAuth Overview page, click **Create OAuth client**, or open [Clients](https://console.cloud.google.com/auth/clients) and click **Create client**.
-2. Set **Application type** to **Web application**. Name it, for example, `Anna’s Annals Website`.
+2. Set **Application type** to **websitelication**. Name it, for example, `Anna’s Annals Website`.
 3. Under **Authorized JavaScript origins**, click **Add URI** and enter the website origin. For a Pages address like `https://YOUR-GITHUB-USERNAME.github.io/annas-annals/`, enter:
 
    ```text
@@ -156,7 +169,7 @@ ISBN lookups use Google Books first and fill missing details from Open Library. 
 
 Book covers are loaded from Open Library by ISBN in card view, list view, and book details when available. In **Settings**, turn off **Show book covers** to hide cover previews and stop requesting them; this preference is stored in your current browser on this device. Images are not saved in your Google Sheet or Drive. The app caches up to 300 cover image files on this device for later visits; different image sizes count separately. Settings shows the cached image count and, when available, the browser’s estimate of site or cache storage (not necessarily the exact size of covers). Use **Settings → Clear cached covers** to remove this app-managed cache; covers can be downloaded again when displayed. Browsers may also maintain their own HTTP cache.
 
-On iPhone, open the HTTPS site in Safari, tap Share, and choose **Add to Home Screen** to install the web app. Other supported browsers offer their own install option. The cover cache belongs to the current site and browser or web-app storage, and can be removed by the device or user. Opening the app, signing in, and reading or updating the Google Sheet still require a network connection; this is not a fully offline catalog.
+On iPhone, open the HTTPS site in Safari, tap Share, and choose **Add to Home Screen** to install the website. Other supported browsers offer their own install option. The cover cache belongs to the current site and browser or web-app storage, and can be removed by the device or user. Opening the app, signing in, and reading or updating the Google Sheet still require a network connection; this is not a fully offline catalog.
 
 Google access tokens expire, so you may need to reconnect. The Sheet ID is stored in browser local storage, and the short-lived access token is stored in browser local storage so other windows on the same site can reconnect until the token expires. The token can remain in browser storage after windows close until it is replaced, cleared, or checked after expiry. Scripts running on this site can access that token. A catalog snapshot is also stored in session storage for fast reloads in the same tab. It can briefly be shown before a fresh permission check and remains available in that tab during a network outage; avoid this on shared devices. Closing the tab normally ends the session. Disconnect clears the stored session and forgets the Sheet across windows but does not revoke the Google grant. To revoke it, use your [Google Account connections](https://myaccount.google.com/connections).
 
