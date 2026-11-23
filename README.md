@@ -8,7 +8,8 @@ Google Cloud gives the website access only to the spreadsheets you choose and le
 | | Google Cloud Project | Google Apps Script |
 | --- | --- | --- |
 | **What can the website access in Google Drive?** | 🟢 Only the spreadsheet(s) you select or create. | 🔴 Drive-wide read and write access. |
-| **Who Can View Spreadsheet Data in the website?** | 🟢 Visitors must connect with a Google account that has access to the spreadsheet. | 🟡 In the public deployment, visitors can browse the catalog without having access to the spreadsheet itself. || **Who Can Edit?** | 🟢 The owner and anyone granted Editor access in Google Sheets. | 🔴 Anyone with the shared admin PIN, when one is configured. |
+| **Who Can View Spreadsheet Data in the website?** | 🟢 Visitors must connect with a Google account that has access to the spreadsheet. | 🟡 In the public deployment, visitors can browse the catalog without having access to the spreadsheet itself. |
+| **Who Can Edit?** | 🟢 The owner and anyone granted Editor access in Google Sheets. | 🔴 Anyone with the shared admin PIN, when one is configured. |
 | **How Do You Share It?** | 🟢 Invite people through Google Sheets and assign them Viewer or Editor access. | 🔴 Share the website link for public browsing and the shared PIN for admin edits. |
 | **How Do Users Connect?** | 🟢 Each user connects with their own Google account. | 🔴 The owner authorizes the script with their Google account. Visitors can browse without signing in. |
 | **How Do You Choose a Spreadsheet?** | 🟢 Choose a spreadsheet with Google’s file picker. | 🟡 Paste the website URL (`/exec`) to connect to its configured spreadsheet. |
@@ -19,11 +20,11 @@ Google Cloud gives the website access only to the spreadsheets you choose and le
 
 1. **A Google account** to create the Google Sheet and to create [Google Cloud Project](https://console.cloud.google.com/projectcreate)
 
-2. **A GitHub Account** to clone this repo & publish front end using GitHub Pages
+2. **A GitHub account** to fork this repo and publish the front end using GitHub Pages. Clone your fork if you want to make the setup changes locally.
 
-## Create Google Cloud Project & Enable APIs
+## 1. Create Google Cloud Project & Enable APIs
 
-1. Open the [Google Cloud Console](https://console.cloud.google.com/) and create new project called something like `Home Library Catalog` 
+1. Open the [Google Cloud Console](https://console.cloud.google.com/) and create a project called something like `Home Library Catalog`. Use the same project for the enabled APIs, OAuth client, and browser API key.
 2. Visit each link and Enable APIs for the newly created project:
    - [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
      - <small>Create and modify spreadsheets data in Google Sheets.</small>
@@ -31,46 +32,45 @@ Google Cloud gives the website access only to the spreadsheets you choose and le
      - <small>Select a Google Spreadsheet stored in Google Drive.</small>
    - [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com)
      - <small>Verifies user has access to edit selected spreadsheet.</small>
-   - [Google Books API](https://console.cloud.google.com/apis/library/books.googleapis.com) (optional, but recommend)
+   - [Google Books API](https://console.cloud.google.com/apis/library/books.googleapis.com) (optional)
      - <small>Access the Google Books repository when scanning ISBN.</small>
-3. Open [Google Cloud Project Dashboard](https://console.cloud.google.com/home/dashboard) and copy the **Project number**.
-    - Typically a 12 digit number
-    - You’ll paste it into the website’s appId setting below so Google Picker can identify your project.
 
-## Configure Google authorization
+## 2. Configure Google authorization
 
 ### Set up the Consent Screen
-> The consent screen is where Google asks users to give the website permission to access the spreadsheet they select.
+> This is the screen that is shown to users when they attempt to connect to a google sheet from the website
+>
+> Anna’s Annals automatically requests `drive.file` when a user connects. This lets the app read and save changes in the spreadsheet the user selects or creates, subject to their Google Sheets permissions.
 
 1. Open [Google Auth Platform → Overview](https://console.cloud.google.com/auth/overview). Make sure your **Home Library Catalog** project is selected.
 2. If you see **Google Auth Platform not configured yet**, click **Get started**.
 3. Under **App Information**, enter **Home Library Catalog** as the **App name**. Select your email for **User support email**, then click **Next**.
 4. Under **Audience**, choose **External** if you’ll sign in with a personal Google account. Your spreadsheet’s sharing settings still control who can open it. Click **Next**.
-5. Under **Contact information**, enter your email address. Continue to the final screen, review your settings, and click **Create**.
+5. Under **Contact information**, enter your email address. Review the Google API Services User Data Policy under **Finish**, accept it if you agree, then click **Continue** and **Create**.
 
-### Add test users
+### Add Test Users
+> While the project is in **Testing**, each person needs to be on the test user list and have access to the spreadsheet. **Google will show an unverified-app warning during sign-in.**
 
 1. Open [Google Auth Platform → Audience](https://console.cloud.google.com/auth/audience) and check the **Publishing status**.
 2. Keep the status set to **Testing**, then scroll to **Test users** and click **Add users**.
 3. Enter the email address of the Google account you’ll use to connect to the website. Add anyone else who will use the website, then click **Save**.
 
-While the project is in **Testing**, each person needs to be on the test user list and have access to the spreadsheet. Share the spreadsheet with any test users who need access. Google will show an unverified-app warning during sign-in. [Google’s OAuth setup guide](https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid)
-
 ### Create the web client
 
-The web client tells Google which website can ask users for permission to access their spreadsheet.
+> The web client identifies Anna’s Annals to Google. Its **Authorized JavaScript origins** tell Google where the app can start the consent flow, such as your GitHub Pages site or `http://localhost:8000` for local testing.
 
 1. Open [Google Auth Platform → Clients](https://console.cloud.google.com/auth/clients) and click **Create client**.
 2. Set **Application type** to **Web application**. For **Name**, enter **Home Library Catalog Website**.
 3. Under **Authorized JavaScript origins**, click **Add URI**. If your GitHub Pages website is at `https://YOUR-GITHUB-USERNAME.github.io/annas-annals/`, enter `https://YOUR-GITHUB-USERNAME.github.io`. Replace `YOUR-GITHUB-USERNAME` with your GitHub username. If you use a custom domain, enter that domain with `https://`. Leave out the path and trailing slash.
 4. If you’ll test the website locally, click **Add URI** again and enter `http://localhost:8000`. Use that exact address when testing.
 5. Leave **Authorized redirect URIs** empty and **Use this client for an AI-powered agent** unchecked. Click **Create**.
-6. Copy the **Client ID** ending in `.apps.googleusercontent.com`. You’ll paste it into the website’s `clientId` setting later. You can find it again on the **Clients** page.
 
-## Create a browser API key
+## 3. Create a browser API key
+
+> The browser API key identifies your Google Cloud project when Anna’s Annals opens Google Picker so users can choose a spreadsheet, or looks up an ISBN through Google Books if enabled. The key is public, so restrict it to the websites and APIs the app uses.
 
 1. Open [Google Cloud credentials](https://console.cloud.google.com/apis/credentials), select the same project, and choose **Create credentials → API key**.
-2. Name the key, for example `Anna’s Annals Picker`. Under **Select API restrictions**, choose **Google Picker API** and **Books API**. If either is missing, first enable it in the API Library. Include **Google Drive API** if needed by Picker. For an existing restricted key, add Books API to its allowed APIs; until then, book lookups fall back to Open Library.
+2. Name the key, for example `Anna’s Annals Picker`. Under **Select API restrictions**, choose **Google Picker API** and **Google Drive API**. Add **Books API** if you enabled it. ISBN lookup uses Open Library when Google Books is unavailable.
 3. Under **Application restrictions**, choose **Websites** and add the following entries for your GitHub Pages site and Google Picker, replacing `YOUR-GITHUB-USERNAME` with your GitHub username:
 
    ```text
@@ -79,7 +79,7 @@ The web client tells Google which website can ask users for permission to access
    ```
 
    For local testing, add `http://localhost:8000/*` as a separate entry. Use your actual site hostname if it differs.
-4. Click **Create** or **Save**. Copy the API key for `apiKey` below. You can return to **Credentials → API Keys** to view or edit its restrictions. Follow [Google's Picker setup guide](https://developers.google.com/workspace/drive/picker/guides/web-picker) if the Cloud Console labels change.
+4. Click **Create** or **Save**. Follow [Google's Picker setup guide](https://developers.google.com/workspace/drive/picker/guides/web-picker) if the Cloud Console labels change.
 
 **The browser API key is public.** Anyone can inspect it in the published website or repository. Apply both website and API restrictions before publishing, and periodically review usage in Google Cloud. Restrictions reduce the risk of misuse but do not eliminate it; website referrers can be spoofed outside a browser. The key is not a substitute for a user's Google authorization or the Sheet's sharing permissions.
 
@@ -87,7 +87,13 @@ GitHub secret scanning may flag the key because it is published. If the restrict
 
 ## 4. Add the configuration and publish
 
-1. Edit [`config.js`](./config.js) and insert the three values between the quotes:
+1. Open [`config.js`](./config.js) for editing. Select the same Google Cloud project on each page below and paste each value into its matching field.
+
+   | Field | Where to get the value |
+   | --- | --- |
+   | `clientId` | [Google Auth Platform → Clients](https://console.cloud.google.com/auth/clients). Open **Home Library Catalog Website** and copy the **Client ID** ending in `.apps.googleusercontent.com`. |
+   | `apiKey` | [APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials). Under **API Keys**, find **Anna’s Annals Picker** and click **Show key** to copy it. |
+   | `appId` | [Google Cloud → Project dashboard](https://console.cloud.google.com/home/dashboard). Under **Project info**, copy the numeric **Project number**. |
 
    ```js
    window.LIBRARY_CONFIG = {
@@ -97,15 +103,14 @@ GitHub secret scanning may flag the key because it is published. If the restrict
    };
    ```
 
-2. Find the three values again if needed: the **client ID** under OAuth 2.0 Client IDs and the **API key** under API Keys on the [Credentials page](https://console.cloud.google.com/apis/credentials); the numeric **project number** under Project info on the [project dashboard](https://console.cloud.google.com/home/dashboard).
-3. Commit and push the files to the branch you intend to publish. Never add a Google client secret, password, or access token to the repository.
-4. On GitHub, open the repository's **Settings → Pages**. Under **Build and deployment**, choose **Deploy from a branch**, select the branch you pushed and **/ (root)**, and save. Open the repository’s **Actions** tab and check that the latest **pages build and deployment** run succeeds for that branch and commit. Open the displayed site URL when it is published. If an older version appears, check the deployed commit and try a private window or hard refresh. [GitHub Pages instructions](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
+2. Commit and push the files to the branch you intend to publish. Never add a Google client secret, password, or access token to the repository.
+3. On GitHub, open the repository's **Settings → Pages**. Under **Build and deployment**, choose **Deploy from a branch**, select the branch you pushed and **/ (root)**, and save. Open the repository’s **Actions** tab and check that the latest **pages build and deployment** run succeeds for that branch and commit. Open the displayed site URL when it is published. If an older version appears, check the deployed commit and try a private window or hard refresh. [GitHub Pages instructions](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
 
 ## 5. Connect and use the library
 
 1. Open the Pages site. Click **Create new library** to create and initialize a new Sheet, or **Connect Google Sheet** to select an existing one. A connected user can also select **New library** to create another Sheet.
-2. Choose the Google account that owns the Sheet or that the Sheet was shared with. Approve the requested access.
-3. If connecting an existing library, select it in Google Picker. If creating a library, enter a name and the app creates and opens it in your Google Drive. Each person connecting must choose the shared file for their own account. The app remembers the chosen Sheet in this browser and restores the catalog after a reload while the Google session is valid. After it expires, reconnect without selecting the Sheet again. Choose **Choose a different Sheet** if needed. If it isn't visible, look in the shared-files view and check that the correct Google account has access.
+2. If creating a library, enter its name first. At the Google prompt, use an account on the test-user list and approve the requested access. For an existing library, use an account that already has access to the Sheet.
+3. If connecting an existing library, select it in Google Picker. If creating a library, the app creates and opens it in your Google Drive. Each person connecting must choose the shared file for their own account. The app remembers the chosen Sheet in this browser and restores the catalog after a reload while the Google session is valid. After it expires, reconnect without selecting the Sheet again. Choose **Choose a different Sheet** if needed. If it isn't visible, look in the shared-files view and check that the correct Google account has access.
 4. Search the catalog or choose **Add book**. Scan or type an ISBN, optionally look it up, review the details, and save. Choose **Edit** on a book to change or delete it. A viewer can browse but cannot save changes.
 
 ISBN lookups use Google Books first and fill missing details from Open Library. The app uses Google’s main category when available, otherwise one Open Library subject; it does not change existing category values. Both sources may have incomplete or inaccurate data, so review the results before saving.
