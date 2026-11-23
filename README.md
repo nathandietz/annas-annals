@@ -10,18 +10,49 @@ A minimal & opinionated book catalog / library management system (LMS) website t
 
 ## Create Google Cloud Project & Enable APIs
 
-1. Open the [Google Cloud Console](https://console.cloud.google.com/) and create new project called something like `Home Library Catalog`
-
+1. Open the [Google Cloud Console](https://console.cloud.google.com/) and create new project called something like `Home Library Catalog` 
 2. Visit each link and Enable APIs for the newly created project:
    - [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
      - <small>Create and modify spreadsheets data in Google Sheets.</small>
    - [Google Picker API](https://console.cloud.google.com/apis/library/picker.googleapis.com)
-     - <small>Select photos, videos, maps and documents stored in Google Drive.</small>
+     - <small>Select a Google Spreadsheet stored in Google Drive.</small>
    - [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com)
-     - <small>Access resources from Google Drive, manage file sharing, and search for files and folders.</small>
-   - [Google Books API](https://console.cloud.google.com/apis/library/books.googleapis.com)
-     - <small>Allows clients to access the Google Books repository.</small> 
-4. Find the **project number** in the [project dashboard](https://console.cloud.google.com/home/dashboard). Save the numeric value for `appId` below. It is different from the project ID and the OAuth client ID.
+     - <small>Verifies user has access to edit selected spreadsheet.</small>
+   - [Google Books API](https://console.cloud.google.com/apis/library/books.googleapis.com) (optional, but recommend)
+     - <small>Access the Google Books repository when scanning ISBN.</small>
+3. Open [Google Cloud Project Dashboard](https://console.cloud.google.com/home/dashboard) and copy the **Project number**.
+    - Typically a 12 digit number
+    - You’ll paste it into the website’s appId setting below so Google Picker can identify your project.
+
+## Configure Google authorization
+
+### Set up the Consent Screen
+> The consent screen is where Google asks users to give the website permission to access the spreadsheet they select.
+
+1. Open [Google Auth Platform → Overview](https://console.cloud.google.com/auth/overview). Make sure your **Home Library Catalog** project is selected.
+2. If you see **Google Auth Platform not configured yet**, click **Get started**.
+3. Under **App Information**, enter **Home Library Catalog** as the **App name**. This is the name users will see on the consent screen. Select your email for **User support email**, then click **Next**.
+4. Under **Audience**, choose **External** if you’ll sign in with a personal Google account. Your spreadsheet’s sharing settings still control who can open it. Click **Next**.
+5. Under **Contact information**, enter your email address. Continue to the final screen, review your settings, and click **Create**.
+
+### Add test users
+
+1. Open [Google Auth Platform → Audience](https://console.cloud.google.com/auth/audience) and check the **Publishing status**.
+2. If the status is **Testing**, scroll to **Test users** and click **Add users**.
+3. Enter the email address of the Google account you’ll use to connect to the website. Add anyone else who will use the website, then click **Save**.
+
+While the project is in **Testing**, each person needs to be on the test user list and have access to the spreadsheet. Share the spreadsheet with any test users who need access. Google will show an unverified-app warning during sign-in. [Google’s OAuth setup guide](https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid)
+
+### Create the web client
+
+The web client tells Google which website can ask users for permission to access their spreadsheet.
+
+1. Open [Google Auth Platform → Clients](https://console.cloud.google.com/auth/clients) and click **Create client**.
+2. Set **Application type** to **Web application**. For **Name**, enter **Home Library Catalog Website**.
+3. Under **Authorized JavaScript origins**, click **Add URI**. If your GitHub Pages website is at `https://YOUR-GITHUB-USERNAME.github.io/annas-annals/`, enter `https://YOUR-GITHUB-USERNAME.github.io`. Replace `YOUR-GITHUB-USERNAME` with your GitHub username. If you use a custom domain, enter that domain with `https://`. Leave out the path and trailing slash.
+4. If you’ll test the website locally, click **Add URI** again and enter `http://localhost:8000`. Use that exact address when testing.
+5. Leave **Authorized redirect URIs** empty and **Use this client for an AI-powered agent** unchecked. Click **Create**.
+6. Copy the **Client ID** ending in `.apps.googleusercontent.com`. You’ll paste it into the website’s `clientId` setting later. You can find it again on the **Clients** page.
 
 ## Why Google Cloud instead of Apps Script?
 Google Cloud gives the website access only to the spreadsheets you choose and lets you use familiar Google tools to sign in and control who can view or edit them.
@@ -72,17 +103,6 @@ Viewers can browse. Editors can add books through the app and can also edit the 
    - [Google Books API](https://console.cloud.google.com/apis/library/books.googleapis.com) for book metadata lookup
 3. Find the **project number** in the [project dashboard](https://console.cloud.google.com/home/dashboard). Save the numeric value for `appId` below. It is different from the project ID and the OAuth client ID.
 
-## 3. Configure Google authorization
-
-### Set up the consent screen
-
-1. Open [Google Auth Platform → Overview](https://console.cloud.google.com/auth/overview). Confirm your project is selected at the top of the page.
-2. If you see **Google Auth Platform not configured yet**, click **Get started**.
-3. On **Project configuration → App Information**, enter an app name such as `Anna’s Annals` and select your email for **User support email**. Click **Next**.
-4. Under **Audience**, select **External** if you want to use personal Google accounts. This does not make the Sheet public. Complete **Contact information** with your email, review the last screen, and click **Create**.
-5. Open [Audience](https://console.cloud.google.com/auth/audience). If the publishing status is **Testing**, scroll to **Test users**, click **Add users**, and add the exact Google account you will use to sign in. Add each additional person's account as well. Save.
-
-A Google account needs to be both a test user and a Sheet collaborator while the app is in Testing. A test user may still see an unverified-app warning. See [Google's OAuth setup guide](https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid).
 
 ### Create the web client
 

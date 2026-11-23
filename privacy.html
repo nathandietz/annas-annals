@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy | Anna’s Annals</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="policy-page">
+    <nav class="policy-links" aria-label="Page links">
+      <a href="./">Anna’s Annals</a>
+      <a href="terms.html">Terms of Service</a>
+    </nav>
+    <h1>Privacy Policy</h1>
+    <p>Last updated <time datetime="2026-11-23">November 23, 2026</time></p>
+    <p>Anna’s Annals is a browser-based book catalog that uses a Google Sheet you select or create to store your library.</p>
+
+    <section>
+      <h2>Google data we access and use</h2>
+      <p>When you connect your Google account, Anna’s Annals requests Google’s <code>drive.file</code> permission. This gives it access to files you choose to use with the app or create through it. The app uses Google Picker to let you select a spreadsheet and Google Drive to check whether you can edit it.</p>
+      <p>The app reads the selected spreadsheet’s name, headers, and catalog entries so you can view and search your library. When you create a library or add, edit, import, or delete entries, the app sends those changes to Google Sheets. People with access to a shared spreadsheet can see its contents according to its Google sharing settings.</p>
+    </section>
+
+    <section>
+      <h2>Storage and retention</h2>
+      <p>Your catalog is stored in Google Sheets. Anna’s Annals runs in your browser and has no separate server for storing your catalog or Google access token. The browser’s local storage remembers your spreadsheet ID, display preferences, and a Google access token with its expiration time. The browser’s session storage temporarily caches catalog data to restore your view. If you enable book covers, your browser can also cache cover images. CSV exports are saved to the location you choose on your device.</p>
+    </section>
+
+    <section>
+      <h2>Book lookups, scanning, and site providers</h2>
+      <p>For ISBN lookups, your browser sends the ISBN to Open Library and, when configured, Google Books to retrieve book details. If you enable covers, your browser sends ISBNs to Open Library to fetch the cover images. Camera frames, photos selected for scanning, and CSV files selected for import are processed in your browser. Saving imported or scanned book details to a library sends the resulting entries to Google Sheets.</p>
+      <p>GitHub Pages hosts the site. Your browser also connects to Google for sign-in, APIs, and fonts and to jsDelivr to load the barcode scanner. These providers receive standard connection information, such as your IP address, when your browser contacts them.</p>
+      <p>Anna’s Annals uses Google user data to provide the library features described here. We do not sell Google user data or use it for advertising. Our use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy#limited-use">Google API Services User Data Policy</a>, including its Limited Use requirements.</p>
+    </section>
+
+    <section>
+      <h2>Disconnecting and deleting data</h2>
+      <p>In the app, open <strong>Settings → Disconnect</strong> to clear the saved token, remembered spreadsheet, and catalog cache for the current tab. You can also remove cached covers in Settings or clear the site’s data using your browser. To revoke Google authorization, remove Anna’s Annals from your <a href="https://myaccount.google.com/connections">Google Account connections</a>.</p>
+      <p>To remove catalog data stored with Google, delete the relevant entries in the app or delete the spreadsheet in Google Drive if you own it. Disconnecting leaves the spreadsheet in your Drive. Delete any CSV copies separately if you no longer need them.</p>
+    </section>
+
+    <section>
+      <h2>Contact</h2>
+      <p>For privacy questions or requests, use the support email shown on the Anna’s Annals Google consent screen.</p>
+    </section>
+  </main>
+</body>
+</html>
