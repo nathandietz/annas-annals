@@ -1,10 +1,28 @@
 # Anna’s Annals
 
-A simple book catalog with a GitHub Pages interface and a private, shareable Google Sheet as its database. You can browse and search, scan an ISBN with a camera or photo, look up book details, and add, edit, or delete books.
+A minimal book catalog / library management system (LMS) app that can be statically hosted and uses a private, shareable Google Sheet as its database. You can browse and search, scan an ISBN with a camera or photo, look up book details, and add, edit, or delete books.
 
-**This version does not use Google Apps Script.** The website asks each person to authorize access with their own Google account and calls the Google Sheets API directly. The site itself is public; the Sheet stays private and controls who can read or edit it.
 
-This is an early prototype. Google sign-in and opening a Sheet have been tried in a live deployment; scanner and shared-user flows still need broader testing. Editing, deletion, and library upgrades need live testing with multiple accounts.
+## Why a Google Cloud Project instead of an AppScript?
+You only need to give the web app access to a individual google sheet (e.g., home_library_database.gsheet) instead of giving access to your entire Google Drive.
+
+
+
+| | Google Cloud Project | Google Apps Script |
+| --- | --- | --- |
+| **Google Drive Permission** | 🟢 Only the spreadsheets you select or create | 🔴 Drive-wide read and write access |
+| **Who Can Authentication** | 	🟢 Each user connects with their own Google account | 🔴 Apps Script Property Field |
+| **Creation** | 🟢 Create a spreadsheet directly in the web app | 🟡 Create a spreadsheet in Google Sheets, then run the script to set up the library tabs and Drive folders. |
+| **Selection** | 🟢 Choose a spreadsheet with Google’s file picker | 🟡 Paste the web app URL (/exec) to connect to its configured spreadsheet |
+| **Who Can View?** | 	🟢 The spreadsheet is private by default. You choose who can view it in Google Sheets. | 🟡 In the documented public setup, anyone with the web app link can browse. |
+| **Who Can Edit?** | 🟢 The owner and anyone granted Editor access in Google Sheets. | 🔴 Anyone with the shared admin PIN, when one is configured. |
+| **Sharing** | 🟢 Google Sheets’ built-in Viewer and Editor Roles. | 🔴 App Script uses a shared PIN for admin access |
+
+A Google Cloud project takes a few extra steps to set up and gives you these benefits.
+- **Google Sign-In:** Use your existing Google account.
+- **Google File Picker:** Easily select your own spreadsheet or one shared with you.
+- **Google File Sharing:** Share your library using Google Sheets’ built-in viewing and editing permissions. 
+- **Single File Access:** Google gives the app access only to the spreadsheets you pick or create, keeping the rest of your Drive private.
 
 ## What you will need
 
