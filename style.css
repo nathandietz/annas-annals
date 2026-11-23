@@ -245,6 +245,11 @@ button.upgrade-button:hover { background: #9a4032; border-color: #9a4032; opacit
 .catalog-meta { gap: 6px; }
 .catalog-meta:not(#settings-meta) #status:not(:empty)::before { content: "|"; padding-right: 6px; color: #a8a29e; }
 
+.app-intro { max-width: 620px; margin: 0; font-size: 15px; line-height: 1.6; }
+.app-intro h2 { font-size: 28px; line-height: 1.2; }
+.app-intro p { margin: 10px 0; }
+main:has(#mode-toggle:not([hidden])) .app-intro { display: none; }
+
 .app-footer {
   margin-top: 32px;
   padding-top: 16px;
@@ -252,7 +257,6 @@ button.upgrade-button:hover { background: #9a4032; border-color: #9a4032; opacit
   color: #57534e;
   line-height: 1.5;
 }
-.app-footer p { margin: 0 0 8px; }
 .policy-links { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .policy-links a, .policy-page a, #connect a { color: #57534e; text-underline-offset: 3px; }
 .policy-page {
