@@ -3,7 +3,10 @@
 A minimal & opinionated book catalog / library management system (LMS) website that can be statically hosted and uses a private, shareable Google Sheet as its database. 
 
 ## Why Google Cloud instead of Apps Script?
-Google Cloud gives the website access only to the spreadsheets you choose and lets you use familiar Google tools to sign in and control who can view or edit them.
+>Google Cloud gives the website access **only to the spreadsheets you choose** and lets you use familiar Google tools to sign in and control who can view or edit them.
+
+<details>
+<summary>Compare Google Cloud and Apps Script</summary>
 
 | | Google Cloud Project | Google Apps Script |
 | --- | --- | --- |
@@ -16,6 +19,8 @@ Google Cloud gives the website access only to the spreadsheets you choose and le
 | **How Do You Create a Spreadsheet?** | 🟢 Create a spreadsheet directly in the website. | 🟡 Create a spreadsheet in Google Sheets, then run the script to set up the library tabs and Drive folders. |
 | **How Do You Publish Updates?** | 🟢 Publish the updated website on GitHub Pages. | 🟡 For backend changes, create a new script version and update the existing deployment in the Apps Script editor. |
 
+</details>
+
 ## What you will need
 
 1. **A Google account** to create the Google Sheet and to create [Google Cloud Project](https://console.cloud.google.com/projectcreate)
@@ -27,19 +32,13 @@ Google Cloud gives the website access only to the spreadsheets you choose and le
 1. Open the [Google Cloud Console](https://console.cloud.google.com/) and create a project called something like `Home Library Catalog`. Use the same project for the enabled APIs, OAuth client, and browser API key.
 2. Visit each link and Enable APIs for the newly created project:
    - [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
-     - <small>Create and modify spreadsheets data in Google Sheets.</small>
    - [Google Picker API](https://console.cloud.google.com/apis/library/picker.googleapis.com)
-     - <small>Select a Google Spreadsheet stored in Google Drive.</small>
    - [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com)
-     - <small>Verifies user has access to edit selected spreadsheet.</small>
-   - [Google Books API](https://console.cloud.google.com/apis/library/books.googleapis.com) (optional)
-     - <small>Access the Google Books repository when scanning ISBN.</small>
-
+   - [Google Books API](https://console.cloud.google.com/apis/library/books.googleapis.com) (optional, but recommended)
 ## 2. Configure Google authorization
 
 ### Set up the Consent Screen
-> This is the screen that is shown to users when they attempt to connect to a google sheet from the website
->
+
 > Anna’s Annals automatically requests `drive.file` when a user connects. This lets the app read and save changes in the spreadsheet the user selects or creates, subject to their Google Sheets permissions.
 
 1. Open [Google Auth Platform → Overview](https://console.cloud.google.com/auth/overview). Make sure your **Home Library Catalog** project is selected.
@@ -81,9 +80,9 @@ Google Cloud gives the website access only to the spreadsheets you choose and le
    For local testing, add `http://localhost:8000/*` as a separate entry. Use your actual site hostname if it differs.
 4. Click **Create** or **Save**. Follow [Google's Picker setup guide](https://developers.google.com/workspace/drive/picker/guides/web-picker) if the Cloud Console labels change.
 
-**The browser API key is public.** Anyone can inspect it in the published website or repository. Apply both website and API restrictions before publishing, and periodically review usage in Google Cloud. Restrictions reduce the risk of misuse but do not eliminate it; website referrers can be spoofed outside a browser. The key is not a substitute for a user's Google authorization or the Sheet's sharing permissions.
+>**The browser API key is public.** Anyone can inspect it in the published website or repository. Apply both website and API restrictions before publishing, and periodically review usage in Google Cloud. Restrictions reduce the risk of misuse but do not eliminate it; website referrers can be spoofed outside a browser. The key is not a substitute for a user's Google authorization or the Sheet's sharing permissions.
 
-GitHub secret scanning may flag the key because it is published. If the restrictions were in place before publication and usage is expected, decide whether to resolve the alert as an intentionally exposed restricted browser key. If the key was unrestricted or usage is suspicious, create and restrict a replacement, update and test the app, then delete the old key. The replacement will also be public and may trigger another alert. See [Google's API key security guidance](https://docs.cloud.google.com/docs/authentication/api-keys-best-practices).
+>GitHub secret scanning may flag the key because it is published. If the restrictions were in place before publication and usage is expected, decide whether to resolve the alert as an intentionally exposed restricted browser key. If the key was unrestricted or usage is suspicious, create and restrict a replacement, update and test the app, then delete the old key. The replacement will also be public and may trigger another alert. See [Google's API key security guidance](https://docs.cloud.google.com/docs/authentication/api-keys-best-practices).
 
 ## 4. Add the configuration and publish
 
@@ -106,32 +105,7 @@ GitHub secret scanning may flag the key because it is published. If the restrict
 2. Commit and push the files to the branch you intend to publish. Never add a Google client secret, password, or access token to the repository.
 3. On GitHub, open the repository's **Settings → Pages**. Under **Build and deployment**, choose **Deploy from a branch**, select the branch you pushed and **/ (root)**, and save. Open the repository’s **Actions** tab and check that the latest **pages build and deployment** run succeeds for that branch and commit. Open the displayed site URL when it is published. If an older version appears, check the deployed commit and try a private window or hard refresh. [GitHub Pages instructions](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
 
-## 5. Connect and use the library
-
-1. Open the Pages site. Click **Create new library** to create and initialize a new Sheet, or **Connect Google Sheet** to select an existing one. A connected user can also select **New library** to create another Sheet.
-2. If creating a library, enter its name first. At the Google prompt, use an account on the test-user list and approve the requested access. For an existing library, use an account that already has access to the Sheet.
-3. If connecting an existing library, select it in Google Picker. If creating a library, the app creates and opens it in your Google Drive. Each person connecting must choose the shared file for their own account. The app remembers the chosen Sheet in this browser and restores the catalog after a reload while the Google session is valid. After it expires, reconnect without selecting the Sheet again. Choose **Choose a different Sheet** if needed. If it isn't visible, look in the shared-files view and check that the correct Google account has access.
-4. Search the catalog or choose **Add book**. Scan or type an ISBN, optionally look it up, review the details, and save. Choose **Edit** on a book to change or delete it. A viewer can browse but cannot save changes.
-
-ISBN lookups use Google Books first and fill missing details from Open Library. The app uses Google’s main category when available, otherwise one Open Library subject; it does not change existing category values. Both sources may have incomplete or inaccurate data, so review the results before saving.
-
-Book covers are loaded from Open Library by ISBN in card view, list view, and book details when available. In **Settings**, turn off **Show book covers** to hide cover previews and stop requesting them; this preference is stored in your current browser on this device. Images are not saved in your Google Sheet or Drive. The app caches up to 300 cover image files on this device for later visits; different image sizes count separately. Settings shows the cached image count and, when available, the browser’s estimate of site or cache storage (not necessarily the exact size of covers). Use **Settings → Clear cached covers** to remove this app-managed cache; covers can be downloaded again when displayed. Browsers may also maintain their own HTTP cache.
-
-On iPhone, open the HTTPS site in Safari, tap Share, and choose **Add to Home Screen** to install the website. Other supported browsers offer their own install option. The cover cache belongs to the current site and browser or web-app storage, and can be removed by the device or user. Opening the app, signing in, and reading or updating the Google Sheet still require a network connection; this is not a fully offline catalog.
-
-Google access tokens expire, so you may need to reconnect. The Sheet ID is stored in browser local storage, and the short-lived access token is stored in browser local storage so other windows on the same site can reconnect until the token expires. The token can remain in browser storage after windows close until it is replaced, cleared, or checked after expiry. Scripts running on this site can access that token. A catalog snapshot is also stored in session storage for fast reloads in the same tab. It can briefly be shown before a fresh permission check and remains available in that tab during a network outage; avoid this on shared devices. Closing the tab normally ends the session. Disconnect clears the stored session and forgets the Sheet across windows but does not revoke the Google grant. To revoke it, use your [Google Account connections](https://myaccount.google.com/connections).
-
-## Troubleshooting and current limitations
-
-- **“Setup needed”:** add all three values to `config.js` and republish.
-- **Origin mismatch:** click **error details** in the Google sign-in popup and compare its `origin` with the exact origin in the OAuth client. Confirm the local browser URL, port, saved settings and client ID in `config.js`. Google changes may take time to propagate.
-- **Access blocked during testing:** add the person's Google account as a test user and verify that the Sheet is shared with that account.
-- **Sheet or header error:** select the new spreadsheet and confirm the `Books` tab and all sixteen headers match exactly (or a supported seven-, nine-, or ten-column format).
-- **Can't save:** confirm the account has Editor access. If a save fails or its response is lost, refresh before retrying to avoid a duplicate.
-- **Camera doesn't start:** open the site over HTTPS and allow camera access; you can also scan a photo or enter the ISBN manually. ISBN lookup sends the ISBN to [Open Library](https://openlibrary.org/); a missing match does not prevent manual entry. Valid ISBN-10 values are converted to ISBN-13 and saved without hyphens; ISBN-13 check digits are validated. Existing Sheet rows are not automatically rewritten.
-- **Creating a library:** if a creation request fails or times out, check Google Drive before retrying; the Sheet might have been created even if the response was lost.
-- **Updating an older library:** open it and select **Update library**. The app checks for unnamed data and formulas before adding missing headers and moving columns. If any contain data, move it before updating. Viewers cannot upgrade. The app sets updated_at when it saves a book; direct Sheet edits do not update it. Back up important Sheets and avoid concurrent Sheet edits during the update; the check and write are separate requests.
-- **Shared edits:** simultaneous additions can create duplicate ISBNs. Before editing or deleting, the app checks whether the record has changed and stops if it finds a conflict. This check and the write are separate requests, so simultaneous edits or row changes between them can still overwrite or affect the wrong row. Avoid concurrent edits and verify changes in the Sheet. Long-term caching and migration are not implemented.
+4. On the published site, choose **Create new library** to start a new Sheet or **Connect Google Sheet** to select an existing one.
 
 ## Local development
 
@@ -147,16 +121,4 @@ Google access tokens expire, so you may need to reconnect. The Sheet ID is store
 
 Local and deployed apps can connect to the same Sheet, so local saves change real data. Create and select a separate test Sheet to avoid that. Save code changes and reload locally; changes reach GitHub Pages only after committing and pushing. Run scanner checks with `node --test tests/*.test.cjs`.
 
-## Column order
 
-The app uses header names rather than column positions. New libraries use a readable order; use **Update library** in the header to move an existing library's known columns into that order, followed by custom columns. The operation moves whole Sheet columns. Back up the Sheet and pause other edits first. Missing or duplicate required headers and unnamed columns with data must be fixed before reordering. The app also stops if it finds formulas in the Books tab. Changing column positions can affect external integrations or formulas in ways the app cannot verify; review them after reordering.
-
-Books added directly to the Sheet appear after refresh when they have a title. To edit or delete one through the app, choose **Assign ID** on its card; the app checks the row and adds a unique ID. App-created books receive an ID automatically. The check and write are separate requests, so avoid simultaneous Sheet edits. Duplicate IDs must be resolved before editing.
-
-## Import and export CSV
-
-Use **Import CSV** to select a UTF-8 CSV and review its row count before importing. CSV headers use the Sheet field names; `title` is required and other known fields are optional. The import appends new records, generates new IDs and timestamps, and skips matches by normalized ISBN or by title and author (case-insensitive). This matching may skip distinct editions with the same title and author. Imports are limited to 1,000 rows and 2 MB at a time. The check and append are separate requests, so avoid simultaneous imports or Sheet edits. If the response is lost, refresh and inspect the Sheet before retrying.
-
-**Export CSV** downloads all books currently loaded in the catalog, regardless of filters. Refresh first to include recent Sheet edits. Exports include app fields but not custom Sheet columns, formatting, formulas, or other tabs; use Google Sheets' own copy/version history for a full backup. Imported IDs and timestamps are regenerated. Treat CSV files as untrusted: spreadsheet programs may interpret cells beginning with formula characters when opened.
-
-For testing, create a separate library and import [`test-data/open-library-200.csv`](./test-data/open-library-200.csv). It contains 200 real works from the [Open Library Search API](https://openlibrary.org/dev/docs/api/search), with title, author, first publication year, an ISBN for an associated edition, and a work link. Search results combine work-level and edition-level data: the ISBN may refer to a translation or different edition, and the year is the work's first publication year rather than necessarily that edition's publication year. Do not import test books into a library you want to keep clean.
