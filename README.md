@@ -65,7 +65,7 @@ While the OAuth app is in **Testing**, the test-user list controls who can conne
 
 
 
-## D. Setup Google Cloud Credentials 
+## 3. Setup Google Cloud Credentials
 > [!IMPORTANT]
 > The browser API key is public and identifies your Google Cloud project to Google Picker and Google Books. Access to your private Sheet requires Google sign-in and permission on the Sheet.
 
@@ -85,7 +85,7 @@ While the OAuth app is in **Testing**, the test-user list controls who can conne
 5. Click `Create` or `Save`.
 
 
-## E. Setup Anna’s Annals and publish
+## 4. Setup Anna’s Annals and publish
 
 1. Grab the `clientId`, `apiKey`, and `appId` values from the Google Links below
    | Field | Where to get the value |
@@ -102,16 +102,12 @@ While the OAuth app is in **Testing**, the test-user list controls who can conne
      appId: 'YOUR_NUMERIC_PROJECT_NUMBER'
    };
    ``` 
-3. Commit and push the files to main on Github
-4. Publish the Branch and visit the url!
-    1. Open the repository's **Settings → Pages**.
-    2. Under **Build and deployment**, choose **Deploy from a branch**, select the branch you pushed and **/ (root)**, and save.
-    3. Open the repository’s **Actions** tab and check that the latest **pages build and deployment** run succeeds for that branch and commit.
-    4. Open the displayed site URL when it is published.
+3. Commit and push the files to the `main` branch of your GitHub fork.
+4. In your fork, open **Settings → Pages**. Under **Build and deployment**, choose **Deploy from a branch**, select `main` and **/ (root)**, then click **Save**.
+5. Check the **Actions** tab for the **pages build and deployment** run. Once it succeeds, open the site URL shown in **Settings → Pages**.
+6. On the published site, choose **Create new library** to start a new Sheet or **Connect Google Sheet** to open an existing Anna’s Annals library. An existing library must have a `Books` tab with `id` and `title` as column headers in the first row.
 
-7. On the published site, choose **Create new library** to start a new Sheet or **Connect Google Sheet** to open an existing Anna’s Annals library. An existing library must have a `Books` tab with `id` and `title` as column headers in the first row.
-
-## F. Setup Local Development
+## 5. Setup Local Development
 > [!Warning]
 > Local and deployed instances can connect to the same Google Sheet, so local saves change real data. Create and select a separate test Sheet to avoid that.
 
