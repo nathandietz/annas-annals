@@ -6,7 +6,7 @@ const { findDuplicateGroups } = require('../duplicates.js');
 const { normalizeIsbn } = require('../isbn.js');
 const { matchBook } = require('../book-match.js');
 
-async function fixture({ legacy = false, extraData = false, nine = false, reordered = false, deferLookup = false, bookData = null, editionData = null, workData = null, googleData = null, googleFails = false } = {}) {
+async function fixture({ initialRow, legacy = false, extraData = false, nine = false, reordered = false, deferLookup = false, bookData = null, editionData = null, workData = null, googleData = null, googleFails = false } = {}) {
   let scanTimer, resolveLookup;
   const lookupWait = new Promise(resolve => { resolveLookup = resolve; });
   const handlers = {}, elements = {}, requests = [];
@@ -14,9 +14,9 @@ async function fixture({ legacy = false, extraData = false, nine = false, reorde
   if (legacy) headers.splice(7);
   if (nine) headers.splice(9);
   const addedRows = [];
-  let row = ['id-1', '9780306406157', 'Original', 'Author', '', '', '2026-01-01', ...(extraData ? ['occupied'] : [])];
+  let row = initialRow || ['id-1', '9780306406157', 'Original', 'Author', '', '', '2026-01-01', ...(extraData ? ['occupied'] : [])];
   if (reordered) { [headers[0], headers[2]] = [headers[2], headers[0]]; [row[0], row[2]] = [row[2], row[0]]; }
-  function element(id) { return elements[id] ||= { hidden: false, value: '', textContent: '', disabled: false, classList: { toggle() {}, add() {}, remove() {} }, children: [], addEventListener(type, fn) { handlers[id + ':' + type] = fn; this['on' + type] = fn; }, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, setAttribute() {}, removeAttribute() {}, showModal() { this.open = true; }, close() { this.open = false; }, reset() {} }; }
+  function element(id) { return elements[id] ||= { hidden: false, value: '', textContent: '', disabled: false, classList: { toggle() {}, add() {}, remove() {} }, children: [], addEventListener(type, fn) { handlers[id + ':' + type] = fn; this['on' + type] = fn; }, replaceChildren() { this.children = []; }, append(...children) { this.children.push(...children); }, setAttribute() {}, removeAttribute() {}, showModal() { this.open = true; }, close() { this.open = false; }, reset() {} }; }
   const form = element('book-form'); form.elements = Object.fromEntries(['isbn','title','author','language','notes','publisher','publication_year','shelf_location','category','description','series_name','volume_number','pages'].map(k => [k, { value: '' }]));
   const localStorage = { getItem: key => key === 'annas-annals-show-covers' ? 'true' : key === 'annas-annals-sheet-id' ? 'sheet-id' : key === 'annas-annals-google-session' ? JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }) : null, setItem() {}, removeItem() {} };
   const sessionStorage = { getItem: () => JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }), setItem() {}, removeItem() {} };
@@ -90,9 +90,9 @@ test('saving a book includes its shelf location', async () => {
 });
 
 test('cards show identification and shelf information while details retain the other fields', async () => {
-  const f = await fixture();
-  f.changeRow(['id-1','9780306406157','Original','Author','English','Notes','2026-01-01','Publisher','1991','Top shelf','Fiction','Description','Series','2','240','2026-01-01']);
-  await f.handlers['refresh:click']();
+  const f = await fixture({
+    initialRow: ['id-1','9780306406157','Original','Author','English','Notes','2026-01-01','Publisher','1991','Top shelf','Fiction','Description','Series','2','240','2026-01-01']
+  });
   const details = f.element('books').children[0].children[0].children.find(child => child.className === 'book-details');
   assert.deepEqual(details.children.map(child => child.children[0]?.textContent || child.textContent), ['Original','Author','Series · Vol. 2','Top shelf']);
   f.element('books').children[0].onclick();
@@ -169,7 +169,36 @@ test('adding a book clears the scan result and shows the new book first', async 
   f.form.elements.isbn.value = '9780140328721';
   await f.handlers['book-form:submit']({ preventDefault() {}, currentTarget: f.form });
   assert.equal(f.element('check-result').hidden, true);
-  assert.equal(f.element('scan-books').children[0].children[0].textContent, 'New arrival');
+  const title = f.element('books').children[0].children[0].children.find(child => child.className === 'book-details').children[0];
+  assert.equal(title.children[0].textContent, 'New arrival');
+});
+
+test('a possible match shows the owned edition and adds the scanned edition', async () => {
+  const f = await fixture({
+    initialRow: ['id-1', '9780306406157', 'Original', 'Author', '', '', '2026-01-01', 'Owned Publisher', '1991', 'Living room · Shelf 2'],
+    bookData: { title: 'Original', authors: [{ name: 'Author' }], publishers: [{ name: 'New Publisher' }] }
+  });
+  f.handlers['mode-scan:click']();
+  f.element('scan-search').value = '9780140328721';
+  f.handlers['scan-search:input']();
+  await f.runScanTimer();
+  await new Promise(resolve => setImmediate(resolve));
+
+  const result = f.element('check-result');
+  const descendants = node => [node, ...node.children.flatMap(descendants)];
+  const contents = descendants(result);
+  assert.equal(result.children[0].textContent, 'Possible match');
+  assert.ok(contents.some(child => child.textContent.includes('Owned Publisher') && child.textContent.includes('9780306406157')));
+  assert.ok(contents.some(child => child.textContent === 'Living room · Shelf 2'));
+  const add = contents.find(child => child.textContent === 'Add this edition anyway');
+  assert.equal(add.className, 'check-primary');
+  add.onclick();
+  assert.equal(f.form.elements.isbn.value, '9780140328721');
+  assert.equal(f.form.elements.publisher.value, 'New Publisher');
+  assert.equal(f.form.elements.shelf_location.value, '');
+  await f.handlers['book-form:submit']({ preventDefault() {}, currentTarget: f.form });
+  const write = f.requests.find(request => request.url.includes(':append'));
+  assert.equal(JSON.parse(write.options.body).values[0][1], '9780140328721');
 });
 
 test('shows the local ISBN result while the edition lookup is pending', async () => {
@@ -179,7 +208,7 @@ test('shows the local ISBN result while the edition lookup is pending', async ()
   f.handlers['scan-search:input']();
   await f.runScanTimer();
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(f.element('check-result').children[0].textContent, 'No ISBN Match Found');
+  assert.equal(f.element('check-result').children[0].textContent, 'Checking your library…');
   f.resolveLookup({ ok: true, json: async () => ({}) });
 });
 
@@ -190,7 +219,7 @@ test('adding a scanned book fills available edition details from the existing lo
   f.handlers['scan-search:input']();
   await f.runScanTimer();
   await new Promise(resolve => setImmediate(resolve));
-  const add = f.element('check-result').children.find(child => child.textContent === 'Add book');
+  const add = f.element('check-result').children.find(child => child.className === 'check-result-actions').children.find(child => child.textContent === 'Add book');
   assert.ok(add); add.onclick();
   for (const [key, value] of Object.entries({isbn:'9780140328721', title:'Matilda', author:'Roald Dahl', publisher:'Puffin', publication_year:'1988', language:'eng', pages:'240', category:'Fiction'})) assert.equal(f.form.elements[key].value, value);
   assert.equal(f.form.elements.shelf_location.value, '');
@@ -202,7 +231,7 @@ test('scan lookup prefers Google Books and keeps one category', async () => {
   const f = await fixture({ googleData: { industryIdentifiers:[{type:'ISBN_13',identifier:'9780140328721'}], title:'Google title', authors:['Roald Dahl'], mainCategory:'Juvenile Fiction', categories:['Juvenile Fiction','Fantasy'], pageCount:240 }, bookData: {title:'Other title', authors:[{name:'Roald Dahl'}], publishers:[{name:'Puffin'}], subjects:[{name:'Children'},{name:'Fiction'}]} });
   f.handlers['mode-scan:click'](); f.element('scan-search').value = '9780140328721'; f.handlers['scan-search:input'](); await f.runScanTimer();
   await new Promise(resolve => setImmediate(resolve));
-  f.element('check-result').children.find(child => child.textContent === 'Add book').onclick();
+  f.element('check-result').children.find(child => child.className === 'check-result-actions').children.find(child => child.textContent === 'Add book').onclick();
   assert.equal(f.form.elements.title.value, 'Google title');
   assert.equal(f.form.elements.category.value, 'Juvenile Fiction');
   assert.equal(f.form.elements.publisher.value, 'Puffin');
@@ -212,7 +241,7 @@ test('scan lookup uses one Open Library subject if Google Books fails', async ()
   const f = await fixture({ googleFails:true, bookData:{title:'Matilda', authors:[{name:'Roald Dahl'}], subjects:[{name:'Fantasy, juvenile fiction'},{name:'Children'}]} });
   f.handlers['mode-scan:click'](); f.element('scan-search').value = '9780140328721'; f.handlers['scan-search:input'](); await f.runScanTimer();
   await new Promise(resolve => setImmediate(resolve));
-  f.element('check-result').children.find(child => child.textContent === 'Add book').onclick();
+  f.element('check-result').children.find(child => child.className === 'check-result-actions').children.find(child => child.textContent === 'Add book').onclick();
   assert.equal(f.form.elements.category.value, 'Fantasy, juvenile fiction');
 });
 
@@ -253,7 +282,7 @@ test('edition and work details fill asynchronously without replacing what the us
   f.element('scan-search').value = '9780140328721';
   f.handlers['scan-search:input'](); await f.runScanTimer();
   await new Promise(resolve => setImmediate(resolve));
-  f.element('check-result').children.find(child => child.textContent === 'Add book').onclick();
+  f.element('check-result').children.find(child => child.className === 'check-result-actions').children.find(child => child.textContent === 'Add book').onclick();
   f.form.elements.description.value = 'My own description';
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(f.form.elements.series_name.value, 'Children’s books');

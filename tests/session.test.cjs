@@ -4,13 +4,13 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const headers = ['id','isbn','title','author','language','notes','created_at','publisher','publication_year','shelf_location','category','description','series_name','volume_number','pages','updated_at'];
 function storage(initial = {}) { const data = new Map(Object.entries(initial)); return { getItem: k => data.get(k) ?? null, setItem: (k,v) => data.set(k,String(v)), removeItem: k => data.delete(k) }; }
-async function openWindow(shared, responseStatus = 200, mobile = false, editable = true) {
+async function openWindow(shared, responseStatus = 200, mobile = false, editable = true, { tabStorage = storage(), permissionReady } = {}) {
   const elements = {}, handlers = {}, requests = [], scanners = [], timers = [];
-  const el = id => elements[id] ||= { hidden: false, value: '', textContent: '', children: [], classList: { values: new Set(), toggle(name, force) { if (force) this.values.add(name); else this.values.delete(name); }, remove(name) { this.values.delete(name); }, add(name) { this.values.add(name); }, contains(name) { return this.values.has(name); } }, addEventListener(type, fn) { handlers[id + ':' + type] = fn; }, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute() {}, append(child) { this.children.push(child); }, replaceChildren() { this.children = []; } };
+  const el = id => elements[id] ||= { hidden: false, value: '', textContent: '', children: [], classList: { values: new Set(), toggle(name, force) { if (force) this.values.add(name); else this.values.delete(name); }, remove(name) { this.values.delete(name); }, add(name) { this.values.add(name); }, contains(name) { return this.values.has(name); } }, addEventListener(type, fn) { handlers[id + ':' + type] = fn; }, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute() {}, append(...children) { this.children.push(...children); }, replaceChildren() { this.children = []; } };
   let deletedCache;
   let navigatedTo;
   const window = { LIBRARY_CONFIG: {}, location: { href:'https://example.com/annals/?view=library', replace: value => { navigatedTo = value; } }, caches: { keys: async () => deletedCache ? [] : ['annas-annals-covers-v1'], open: async () => ({ keys: async () => [{}, {}] }), delete: async name => { deletedCache = name; } }, navigator: { storage: { estimate: async () => ({usage: 1048576}) } }, matchMedia: () => ({ matches: mobile }), addEventListener: (type, fn) => { handlers['window:' + type] = fn; } };
-  const context = vm.createContext({ URL, document: { getElementById: el, createElement: () => ({ textContent: '', setAttribute() {}, addEventListener() {}, append() {} }) }, window, localStorage: shared, sessionStorage: storage(), findDuplicateGroups: () => [], normalizeIsbn: require('../isbn.js').normalizeIsbn, matchBook: () => ({kind:'exact', books:[]}), createLibraryScanner: () => { const scanner = { stops: 0, start: async (callback, onStatus) => { scanner.decoded = callback; onStatus('Starting camera…'); }, hold: duration => { scanner.holdDuration = duration; }, stop: async () => { scanner.stops++; } }; scanners.push(scanner); return scanner; }, setTimeout: fn => { timers.push(fn); }, fetch: async (url, options) => { requests.push({url, options}); return { ok: responseStatus === 200, status: responseStatus, json: async () => url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: editable } } : url.includes('fields=properties') ? { properties: {title: 'My library'}, sheets: [{properties: {title:'Books', gridProperties:{frozenRowCount:1}}}] } : { values: [headers] } }; }, console });
+  const context = vm.createContext({ URL, document: { getElementById: el, createElement: () => ({ textContent: '', setAttribute() {}, addEventListener() {}, append() {} }) }, window, localStorage: shared, sessionStorage: tabStorage, findDuplicateGroups: () => [], normalizeIsbn: require('../isbn.js').normalizeIsbn, matchBook: () => ({kind:'exact', books:[]}), createLibraryScanner: () => { const scanner = { stops: 0, start: async (callback, onStatus) => { scanner.decoded = callback; onStatus('Starting camera…'); }, hold: duration => { scanner.holdDuration = duration; }, stop: async () => { scanner.stops++; } }; scanners.push(scanner); return scanner; }, setTimeout: fn => timers.push(fn) - 1, clearTimeout: id => { if (id !== undefined) timers[id] = () => {}; }, fetch: async (url, options) => { requests.push({url, options}); if (url.includes('capabilities(canEdit)') && permissionReady) await permissionReady; return { ok: responseStatus === 200, status: responseStatus, json: async () => url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: editable } } : url.includes('fields=properties') ? { properties: {title: 'My library'}, sheets: [{properties: {title:'Books', gridProperties:{frozenRowCount:1}}}] } : { values: [headers] } }; }, console });
   vm.runInContext(fs.readFileSync('app.js', 'utf8'), context);
   await new Promise(resolve => setImmediate(resolve));
   return { el, handlers, requests, scanners, timers, window, navigatedTo: () => navigatedTo, cacheDeleted: () => deletedCache };
@@ -21,6 +21,25 @@ test('a new window restores a valid session without reconnecting', async () => {
   const first = await openWindow(shared), second = await openWindow(shared);
   for (const view of [first, second]) { assert.equal(view.el('library').hidden, false); assert.equal(view.el('connect').hidden, true); assert.equal(view.requests.length, 3); assert.equal(view.el('add').hidden, false); }
 });
+test('desktop reload keeps Add book in place while editor access is verified once', async () => {
+  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
+  const tabStorage = storage();
+  await openWindow(shared, 200, false, true, { tabStorage });
+
+  let finishPermission;
+  const permissionReady = new Promise(resolve => { finishPermission = resolve; });
+  const view = await openWindow(shared, 200, false, true, { tabStorage, permissionReady });
+  assert.equal(view.el('library').hidden, false);
+  assert.equal(view.el('add').hidden, false);
+  assert.equal(view.el('add').disabled, true);
+  assert.equal(view.requests.filter(request => request.url.includes('capabilities(canEdit)')).length, 1);
+
+  finishPermission();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(view.el('add').hidden, false);
+  assert.equal(view.el('add').disabled, false);
+});
+
 test('an expired session is cleared and requires reconnection', async () => {
   const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'expired', expiresAt: Date.now() - 1000 }) });
   const view = await openWindow(shared);

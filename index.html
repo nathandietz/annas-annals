@@ -1,26 +1,86 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#1c1917"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Annals"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icons/icon-180.png">
-  <title>Anna’s Annals</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_upward,edit,expand_less,expand_more,refresh,unfold_more&display=block" rel="stylesheet"><link rel="stylesheet" href="style.css?v=public-homepage-2">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#f2f2f7"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Annals"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icons/icon-180.png">
+  <title>Anna’s Annals</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_upward,barcode_scanner,book_2,edit,expand_less,expand_more,search,settings,unfold_more&display=block" rel="stylesheet"><link rel="stylesheet" href="style.css?v=mobile-library-11">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://apis.google.com/js/api.js" async defer></script>
   <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js" async></script>
-  <script src="scanner.js?v=canvas-preview-1" defer></script><script src="isbn.js?v=017c5b1b32ae" defer></script><script src="book-match.js?v=017c5b1b32ae" defer></script><script src="duplicates.js?v=017c5b1b32ae" defer></script><script src="csv.js?v=017c5b1b32ae" defer></script><script src="config.js?v=017c5b1b32ae" defer></script><script src="app.js?v=app-update-1" defer></script>
+  <script src="scanner.js?v=canvas-preview-1" defer></script><script src="isbn.js?v=017c5b1b32ae" defer></script><script src="book-match.js?v=017c5b1b32ae" defer></script><script src="duplicates.js?v=017c5b1b32ae" defer></script><script src="csv.js?v=017c5b1b32ae" defer></script><script src="config.js?v=017c5b1b32ae" defer></script><script src="app.js?v=mobile-library-11" defer></script>
 </head>
 <body>
   <main>
-    <header class="site-header"><div class="brand"><span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span><h1><a id="library-name" target="_blank" rel="noopener noreferrer">Your library</a></h1></div><p id="status" role="status" aria-live="polite">Loading your library…</p><nav id="mode-toggle" class="mode-toggle" aria-label="Main view" hidden><button id="mode-scan" type="button">Scan</button><button id="mode-library" type="button">Library</button><button id="settings-open" type="button">Settings</button></nav></header>
-    <div id="scan-view" hidden><div class="scan-search"><form id="check-form" role="search"><input id="scan-search" type="search" placeholder="Search title, author, or ISBN" aria-label="Search title, author, or ISBN" autocomplete="off"></form><div class="scan-control"><button id="scan-start" type="button" aria-expanded="false" aria-controls="check-camera">▥ &nbsp; Scan a book</button><div id="check-camera" hidden><div id="check-preview" class="scanner-preview"><div id="check-qr-reader"></div><span class="scanner-guide" aria-hidden="true"></span></div><p id="check-status" role="status"></p><label>Or scan a photo<input id="check-photo" type="file" accept="image/*"></label><button id="check-stop" class="secondary" type="button">Close scanner</button></div></div></div><div id="check-result" class="check-result" hidden aria-live="polite"></div><div id="scan-meta" class="catalog-meta"><p id="scan-count" class="hint"></p></div><div id="scan-books" class="scan-books"></div></div><div class="toolbar"><div class="search-wrap"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search title, author, ISBN, category, series, or location" aria-label="Search catalog" disabled></div><div id="view-switcher" class="view-switcher" role="group" aria-label="Catalog view" hidden><button id="view-card" type="button" aria-pressed="true">Cards</button><button id="view-list" type="button" aria-pressed="false">List</button></div><div id="library-actions" class="actions" hidden><button id="all-books" class="secondary" type="button" hidden>All books</button><button id="add">Add book</button><button id="refresh" class="secondary icon-button" aria-label="Refresh catalog" title="Refresh catalog"><span class="material-symbol" aria-hidden="true">refresh</span></button></div></div>
+    <header class="site-header">
+      <div class="brand"><span class="material-symbol" aria-hidden="true">book_2</span><h1><a id="library-link" target="_blank" rel="noopener noreferrer">Anna’s Annals</a></h1></div>
+      <p id="status" role="status" aria-live="polite">Loading your library…</p>
+      <nav id="mode-toggle" class="mode-toggle" aria-label="Main view" hidden>
+        <button id="mode-scan" type="button"><span class="material-symbol" aria-hidden="true">barcode_scanner</span>Check</button>
+        <button id="mode-library" type="button"><span class="material-symbol" aria-hidden="true">book_2</span>Library</button>
+        <button id="settings-open" type="button"><span class="material-symbol" aria-hidden="true">settings</span>Settings</button>
+      </nav>
+    </header>
+    <section id="scan-view" aria-label="Check a book" hidden>
+      <div id="check-home">
+        <h2 class="page-title">Do I own This?</h2>
+        <div class="scanner-mark" aria-hidden="true">
+          <svg width="152" height="112" viewBox="0 0 152 112" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <path d="M33 18H17a6 6 0 0 0-6 6v14m108-20h16a6 6 0 0 1 6 6v14M33 94H17a6 6 0 0 1-6-6V74m108 20h16a6 6 0 0 0 6-6V74"/>
+            <path d="M42 33v46m10-46v46m24-46v46m16-46v46m19-46v46" stroke-width="2"/><path d="M64 33v46m36-46v46" stroke-width="4"/><path d="M23 58h106" stroke="#5aa1ed"/>
+          </svg>
+        </div>
+        <form id="check-form" class="search-wrap" role="search">
+          <span class="material-symbol" aria-hidden="true">search</span>
+          <input id="scan-search" type="search" placeholder="Search by title or author" aria-label="Search by title, author, or ISBN" autocomplete="off">
+        </form>
+        <p id="scan-count" class="hint" role="status" hidden></p>
+        <div id="scan-books" class="scan-books" hidden></div>
+      </div>
+      <button id="check-back" class="quiet-button" type="button" hidden>‹ Check</button>
+      <p id="check-announcement" class="visually-hidden" role="status"></p>
+      <div id="check-result" class="check-result" hidden aria-label="Ownership result"></div>
+      <div id="scan-meta" class="catalog-meta"></div>
+      <div id="scan-controls">
+        <form id="check-isbn-form" hidden>
+          <label for="check-isbn">ISBN</label>
+          <input id="check-isbn" name="isbn" type="text" inputmode="text" autocomplete="off" required>
+          <button type="submit">Check ISBN</button>
+          <button id="check-isbn-cancel" class="quiet-button" type="button">Cancel</button>
+          <p id="check-isbn-error" role="status"></p>
+        </form>
+        <button id="scan-start" class="check-primary" type="button" aria-expanded="false" aria-controls="check-camera"><span class="material-symbol" aria-hidden="true">barcode_scanner</span><span id="scan-start-label">Scan barcode</span></button>
+        <div id="check-camera" hidden>
+          <div id="check-preview" class="scanner-preview"><div id="check-qr-reader"></div><span class="scanner-guide" aria-hidden="true"></span></div>
+          <p id="check-status" role="status"></p>
+          <button id="check-stop" class="quiet-button" type="button">Close scanner</button>
+        </div>
+        <div class="scan-options">
+          <button id="check-isbn-open" class="quiet-button" type="button" aria-controls="check-isbn-form" aria-expanded="false">Enter ISBN</button>
+          <button id="check-photo-open" class="quiet-button" type="button">Use a photo</button>
+          <input id="check-photo" type="file" accept="image/*" hidden>
+        </div>
+        <p id="check-photo-status" role="status"></p>
+      </div>
+    </section>
     <section id="connect" hidden><h2>Your library, in your Sheet</h2><p>Sign in with Google, then choose an existing spreadsheet or create a new library.</p><div class="actions"><button id="signin">Connect Google Sheet</button><button id="new-library" class="secondary">Create new library</button><button id="choose-sheet" class="secondary" hidden>Choose a different Sheet</button></div><p class="hint">Anna’s Annals reads and updates the library spreadsheet you choose or create. <a href="privacy.html">How we use Google data</a></p></section>
-    <section id="library" hidden><div id="library-meta" class="catalog-meta"><p id="count" class="hint"></p></div>
+    <section id="library" aria-labelledby="library-title" hidden>
+      <h2 id="library-title" class="page-title">Library</h2>
+      <div class="toolbar">
+        <div class="library-tools">
+          <div class="search-wrap"><span class="material-symbol" aria-hidden="true">search</span><input id="search" type="search" placeholder="Search your library" aria-label="Search your library" disabled></div>
+          <button id="add" class="quiet-button" type="button" aria-label="Add book" title="Add book" hidden><span class="add-symbol" aria-hidden="true">+</span><span class="add-label">Add book</span></button>
+          <div id="view-switcher" class="view-switcher" role="group" aria-label="Catalog view" hidden><button id="view-card" type="button" aria-pressed="true">Cards</button><button id="view-list" type="button" aria-pressed="false">List</button></div>
+        </div>
+        <button id="all-books" class="secondary" type="button" hidden>All books</button>
+      </div>
+      <div id="library-meta" class="catalog-meta"><p id="count" class="hint" role="status"></p></div>
+      <div class="mobile-sort"><label for="library-sort">Sort by</label><select id="library-sort"><option value="">Recently added</option><option value="title">Title</option><option value="author">Author</option><option value="shelf_location">Shelf location</option></select></div>
+      <p id="library-empty" class="empty-state" hidden></p>
       <div id="books" class="books"></div>
     </section>
     <section id="settings-dialog" aria-labelledby="settings-title" hidden>
+      <h2 id="settings-title" class="page-title">Settings</h2>
       <div id="settings-meta" class="catalog-meta"></div>
-      <div class="settings-header"><h2 id="settings-title">Library settings</h2></div>
       <div class="settings-content">
-        <p class="settings-description">Choose how your library looks and manage its data.</p>
         <section class="settings-group" aria-labelledby="covers-title">
           <h3 id="covers-title">Book covers</h3>
           <label class="cover-setting" for="show-covers"><span><strong>Show book covers</strong><span class="hint">Load and cache covers from Open Library on this device.</span></span><input id="show-covers" type="checkbox" role="switch"></label>
@@ -53,7 +113,7 @@
       <p class="hint">Columns will be moved as whole columns, with custom columns following the library columns. The app checks for conflicts first. Back up your Sheet and pause other edits before continuing.</p>
       <div class="actions dialog-actions"><button id="cancel-upgrade" class="secondary" type="button">Cancel</button><button id="confirm-upgrade" type="button">Update library</button></div>
     </dialog>
-    <dialog id="editor"><form id="book-form"><div class="dialog-header"><h2 id="editor-title">Add a book</h2><div class="actions"><button id="edit-from-details" type="button" hidden>Edit book</button><button id="save" type="submit">Save book</button><button id="cancel-edit" class="secondary" type="button" hidden>Cancel</button><button id="delete" class="secondary" type="button" hidden>Delete book</button><button type="button" id="close-editor" class="secondary">Close</button></div></div>
+    <dialog id="editor" aria-labelledby="editor-title"><form id="book-form"><div class="dialog-header"><h2 id="editor-title">Add a book</h2><div class="actions"><button id="edit-from-details" type="button" hidden>Edit book</button><button id="save" type="submit">Save book</button><button id="cancel-edit" class="secondary" type="button" hidden>Cancel</button><button id="delete" class="secondary" type="button" hidden>Delete book</button><button type="button" id="close-editor" class="secondary">Close</button></div></div>
       <div class="editor-body">
       <div id="book-intro" class="book-intro">
         <div id="book-cover-panel" class="details-cover"><div id="book-cover-placeholder"><span aria-hidden="true">▤</span><span>Book cover</span></div><img id="book-cover-image" alt="Book cover" hidden></div>

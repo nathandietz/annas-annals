@@ -2,6 +2,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const config = window.LIBRARY_CONFIG;
+  const appName = 'Anna’s Annals';
   window.addEventListener('load', () => {
     window.navigator?.serviceWorker?.register('service-worker.js').catch(() => {});
   });
@@ -32,6 +33,7 @@
   const storageKey = 'annas-annals-sheet-id';
   const sessionKey = 'annas-annals-google-session';
   const cacheKey = 'annas-annals-catalog-snapshot';
+  const editAccessKey = 'annas-annals-edit-access';
   let token = '', sheetId = '', books = [], pickerReady = false, busy = false, creatingLibrary = false, libraryWidth = 16;
   let rememberedSheet = '', editingBook = null, viewMode = 'card', duplicatesMode = false, sortField = '', sortDirection = 1;
   let showCovers = false;
@@ -42,7 +44,8 @@
   const scanner = createLibraryScanner();
   const checkScanner = createLibraryScanner('check-qr-reader');
   const scanGuidance = 'Keep the entire barcode in view, including blank space at both ends. Hold steady in good light.';
-  let mainView = window.matchMedia?.('(max-width: 700px)').matches ? 'scan' : 'library', canEdit = false, checkSequence = 0;
+  const compactLayout = window.matchMedia?.('(max-width: 700px)');
+  let mainView = compactLayout?.matches ? 'scan' : 'library', canEdit = false, checkSequence = 0;
   try { const savedMainView = localStorage.getItem('annas-annals-main-view'); if (['scan', 'library', 'settings'].includes(savedMainView)) mainView = savedMainView; } catch {}
   let lastCatalogUpdate = 0, showingUpdateAge = false;
   const status = message => { showingUpdateAge = false; $('status').textContent = message; };
@@ -63,9 +66,51 @@
     try { if (id) localStorage.setItem(storageKey, id); else localStorage.removeItem(storageKey); } catch {}
     updateConnect();
   }
-  function showLibrary() { $('mode-toggle').hidden = false; checkPermission(); $('library-name').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit'; $('connect').hidden = true; $('library').hidden = false; $('disconnect').hidden = false; $('new-library-connected').hidden = false; $('transfer-actions').hidden = false;   $('library-actions').hidden = false; $('view-switcher').hidden = false; $('search').disabled = false; setMainView(mainView); }
+  function setLibraryLinkLabel(title) {
+    const link = $('library-link');
+    const name = typeof title === 'string' ? title.trim() : '';
+    link.textContent = name || appName;
+    link.title = name
+      ? 'Open “' + name + '” in Google Sheets (opens in a new tab)'
+      : 'Open the library in Google Sheets (opens in a new tab)';
+  }
+  function showLibrary() {
+    $('mode-toggle').hidden = false;
+    checkPermission();
+    $('library-link').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit';
+    $('connect').hidden = true;
+    $('disconnect').hidden = false;
+    $('new-library-connected').hidden = false;
+    $('transfer-actions').hidden = false;
+    $('view-switcher').hidden = false;
+    $('search').disabled = false;
+    setMainView(mainView);
+  }
   updateConnect();
-  function clearSession() { document.querySelector?.('.site-header')?.append($('status')); canEdit = false; checkSequence++; checkScanner.stop?.().catch(() => {}); $('mode-toggle').hidden = true; $('scan-view').hidden = true; setCameraOpen(false); try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); } catch {} token = ''; sheetId = ''; books = []; $('count').textContent = ''; duplicatesMode = false; $('all-books').hidden = true; $('library-name').textContent = 'Your library'; $('library-name').removeAttribute('href'); $('books').replaceChildren(); $('search').value = ''; $('search').disabled = true; $('library-actions').hidden = true; $('view-switcher').hidden = true; $('library').hidden = true; $('connect').hidden = false; $('disconnect').hidden = true; $('new-library-connected').hidden = true; $('transfer-actions').hidden = true; $('settings-dialog').hidden = true;  }
+  function clearSession() {
+    document.querySelector?.('.site-header')?.append($('status'));
+    canEdit = false;
+    checkScanner.stop?.().catch(() => {});
+    try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); sessionStorage.removeItem(editAccessKey); } catch {}
+    token = '';
+    sheetId = '';
+    books = [];
+    duplicatesMode = false;
+    $('scan-search').value = '';
+    $('check-isbn').value = '';
+    resetOwnershipCheck();
+    for (const id of ['mode-toggle', 'scan-view', 'all-books', 'add', 'view-switcher', 'library', 'disconnect', 'new-library-connected', 'transfer-actions', 'settings-dialog']) {
+      $(id).hidden = true;
+    }
+    $('count').textContent = '';
+    $('library-link').textContent = appName;
+    $('library-link').removeAttribute('href');
+    $('library-link').removeAttribute('title');
+    $('books').replaceChildren();
+    $('search').value = '';
+    $('search').disabled = true;
+    $('connect').hidden = false;
+  }
   async function api(path, options = {}) {
     const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(sheetId) + path, {
       ...options, headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
@@ -86,9 +131,10 @@
     headerFrozen = (spreadsheet.sheets?.find(item => item.properties?.title === 'Books')?.properties?.gridProperties?.frozenRowCount || 0) >= 1;
     $('upgrade-library').hidden = !canEdit || !needsUpdate();
     books = rows.slice(1).map(row => record(row, sheetHeaders)).filter(book => book.title).sort((a, b) => (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0));
-    $('library-name').textContent = spreadsheet.properties?.title || 'Your library';
+    const title = spreadsheet.properties?.title;
+    setLibraryLinkLabel(title);
     const updatedAt = Date.now();
-    try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title: $('library-name').textContent, books, updatedAt, sheetHeaders, headerFrozen })); } catch {}
+    try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title, books, updatedAt, sheetHeaders, headerFrozen })); } catch {}
     render(); lastCatalogUpdate = updatedAt; showingUpdateAge = true; showUpdateAge();
   }
   function render() {
@@ -101,15 +147,18 @@
     }
     const query = $('search').value.trim().toLocaleLowerCase();
     const filtered = books.filter(book => (!duplicatesMode || duplicateReasons.has(book)) && [book.title, book.author, book.isbn, book.shelf_location, book.category, book.series_name, book.description].some(value => value.toLocaleLowerCase().includes(query)));
-    if (viewMode === 'list' && sortField) filtered.sort((a, b) => {
-      const left = a[sortField].trim(), right = b[sortField].trim();
+    const compact = compactLayout?.matches;
+    const layout = compact ? 'card' : viewMode;
+    const field = compact ? $('library-sort').value : layout === 'list' ? sortField : '';
+    if (field) filtered.sort((a, b) => {
+      const left = a[field].trim(), right = b[field].trim();
       if (!left || !right) return left ? -1 : right ? 1 : 0;
-      return sortDirection * left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' });
+      return (compact ? 1 : sortDirection) * left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' });
     });
-    const container = $('books'); container.replaceChildren(); container.className = 'books view-' + viewMode;
+    const container = $('books'); container.replaceChildren(); container.className = 'books view-' + layout;
     for (const mode of ['card', 'list']) $('view-' + mode).setAttribute('aria-pressed', String(viewMode === mode));
     let listBody;
-    if (viewMode === 'list') {
+    if (layout === 'list') {
       const table = document.createElement('table'); table.className = 'catalog-table';
       const head = document.createElement('thead'), row = document.createElement('tr');
       for (const [label, field] of [['Title','title'], ['Author','author'], ['Publisher','publisher'], ['Category','category'], ['Location','shelf_location'], ['Actions','']]) {
@@ -130,7 +179,7 @@
       head.append(row); table.append(head); listBody = document.createElement('tbody'); table.append(listBody); container.append(table);
     }
     for (const book of filtered) {
-      if (viewMode === 'list') {
+      if (layout === 'list') {
         const row = document.createElement('tr'); row.className = 'book-row'; row.addEventListener('click', () => showDetails(book));
         for (const [index, value] of [book.title, book.author, book.publisher, book.category, book.shelf_location].entries()) {
           const cell = document.createElement('td');
@@ -148,6 +197,7 @@
       const card = document.createElement('article'); card.className = 'book'; card.addEventListener('click', () => showDetails(book));
       const content = document.createElement('div'); content.className = 'book-content';
       if (showCovers) { const cover = document.createElement('div'); cover.className = 'cover-placeholder'; cover.setAttribute('aria-hidden', 'true'); const image = makeCoverImage(book, 'card-cover'); if (image) { cover.append(image); image.addEventListener('error', () => { image.remove(); cover.textContent = '▤'; }); } else cover.textContent = '▤'; content.append(cover); }
+      if (compact && !showCovers) content.append(makeBookSpine(book.title));
       const details = document.createElement('div'); details.className = 'book-details';
       for (const [tag, value] of [['h3', book.title], ['p', book.author], ['p', [book.series_name, book.volume_number ? 'Vol. ' + book.volume_number : ''].filter(Boolean).join(' · ')], ['p', book.shelf_location]]) {
         if (value) { const el = document.createElement(tag); if (tag === 'h3') { const title = document.createElement('button'); title.type = 'button'; title.className = 'book-title-button'; title.textContent = value; title.addEventListener('click', event => { event.stopPropagation(); showDetails(book); }); el.append(title); } else el.textContent = value; details.append(el); }
@@ -164,7 +214,21 @@
       actions.append(edit); card.append(actions);
       $('books').append(card);
     }
-    $('count').textContent = filtered.length + (filtered.length === 1 ? ' Book' : ' Books'); renderScanBooks();
+    $('count').textContent = filtered.length + (filtered.length === 1 ? ' book' : ' books');
+    const empty = $('library-empty');
+    empty.hidden = filtered.length > 0;
+    empty.textContent = query ? 'No books match your search. Try a different title, author, or keyword.' : duplicatesMode ? 'No duplicates found.' : 'Your library is empty.';
+    renderScanBooks();
+  }
+
+  function makeBookSpine(title) {
+    const spine = document.createElement('span');
+    spine.className = 'book-spine';
+    spine.setAttribute('aria-hidden', 'true');
+    const initial = [...title.trim()][0] || '';
+    spine.textContent = initial.toLocaleUpperCase();
+    spine.setAttribute('data-tone', String((initial.toLocaleUpperCase().codePointAt(0) || 0) % 4));
+    return spine;
   }
 
   function makeCoverImage(book, className) {
@@ -219,15 +283,43 @@
   });
 
   async function checkPermission() {
-    const currentSheet = sheetId;
-    canEdit = false; $('add').hidden = true; $('import-open').hidden = true; $('upgrade-library').hidden = true;
+    const currentSheet = sheetId, currentToken = token;
+    const add = $('add');
+    let cachedAccess;
     try {
-      const response = await fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(currentSheet) + '?fields=capabilities(canEdit)', { headers: { Authorization: 'Bearer ' + token } });
+      const saved = JSON.parse(sessionStorage.getItem(editAccessKey) || 'null');
+      if (saved?.sheetId === currentSheet && typeof saved.canEdit === 'boolean') cachedAccess = saved.canEdit;
+    } catch {}
+    // Cache the toolbar layout only. Editing still requires a fresh Drive response.
+    canEdit = false;
+    add.disabled = true;
+    add.hidden = cachedAccess === false;
+    add.classList.toggle('awaiting-edit-access', cachedAccess === undefined);
+    updateCheckActions();
+    $('import-open').hidden = true;
+    $('upgrade-library').hidden = true;
+    try {
+      const response = await fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(currentSheet) + '?fields=capabilities(canEdit)', { headers: { Authorization: 'Bearer ' + currentToken } });
       const data = await response.json();
-      if (sheetId !== currentSheet) return;
-      canEdit = response.ok && data.capabilities?.canEdit === true;
-      $('add').hidden = !canEdit; $('import-open').hidden = !canEdit; $('upgrade-library').hidden = !canEdit || !needsUpdate(); render();
-    } catch { if (sheetId === currentSheet) status('Could not check editing access. You can still browse and scan.'); }
+      if (sheetId !== currentSheet || token !== currentToken) return;
+      const access = data.capabilities?.canEdit;
+      canEdit = response.ok && access === true;
+      if (response.ok && typeof access === 'boolean') {
+        try { sessionStorage.setItem(editAccessKey, JSON.stringify({ sheetId: currentSheet, canEdit })); } catch {}
+      }
+      updateCheckActions();
+      $('import-open').hidden = !canEdit;
+      $('upgrade-library').hidden = !canEdit || !needsUpdate();
+      render();
+    } catch {
+      if (sheetId === currentSheet && token === currentToken) status('Could not check editing access. You can still browse and scan.');
+    } finally {
+      if (sheetId === currentSheet && token === currentToken) {
+        add.classList.remove('awaiting-edit-access');
+        add.hidden = !canEdit;
+        add.disabled = !canEdit;
+      }
+    }
   }
   let cacheInfoSequence = 0;
   async function updateCoverCacheInfo() {
@@ -248,6 +340,7 @@
     } catch { if (current === cacheInfoSequence) info.textContent = 'Cover cache information is unavailable in this browser.'; }
   }
   function setMainView(view) {
+    const previousView = mainView;
     mainView = view;
     try { localStorage.setItem('annas-annals-main-view', view); } catch {}
     if (view === 'settings') updateCoverCacheInfo();
@@ -255,9 +348,12 @@
     $('scan-view').hidden = view !== 'scan';
     $('library').hidden = view !== 'library';
     $('settings-dialog').hidden = view !== 'settings';
-    const toolbar = document.querySelector?.('.toolbar'); if (toolbar) toolbar.hidden = view !== 'library';
     for (const name of ['scan', 'library', 'settings']) $(name === 'settings' ? 'settings-open' : 'mode-' + name).setAttribute('aria-pressed', String(name === view));
-    if (view !== 'scan') { checkSequence++; checkScanner.stop?.().catch(() => {}); setCameraOpen(false); }
+    if (view !== 'scan') {
+      resetOwnershipCheck();
+      checkScanner.stop?.().catch(() => {});
+    }
+    if (view !== previousView) window.scrollTo?.(0, 0);
   }
   $('mode-scan').addEventListener('click', () => setMainView('scan'));
   $('mode-library').addEventListener('click', () => setMainView('library'));
@@ -265,21 +361,94 @@
     const container = $('scan-books'); container.replaceChildren();
     const query = $('scan-search').value.trim().toLocaleLowerCase();
     const isbnQuery = query.replace(/[\s-]/g, '');
+    container.hidden = !query;
+    $('scan-count').hidden = !query;
+    if (!query) {
+      $('scan-count').textContent = '';
+      return;
+    }
     const filtered = books.filter(book => [book.title, book.author].some(value => (value || '').toLocaleLowerCase().includes(query)) || (isbnQuery && (book.isbn || '').toLocaleLowerCase().replace(/[\s-]/g, '').includes(isbnQuery)));
-    $('scan-count').textContent = filtered.length + (filtered.length === 1 ? ' book' : ' books');
+    $('scan-count').textContent = filtered.length
+      ? filtered.length + (filtered.length === 1 ? ' book found' : ' books found')
+      : 'No books match your search. Try a different title or author.';
     for (const book of filtered) {
-      const button = document.createElement('button'); button.type = 'button'; button.className = 'scan-book';
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'scan-book quiet-button';
+      const details = document.createElement('span');
       const title = document.createElement('strong'); title.textContent = book.title;
       const author = document.createElement('span'); author.textContent = book.author || 'Unknown author';
-      button.append(title, author); button.addEventListener('click', () => showDetails(book)); container.append(button);
+      details.append(title, author);
+      button.append(details);
+      button.addEventListener('click', () => showDetails(book));
+      container.append(button);
     }
   }
-  let scanSearchTimer;
+  let scanSearchTimer, cameraOpen = false, resultActions;
+  function showCheckResult(show) {
+    $('check-home').hidden = show;
+    $('check-back').hidden = !show;
+    $('scan-controls').hidden = show;
+    $('check-result').hidden = !show;
+    if (show) $('scan-count').hidden = true;
+  }
+  function showIsbnForm(show) {
+    $('check-isbn-form').hidden = !show;
+    $('check-isbn-open').setAttribute('aria-expanded', String(show));
+    $('check-isbn-error').textContent = '';
+    if (show) $('check-isbn').focus();
+  }
+  function resetOwnershipCheck() {
+    checkSequence++;
+    clearTimeout(scanSearchTimer);
+    setCameraOpen(false);
+    showCheckResult(false);
+    showIsbnForm(false);
+    $('check-result').replaceChildren();
+    resultActions = undefined;
+    $('check-announcement').textContent = '';
+    $('check-photo-status').textContent = '';
+    renderScanBooks();
+  }
+  function returnToCheck() {
+    $('scan-search').value = '';
+    $('check-isbn').value = '';
+    resetOwnershipCheck();
+    window.scrollTo?.(0, 0);
+  }
+  $('check-back').addEventListener('click', () => {
+    returnToCheck();
+    checkScanner.stop().catch(() => {});
+    $('scan-start').focus();
+  });
+  $('check-isbn-open').addEventListener('click', async () => {
+    clearTimeout(scanSearchTimer);
+    const sequence = await closeCheckScanner();
+    if (sequence === checkSequence && mainView === 'scan') showIsbnForm(true);
+  });
+  $('check-isbn-cancel').addEventListener('click', () => {
+    showIsbnForm(false);
+    $('check-isbn-open').focus();
+  });
+  $('check-isbn-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const isbn = normalizeIsbn($('check-isbn').value);
+    if (!isbn) {
+      $('check-isbn-error').textContent = 'Enter a valid ISBN-10 or ISBN-13.';
+      $('check-isbn').focus();
+      return;
+    }
+    clearTimeout(scanSearchTimer);
+    const sequence = await closeCheckScanner();
+    if (sequence === checkSequence && mainView === 'scan') checkIsbn(isbn);
+  });
   $('scan-search').addEventListener('input', () => {
-    checkSequence++; clearTimeout(scanSearchTimer); $('check-result').hidden = true; renderScanBooks();
+    checkSequence++;
+    clearTimeout(scanSearchTimer);
+    showCheckResult(false);
+    renderScanBooks();
     const query = $('scan-search').value.trim();
     if (normalizeIsbn(query)) scanSearchTimer = setTimeout(async () => {
-      await checkScanner.stop(); setCameraOpen(false);
+      await checkScanner.stop();
+      setCameraOpen(false);
       if ($('scan-search').value.trim() === query && mainView === 'scan') checkIsbn(query);
     }, 400);
   });
@@ -354,44 +523,154 @@
       fillEmptyBookFields({ description: text(work.description) }, generation, isbn);
     } catch { /* Details are optional; the existing lookup remains usable. */ }
   }
+  function showOwnedEditions(result, matchingBooks) {
+    if (!matchingBooks.length) return;
+    const editions = document.createElement('div');
+    editions.className = 'owned-editions';
+    const label = document.createElement('h3');
+    label.textContent = matchingBooks.length === 1 ? 'Edition you own' : 'Editions you own';
+    editions.append(label);
+    for (const book of matchingBooks) {
+      const edition = document.createElement('div');
+      edition.className = 'owned-edition';
+      const link = document.createElement('button');
+      link.type = 'button';
+      link.className = 'owned-book quiet-button';
+      link.addEventListener('click', () => showDetails(book));
+      const cover = makeCoverImage(book, 'owned-cover');
+      const spine = makeBookSpine(book.title);
+      link.append(cover || spine);
+      if (cover) cover.addEventListener('error', () => cover.replaceWith(spine));
+      const details = document.createElement('span');
+      const title = document.createElement('strong');
+      title.textContent = book.title;
+      details.append(title);
+      for (const text of [book.author, [book.publisher, book.publication_year, book.isbn && 'ISBN ' + book.isbn].filter(Boolean).join(' · ')]) {
+        if (!text) continue;
+        const metadata = document.createElement('small');
+        metadata.textContent = text;
+        details.append(metadata);
+      }
+      link.append(details);
+      const shelf = document.createElement('p');
+      shelf.className = 'owned-shelf';
+      shelf.textContent = book.shelf_location.trim() || 'Shelf location not recorded';
+      edition.append(link, shelf);
+      editions.append(edition);
+    }
+    result.append(editions);
+  }
+
   async function checkIsbn(value) {
-    const sequence = ++checkSequence, isbn = normalizeIsbn(value);
-    const result = $('check-result'); result.hidden = false; result.replaceChildren();
-    if (!isbn) { result.textContent = 'Enter a valid ISBN-10 or ISBN-13.'; return; }
+    const sequence = ++checkSequence;
+    const isbn = normalizeIsbn(value);
+    const result = $('check-result');
+    const heading = document.createElement('h2');
+    heading.className = 'page-title';
+    heading.setAttribute('tabindex', '-1');
+    const detail = document.createElement('p');
+    detail.className = 'page-subtitle';
+    resultActions = undefined;
+    result.replaceChildren();
+    result.append(heading, detail);
+    showIsbnForm(false);
+    showCheckResult(true);
+    window.scrollTo?.(0, 0);
+    if (!isbn) {
+      heading.textContent = 'Invalid ISBN';
+      detail.textContent = 'Enter a valid ISBN-10 or ISBN-13.';
+      heading.focus?.();
+      return;
+    }
 
     let match = matchBook(isbn, null, books), metadata = null, bookData = null;
     if (match.kind !== 'exact') {
-      const heading = document.createElement('h2'); heading.textContent = 'No ISBN Match Found';
-      const detail = document.createElement('p'); detail.textContent = 'Checking Title & Author';
-      result.append(heading, detail);
+      heading.textContent = 'Checking your library…';
+      detail.textContent = 'Looking up the title and author.';
+      heading.focus?.();
       try {
         ({metadata, bookData} = await lookupBookMetadata(isbn));
         match = matchBook(isbn, metadata, books);
       } catch { match = { kind: 'unknown', books: [] }; }
     }
     if (sequence !== checkSequence || mainView !== 'scan') return;
-    result.replaceChildren();
-    const heading = document.createElement('h2'); heading.textContent = {exact:'Already in your library', possible:'Likely already in your library', none:'No Book Match Found', unknown:'No ISBN Match Found'}[match.kind]; result.append(heading);
-    const detail = document.createElement('p'); detail.textContent = match.kind === 'unknown' ? 'Could not check for other editions. Search by title or author to check manually.' : match.kind === 'possible' ? 'The title and author match a book you own; this may be another edition.' : metadata ? [metadata.title, metadata.author].filter(Boolean).join(' — ') : ''; result.append(detail);
-    for (const book of match.books) { const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary'; button.textContent = [book.title, book.author].filter(Boolean).join(' — '); button.addEventListener('click', () => showDetails(book)); result.append(button); }
-    if (canEdit && match.kind !== 'exact') { const add = document.createElement('button'); add.type = 'button'; add.textContent = match.kind === 'possible' ? 'Add this edition anyway' : 'Add book'; add.addEventListener('click', () => { openEditor(); const form = $('book-form'); form.elements.isbn.value = isbn; updateBookCover(); if (metadata) for (const [key, value] of Object.entries(metadata)) if (value) form.elements[key].value = value; if (bookData) enrichScannedBook(bookData, editorGeneration, isbn); }); result.append(add); }
-    const again = document.createElement('button'); again.type = 'button'; again.className = 'secondary'; again.textContent = 'Scan another book'; again.addEventListener('click', startCheckScanner); result.append(again);
+    heading.textContent = { exact: 'In your library', possible: 'Possible match', none: 'No match in your library', unknown: 'Couldn’t verify' }[match.kind];
+    detail.textContent = {
+      exact: 'The ISBN matches an edition you own.',
+      possible: 'The title and author match a book in your library.',
+      none: [metadata?.title, metadata?.author].filter(Boolean).join(' · '),
+      unknown: 'Try searching by title or author to check your library.'
+    }[match.kind];
+    const scanned = document.createElement('p');
+    scanned.className = 'scanned-isbn';
+    scanned.textContent = 'Scanned ISBN ' + isbn;
+    result.append(scanned);
+    showOwnedEditions(result, match.books);
+
+    const actions = document.createElement('div');
+    actions.className = 'check-result-actions';
+    let add;
+    if (match.kind !== 'exact') {
+      add = document.createElement('button');
+      add.type = 'button';
+      add.className = 'check-primary';
+      add.textContent = match.kind === 'possible' ? 'Add this edition anyway' : 'Add book';
+      add.addEventListener('click', () => {
+        if (!canEdit) return;
+        openEditor();
+        const form = $('book-form');
+        form.elements.isbn.value = isbn;
+        updateBookCover();
+        if (metadata) for (const [key, value] of Object.entries(metadata)) if (value) form.elements[key].value = value;
+        if (bookData) enrichScannedBook(bookData, editorGeneration, isbn);
+      });
+      actions.append(add);
+    }
+    const again = document.createElement('button');
+    again.type = 'button';
+    again.textContent = 'Scan another';
+    again.addEventListener('click', () => {
+      returnToCheck();
+      startCheckScanner();
+      $('scan-start').focus?.();
+    });
+    actions.append(again);
+    resultActions = { add, again };
+    updateCheckActions();
+    result.append(actions);
+    // Announce the completed state without moving focus away from a control
+    // the user reached during a slow lookup.
+    if (match.kind === 'exact') heading.focus?.();
+    $('check-announcement').textContent = heading.textContent;
   }
-  let cameraOpen = false;
+  function updateCheckActions() {
+    if (!resultActions) return;
+    const { add, again } = resultActions;
+    if (add) add.hidden = !canEdit;
+    again.className = add && canEdit ? 'quiet-button' : 'check-primary';
+  }
   function setCameraOpen(open, standby = false) {
     cameraOpen = open;
     $('check-camera').hidden = !open && !standby;
     $('check-camera').classList.toggle('camera-standby', standby);
     $('check-camera').inert = standby;
+    $('scan-start-label').textContent = open ? 'Close scanner' : 'Scan barcode';
     $('scan-start').setAttribute('aria-expanded', String(open));
   }
   async function closeCheckScanner() {
-    checkSequence++; setCameraOpen(false);
+    const sequence = ++checkSequence;
+    setCameraOpen(false);
+    $('check-photo-status').textContent = '';
     await checkScanner.stop();
+    return sequence;
   }
   async function startCheckScanner() {
     const scanId = ++checkSequence;
-    setCameraOpen(true); $('check-result').hidden = true; $('check-status').textContent = scanGuidance; $('check-preview').classList.remove('recognized'); $('check-preview').classList.add('loading');
+    clearTimeout(scanSearchTimer);
+    showIsbnForm(false);
+    showCheckResult(false);
+    $('check-photo-status').textContent = '';
+    setCameraOpen(true); $('check-status').textContent = scanGuidance; $('check-preview').classList.remove('recognized'); $('check-preview').classList.add('loading');
     try {
       await checkScanner.start(async value => {
         if (scanId !== checkSequence || $('check-camera').hidden) return;
@@ -409,10 +688,31 @@
   $('scan-start').addEventListener('click', () => cameraOpen ? closeCheckScanner() : startCheckScanner());
   $('check-stop').addEventListener('click', closeCheckScanner);
   document.addEventListener?.('visibilitychange', () => {
-    if (document.hidden) { checkSequence++; setCameraOpen(false); checkScanner.stop().catch(() => {}); }
+    if (!document.hidden || $('check-camera').hidden) return;
+    if (cameraOpen) checkSequence++;
+    setCameraOpen(false);
+    checkScanner.stop().catch(() => {});
   });
   $('check-form').addEventListener('submit', event => { event.preventDefault(); });
-  $('check-photo').addEventListener('change', async event => { try { const value = await checkScanner.scanFile(event.target.files[0]); if (value) { await checkScanner.stop(); setCameraOpen(false); checkIsbn(value); } } catch { $('check-status').textContent = 'No barcode found. Try another photo or enter the ISBN manually.'; } });
+  $('check-photo-open').addEventListener('click', () => $('check-photo').click());
+  $('check-photo').addEventListener('change', async event => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = '';
+    clearTimeout(scanSearchTimer);
+    const sequence = await closeCheckScanner();
+    if (sequence !== checkSequence || mainView !== 'scan') return;
+    const photoStatus = $('check-photo-status');
+    photoStatus.textContent = 'Reading barcode…';
+    try {
+      const value = await checkScanner.scanFile(file);
+      if (sequence !== checkSequence || mainView !== 'scan') return;
+      photoStatus.textContent = '';
+      if (value) checkIsbn(value);
+    } catch {
+      if (sequence === checkSequence) photoStatus.textContent = 'No barcode found. Try another photo or enter the ISBN manually.';
+    }
+  });
 
   $('duplicates-toggle').addEventListener('click', () => { duplicatesMode = true; setMainView('library'); render(); });
   $('all-books').addEventListener('click', () => { duplicatesMode = false; render(); });
@@ -487,7 +787,7 @@
     const client = google.accounts.oauth2.initTokenClient({ client_id: config.clientId, scope, callback: async response => {
       if (response.error) { status('Google authorization was not completed: ' + response.error); return; }
       token = response.access_token;
-      try { sessionStorage.removeItem(cacheKey); } catch {}
+      try { sessionStorage.removeItem(cacheKey); sessionStorage.removeItem(editAccessKey); } catch {}
       try { localStorage.setItem(sessionKey, JSON.stringify({ token, expiresAt: Date.now() + Number(response.expires_in) * 1000 })); } catch {}
       if (mode === 'create') {
         try { await createLibrary(libraryName); } catch (error) { status(message(error)); }
@@ -518,12 +818,15 @@
       const snapshot = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
       if (snapshot?.sheetId === sheetId && Array.isArray(snapshot.books) && snapshot.books.every(book => headers.every(key => typeof book[key] === 'string')) && Number.isFinite(snapshot.updatedAt) && Array.isArray(snapshot.sheetHeaders)) {
         sheetHeaders = readHeaders(snapshot.sheetHeaders); headerFrozen = snapshot.headerFrozen === true; libraryWidth = sheetHeaders.length; $('upgrade-library').hidden = !canEdit || !needsUpdate();
-        books = snapshot.books; $('library-name').textContent = snapshot.title || 'Your library';
+        books = snapshot.books;
+        setLibraryLinkLabel(snapshot.title);
         render(); showLibrary(); cached = true;
       }
     } catch {}
-    try { await refresh(); showLibrary(); }
-    catch (error) {
+    try {
+      await refresh();
+      if (!cached) showLibrary();
+    } catch (error) {
       if (cached && error.status !== 401 && error.status !== 403) {
         status('Showing saved catalog; refresh failed: ' + message(error));
       } else {
@@ -659,11 +962,12 @@
     const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a'); link.href = url; link.download = 'library-export.csv'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
-  $('refresh').addEventListener('click', () => refresh().catch(error => status(message(error))));
   for (const mode of ['card', 'list']) $('view-' + mode).addEventListener('click', () => {
     viewMode = mode; try { localStorage.setItem('annas-annals-view', mode); } catch {} render();
   });
   $('search').addEventListener('input', render);
+  $('library-sort').addEventListener('change', render);
+  compactLayout?.addEventListener?.('change', render);
   let editMode = false, deleteArmed = false, deleteTimer;
   function resetDelete() {
     deleteArmed = false; clearTimeout(deleteTimer);
@@ -713,7 +1017,7 @@
     $('lookup-suggestions').replaceChildren(); formStatus('');
     setEditorMode(editable); $('editor').showModal();
   }
-  $('add').addEventListener('click', () => openEditor());
+  $('add').addEventListener('click', () => { if (canEdit) openEditor(); });
   async function findUnchangedBook(original) {
     const data = await api('/values/' + encodeURIComponent("'Books'!A:ZZ"));
     const rows = data.values || [];
@@ -834,8 +1138,8 @@
         await api('/values:batchUpdate', { method: 'POST', body: JSON.stringify({ valueInputOption: 'RAW', data: headers.map(key => ({ range: "'Books'!" + column(sheetHeaders.indexOf(key)) + rowNumber, values: [[valuesByHeader[key]]] })) }) });
       } else {
         await api('/values/' + encodeURIComponent("'Books'!A:ZZ") + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', { method: 'POST', body: JSON.stringify({ values: [sheetHeaders.map(key => valuesByHeader[key] || '')] }) });
-        checkSequence++; $('check-result').hidden = true; $('check-result').replaceChildren();
-        $('scan-search').value = ''; $('search').value = ''; sortField = ''; duplicatesMode = false;
+        returnToCheck();
+        $('search').value = ''; $('library-sort').value = ''; sortField = ''; duplicatesMode = false;
         books.unshift(valuesByHeader); render();
       }
       await finishChange('Book saved.');
