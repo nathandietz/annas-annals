@@ -6,19 +6,20 @@ Anna’s Annals is a free, minimal, opinionated progressive web app for catalogi
 - Your [**Google Cloud project**](https://console.cloud.google.com/) provides Google sign-in and API access.
   
 ## Why Google Cloud instead of Google Apps Script?
-Other catalog tools I tried used a [Google Apps Scripts](https://developers.google.com/apps-script) to quickly setup a catalog in Google Sheets. However because of how they were built and their functionality, they requested read/write access to the entire Google Drive. **I found this unacceptable.**
+Other catalog tools I tried, used a [Google Apps Script](https://developers.google.com/apps-script) to quickly setup a catalog in Google Sheets. However because of how they were built and their functionality, they requested read/write access to the entire Google Drive. **I found this unacceptable.**
 
 With a Google Cloud project you create and manage, Anna’s Annals asks for access to only the spreadsheets you choose or create in the app. Plus, you get to use familiar Google tools to sign in and decide who can view or edit your catalog.
 
+It does require a little more initial setup, but the end result is a catalog that lives in your own Google Sheet, with you in charge of who can see or edit it.
 
 ## What you will need to get started
+1. **A Free GitHub account** to fork this repo and publish your own website using [GitHub Pages](https://docs.github.com/en/pages).
 
-1. **A Free Google account** to create Google Sheets and to create [Google Cloud Project](https://console.cloud.google.com/projectcreate).
-
-2. **A Free GitHub account** to fork this repo and publish your own website using [GitHub Pages](https://docs.github.com/en/pages).
+2. **A Free Google account** to create Google Sheets and to create [Google Cloud Project](https://console.cloud.google.com/projectcreate).
 
 > [!TIP]
 > No credit card or billing account is needed! Everything can be run for free on Google and Github.
+
 
 ## 1. Create Google Cloud Project & Enable APIs
 1. Open the [Google Cloud Console](https://console.cloud.google.com/) and create a project called `Anna’s Annals`. We will use this project for the enabled APIs, OAuth client, and browser API key.
