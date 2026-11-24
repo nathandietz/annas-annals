@@ -6,11 +6,11 @@ Anna’s Annals is a free, minimal, opinionated progressive web app for catalogi
 - Your [**Google Cloud project**](https://console.cloud.google.com/) provides Google sign-in and API access.
   
 ## Why Google Cloud instead of Google Apps Script?
-Other tools I discovered used [Google Apps Scripts](https://developers.google.com/apps-script) to easily setup a catalog in Google Sheets, but they all requested read/write access to the entire Google Drive. Which I found unacceptable! Why would I give some random person and their script access to everything?
+Other catalog tools I tried used a [Google Apps Scripts](https://developers.google.com/apps-script) to quickly setup a catalog in Google Sheets. However because of how they were built and their functionality, they requested read/write access to the entire Google Drive. **I found this unacceptable.**
+
+Anna’s Annals uses a Google Cloud project you create and manage. It requests Google’s drive.file permission, which limits the app’s access to spreadsheets you select or create through the app. You sign in with Google, and your Sheet’s sharing settings still control who can view or edit your catalog.
 
 By using a Google Cloud project, I can restrict the Anna’s Annals to requesting access to a single file—**the spreadsheets you choose**—nothing else! Plus it lets you use familiar Google tools for sign-in and controlling who can view or edit. 
-
-Requiring the full Google Drive access seems to be a limitation by AppsScript, but I’m not sure!
 
 
 ## What you will need to get started
