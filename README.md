@@ -3,7 +3,7 @@ Anna’s Annals is a free, minimal, opinionated progressive web app for catalogi
 - Your [**GitHub Account**](https://docs.github.com/en/pages) hosts the web app via Github Pages
 - Your [**Google Drive**](https://drive.google.com) stores the catalog in a private Google Sheet.
 - Your [**Google Cloud project**](https://console.cloud.google.com/) provides Google sign-in and API access.
-- 
+
 ## Why Google Cloud instead of Google Apps Script?
 Other catalog tools I tried, used a [Google Apps Script](https://developers.google.com/apps-script) to quickly setup a catalog in Google Sheets. However because of how they were built and their functionality, they requested read/write access to the entire Google Drive. **I found this unacceptable.**
 
