@@ -49,11 +49,11 @@ It does require a little more initial setup, but the end result is a catalog tha
 While the OAuth app is in **Testing**, the test-user list controls who can connect through Anna’s Annals. To give someone access to your catalog, also share the Google Sheet with that account as a **Viewer** or **Editor**.
 
 ### Create the OAuth 2.0 Web Client
-> The web client identifies Anna’s Annals to Google. Its **Authorized JavaScript origins** tell Google what domains have access
+> The web client identifies Anna’s Annals to Google. **Authorized JavaScript origins** tell Google which websites can start Google sign-in.
 
 1. Open [Google Auth Platform → Clients](https://console.cloud.google.com/auth/clients) and click `Create Client`.
 2. Set **Application type** to `Web application`. For **Name**, enter `Anna’s Annals OAuth Client`.
-3. Under **Authorized JavaScript origins**, click `Add URI` and add the following web address:
+3. Under **Authorized JavaScript origins**, click `Add URI` and enter your GitHub Pages origin. Replace `YOUR-GITHUB-USERNAME` with your GitHub username and leave off the repository path (such as `/annas-annals`).
    
     ```text
     https://YOUR-GITHUB-USERNAME.github.io
