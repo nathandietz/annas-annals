@@ -46,16 +46,12 @@ It does require a little more initial setup, but the end result is a catalog tha
 6. Under **Contact information**, enter your email address.
 7. Under **Finish** review the Google API Services User Data Policy, accept it if you agree, then click `Continue` and `Create`.
 
-> [!NOTE]
-> Anna’s Annals automatically requests `drive.file` when you click **Connect Google Sheet**. The app can work in **Testing** with that scope unlisted under **Data Access**. Google recommends listing `https://www.googleapis.com/auth/drive.file` under **Google Auth Platform → Data Access** for External apps so the permissions declared in the console match what the app requests at sign-in. [Google’s OAuth setup guide](https://developers.google.com/workspace/guides/configure-oauth-consent#configure_oauth_consent)
+### Add test users
 
-### Add Users to can Access
-1. Open [Google Auth Platform → Audience](https://console.cloud.google.com/auth/audience) and check the Publishing status.
-2. Keep the status set to `Testing`, then scroll down to "Test Users" and click `Add users`
-3. Enter the email address of the Google account you’ll use to connect to the website.
-4. Add the email of else who will use the website, then click `Save`
-> [!Important]
-> While the project is in Testing, each user must be on the "Test User" list to have access to the spreadsheet. Otherwise, they will not be able to access.
+1. Open [Google Auth Platform → Audience](https://console.cloud.google.com/auth/audience) and keep the publishing status set to **Testing**.
+2. Under **Test users**, click `Add users`. Enter the Google account you’ll use to connect and the accounts of anyone else who will use the app, then click `Save`.
+
+While the OAuth app is in **Testing**, the test-user list controls who can connect through Anna’s Annals. To give someone access to your catalog, also share the Google Sheet with that account as a **Viewer** or **Editor**.
 
 ### Create the OAuth 2.0 Web Client
 > The web client identifies Anna’s Annals to Google. Its **Authorized JavaScript origins** tell Google what domains have access
@@ -75,14 +71,8 @@ It does require a little more initial setup, but the end result is a catalog tha
 
 
 ## 3. Setup Google Cloud Credentials 
-> [!IMPORTANT] 
-> Because Anna’s Annals web app runs in the browser, it uses a publicly visible API key to identify your Google Cloud project when you choose a spreadsheet with Google Picker or look up an ISBN with Google Books.
-> 
-> However, this API key **DOES NOT GRANT ACCESS** to any Google Sheet data.
->
-> To view or edit your Google Sheet, a user must first:
-> 1. Sign in with a Google account that has permission to view or edit the Google Sheet.
-> 2. Be added in **Test users** on [Google Auth Platform → Audience](https://console.cloud.google.com/auth/audience)
+> [!IMPORTANT]
+> The browser API key is public and identifies your Google Cloud project to Google Picker and Google Books. Access to your private Sheet requires Google sign-in and permission on the Sheet.
 
 1. Open [Google Cloud credentials](https://console.cloud.google.com/apis/credentials), select the same project, and choose
      - `Create credentials` → `API key`
