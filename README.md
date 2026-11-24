@@ -9,7 +9,25 @@ Other catalog tools I tried, used a [Google Apps Script](https://developers.goog
 
 With a Google Cloud project you create and manage, Anna’s Annals asks for access to only the spreadsheets you choose or create in the app. Plus, you get to use familiar Google tools to sign in and decide who can view or edit your catalog.
 
+<details>
+<summary>Compare Anna’s Annals with the Apps Script setup I tried</summary>
+  
+| | Google Cloud Project | Google Apps Script |
+| --- | --- | --- |
+| **What can the website access in Google Drive?** | 🟢 Only the spreadsheet(s) you select or create. | 🔴 Drive-wide read and write access. |
+| **Who Can View Spreadsheet Data in the website?** | 🟢 Visitors must connect with a Google account that has access to the spreadsheet. | 🟡 In the public deployment, visitors can browse the catalog without having access to the spreadsheet itself. |
+| **Who Can Edit?** | 🟢 The owner and anyone granted Editor access in Google Sheets. | 🔴 Anyone with the shared admin PIN, when one is configured. |
+| **How Do You Share It?** | 🟢 Invite people through Google Sheets and assign them Viewer or Editor access. | 🔴 Share the website link for public browsing and the shared PIN for admin edits. |
+| **How Do Users Connect?** | 🟢 Each user connects with their own Google account. | 🔴 The owner authorizes the script with their Google account. Visitors can browse without signing in. |
+| **How Do You Choose a Spreadsheet?** | 🟢 Choose a spreadsheet with Google’s file picker. | 🟡 Paste the website URL (`/exec`) to connect to its configured spreadsheet. |
+| **How Do You Create a Spreadsheet?** | 🟢 Create a spreadsheet directly in the website. | 🟡 Create a spreadsheet in Google Sheets, then run the script to set up the library tabs and Drive folders. |
+| **How Do You Publish Updates?** | 🟢 Publish the updated website on GitHub Pages. | 🟡 For backend changes, create a new script version and update the existing deployment in the Apps Script editor. |
+
+</details>
+
 It does require a little more initial setup, but the end result is a catalog that lives in your own Google Sheet, with you in charge of who can see or edit it.
+
+
 
 # Setup Anna’s Annals
 ## What you will need to get started
@@ -96,7 +114,7 @@ While the OAuth app is in **Testing**, the test-user list controls who can conne
 6. Check the **Actions** tab for the **pages build and deployment** run. Once it succeeds, open the site URL shown in **Settings → Pages**.
 7. On the published site, choose **Create new library** to start a new Sheet or **Connect Google Sheet** to open an existing Anna’s Annals library. An existing library must have a `Books` tab with `id` and `title` as column headers in the first row. If other library columns are missing, editors can use **Settings → Update library** before saving books.
 
-## 5. Setup Local Development
+# Local Development
 > [!Warning]
 > Local and deployed instances can connect to the same Google Sheet, so local saves change real data. Create and select a separate test Sheet to avoid that.
 
@@ -112,19 +130,3 @@ While the OAuth app is in **Testing**, the test-user list controls who can conne
 Save code changes and reload locally; changes reach GitHub Pages only after committing and pushing. Run scanner checks with `node --test tests/*.test.cjs`. 
 
 Make sure to use the exact hostname and port above. `127.0.0.1` is a different OAuth origin.
-
-<details>
-<summary>Compare Anna’s Annals with the Apps Script setup I tried</summary>
-
-| | Google Cloud Project | Google Apps Script |
-| --- | --- | --- |
-| **What can the website access in Google Drive?** | 🟢 Only the spreadsheet(s) you select or create. | 🔴 Drive-wide read and write access. |
-| **Who Can View Spreadsheet Data in the website?** | 🟢 Visitors must connect with a Google account that has access to the spreadsheet. | 🟡 In the public deployment, visitors can browse the catalog without having access to the spreadsheet itself. |
-| **Who Can Edit?** | 🟢 The owner and anyone granted Editor access in Google Sheets. | 🔴 Anyone with the shared admin PIN, when one is configured. |
-| **How Do You Share It?** | 🟢 Invite people through Google Sheets and assign them Viewer or Editor access. | 🔴 Share the website link for public browsing and the shared PIN for admin edits. |
-| **How Do Users Connect?** | 🟢 Each user connects with their own Google account. | 🔴 The owner authorizes the script with their Google account. Visitors can browse without signing in. |
-| **How Do You Choose a Spreadsheet?** | 🟢 Choose a spreadsheet with Google’s file picker. | 🟡 Paste the website URL (`/exec`) to connect to its configured spreadsheet. |
-| **How Do You Create a Spreadsheet?** | 🟢 Create a spreadsheet directly in the website. | 🟡 Create a spreadsheet in Google Sheets, then run the script to set up the library tabs and Drive folders. |
-| **How Do You Publish Updates?** | 🟢 Publish the updated website on GitHub Pages. | 🟡 For backend changes, create a new script version and update the existing deployment in the Apps Script editor. |
-
-</details>
