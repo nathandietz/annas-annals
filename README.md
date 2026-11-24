@@ -36,7 +36,7 @@ It does require a little more initial setup, but the end result is a catalog tha
 
 ## 1. Create Google Cloud Project & Enable APIs
 1. Open the [Google Cloud Console](https://console.cloud.google.com/) and create a project called `Anna’s Annals`. We will use this project for the enabled APIs, OAuth client, and browser API key.
-2. Visit each link and Enable APIs for the newly created project:
+2. Visit each link and `Enable` APIs for the newly created project:
    - [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
    - [Google Picker API](https://console.cloud.google.com/apis/library/picker.googleapis.com)
    - [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com)
@@ -50,17 +50,17 @@ It does require a little more initial setup, but the end result is a catalog tha
 ## 2. Setup Google Auth Platform
 ### Set up the Consent Screen
 1. Open [Google Auth Platform → Overview](https://console.cloud.google.com/auth/overview) and confirm the project you just created is selected.
-2. You will likely see `Google Auth Platform not configured yet`. If you do click the `Get Started` button.
-3. Under **App Information** enter a `App Name`  and `User Support Email`  click `Next`.
+2. You will likely see **Google Auth Platform not configured yet**. If you do click the `Get Started` button.
+3. Under **App Information** enter a **App Name**  and **User Support Email**  click `Next`.
 4. Under **Audience**, choose `External` and click `Next`
 5. Under **Contact information**, enter your email address.
-6. Under **Finish** review the Google API Services User Data Policy, accept it if you agree, then click `Continue` and `Create`.
+6. Under **Finish** review the **Google API Services User Data Policy**, accept it if you agree, then click `Continue` and `Create`.
 
 ### Add test users
-1. Open [Google Auth Platform → Audience](https://console.cloud.google.com/auth/audience) and keep the publishing status set to **Testing**.
+1. Open [Google Auth Platform → Audience](https://console.cloud.google.com/auth/audience) and keep the **publishing status** set to `Testing`.
 2. Under **Test users**, click `Add users`. Enter the Google account you’ll use to connect and the accounts of anyone else who will use the app, then click `Save`.
 
-While the OAuth app is in **Testing**, the test-user list controls who can connect through Anna’s Annals. To give someone access to your catalog, also share the Google Sheet with that account as a **Viewer** or **Editor**.
+While the OAuth app is in **Testing**, the test-user list controls who can connect through Anna’s Annals. To give someone access to your catalog, also share the Google Sheet with that account as a `Viewer` or `Editor`.
 
 ### Create the OAuth 2.0 Web Client
 > The web client identifies Anna’s Annals to Google. **Authorized JavaScript origins** tell Google which websites can start Google sign-in.
@@ -97,8 +97,8 @@ While the OAuth app is in **Testing**, the test-user list controls who can conne
 1. Grab the `clientId`, `apiKey`, and `appId` values from the Google Links below
     | Field | Where to get the value |
     | --- | --- |
-    | `clientId` | [Google Auth Platform → Clients](https://console.cloud.google.com/auth/clients). Open **Anna’s Annals OAuth Client** and copy the **Client ID** ending in `.apps.googleusercontent.com`. |
-    | `apiKey` | [APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials). Under **API Keys**, find **Anna’s Annals API Key** and click **Show key** to copy it. |
+    | `clientId` | [Google Auth Platform → Clients](https://console.cloud.google.com/auth/clients). Open `Anna’s Annals OAuth Client` and copy the **Client ID** ending in `.apps.googleusercontent.com`. |
+    | `apiKey` | [APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials). Under **API Keys**, find `Anna’s Annals API Key` and click `Show key` to copy it. |
     | `appId` | [Google Cloud → Project dashboard](https://console.cloud.google.com/home/dashboard). Under **Project info**, copy the numeric **Project number**. | 
 2. Open Anna’s Annals [`config.js`](./config.js), paste in your values, and save. 
    ```js
@@ -110,22 +110,22 @@ While the OAuth app is in **Testing**, the test-user list controls who can conne
    ``` 
 3. Commit and push the files to the `main` branch of your GitHub fork.
 4. Make sure your fork of Anna’s Annals is public, not private. This is required to use [GitHub Pages on GitHub Free](https://docs.github.com/en/pages/getting-started-with-github-pages/creating-a-github-pages-site).
-5. In your fork, open **Settings → Pages**. Under **Build and deployment**, choose **Deploy from a branch**, select `main` and **/ (root)**, then click **Save**.
-6. Check the **Actions** tab for the **pages build and deployment** run. Once it succeeds, open the site URL shown in **Settings → Pages**.
-7. On the published site, choose **Create new library** to start a new Sheet or **Connect Google Sheet** to open an existing Anna’s Annals library. An existing library must have a `Books` tab with `id` and `title` as column headers in the first row. If other library columns are missing, editors can use **Settings → Update library** before saving books.
+5. In your fork, open `Settings → Pages`. Under **Build and deployment**, choose `Deploy from a branch`, select `main` and `/ (root)`, then click `Save`.
+6. Check the `Actions` tab for the **pages build and deployment** run. Once it succeeds, open the site URL shown in **Settings → Pages**.
+7. On the published site, choose `Create new library` to start a new Sheet or `Connect Google Sheet` to open an existing Anna’s Annals library. An existing library must have a `Books` tab with `id` and `title` as column headers in the first row. If other library columns are missing, editors can use `Settings → Update library` before saving books.
 
 # Local Development
 > [!Warning]
 > Local and deployed instances can connect to the same Google Sheet, so local saves change real data. Create and select a separate test Sheet to avoid that.
 
-1. Add `http://localhost:8000` to [Google Auth Platform → Clients](https://console.cloud.google.com/auth/clients) → Authorized JavaScript origins 
-2. Add `http://localhost:8000/*` to [Google Cloud credentials](https://console.cloud.google.com/apis/credentials) → Websites.
+1. Add `http://localhost:8000` to [Google Auth Platform → Clients](https://console.cloud.google.com/auth/clients) → **Authorized JavaScript origins**
+2. Add `http://localhost:8000/*` to [Google Cloud credentials](https://console.cloud.google.com/apis/credentials) → `Websites`.
 3. In a terminal, start the server from the repository folder:
    ```bash
    cd /path/to/annas-annals
    python3 -m http.server 8000
    ```
-4. Open [http://localhost:8000](http://localhost:8000), connect with Google, and select a Sheet. Stop the server with **Ctrl+C**.
+4. Open [http://localhost:8000](http://localhost:8000), connect with Google, and select a Sheet. Stop the server with `Ctrl+C`.
 
 Save code changes and reload locally; changes reach GitHub Pages only after committing and pushing. Run scanner checks with `node --test tests/*.test.cjs`. 
 
