@@ -61,7 +61,7 @@ It does require a little more initial setup, but the end result is a catalog tha
 > The web client identifies Anna’s Annals to Google. Its **Authorized JavaScript origins** tell Google what domains have access
 
 1. Open [Google Auth Platform → Clients](https://console.cloud.google.com/auth/clients) and click `Create Client`.
-2. Set **Application type** to `Web application`. For **Name**, enter `Anna’s Annals Website`.
+2. Set **Application type** to `Web application`. For **Name**, enter `Anna’s Annals OAuth Client`.
 3. Under **Authorized JavaScript origins**, click `Add URI` and add the following web address:
    
     ```text
@@ -105,8 +105,8 @@ It does require a little more initial setup, but the end result is a catalog tha
 1. Grab the `clientId`, `apiKey`, and `appId` values from the Google Links below
    | Field | Where to get the value |
    | --- | --- |
-   | `clientId` | [Google Auth Platform → Clients](https://console.cloud.google.com/auth/clients). Open **Home Library Catalog Website** and copy the **Client ID** ending in `.apps.googleusercontent.com`. |
-   | `apiKey` | [APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials). Under **API Keys**, find **Anna’s Annals Picker** and click **Show key** to copy it. |
+   | `clientId` | [Google Auth Platform → Clients](https://console.cloud.google.com/auth/clients). Open **Anna’s Annals OAuth Client** and copy the **Client ID** ending in `.apps.googleusercontent.com`. |
+   | `apiKey` | [APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials). Under **API Keys**, find **Anna’s Annals API Key** and click **Show key** to copy it. |
    | `appId` | [Google Cloud → Project dashboard](https://console.cloud.google.com/home/dashboard). Under **Project info**, copy the numeric **Project number**. |
 2. Open Anna’s Annals [`config.js`](./config.js), paste in your values, and save. 
 
