@@ -14,7 +14,7 @@ It does require a little more initial setup, but the end result is a catalog tha
 # Setup Anna’s Annals
 
 ## What you will need to get started
-1. A **free GitHub account** to fork this repository and publish the app on [GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages#who-can-use-this-feature)
+1. A **free GitHub account** to fork this repository and publish the app on [GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages#who-can-use-this-feature).
 2. A **Free Google account** to create Google Sheets and to create [Google Cloud Project](https://console.cloud.google.com/projectcreate).
 
 
@@ -103,9 +103,10 @@ While the OAuth app is in **Testing**, the test-user list controls who can conne
    };
    ``` 
 3. Commit and push the files to the `main` branch of your GitHub fork.
-4. In your fork, open **Settings → Pages**. Under **Build and deployment**, choose **Deploy from a branch**, select `main` and **/ (root)**, then click **Save**.
-5. Check the **Actions** tab for the **pages build and deployment** run. Once it succeeds, open the site URL shown in **Settings → Pages**.
-6. On the published site, choose **Create new library** to start a new Sheet or **Connect Google Sheet** to open an existing Anna’s Annals library. An existing library must have a `Books` tab with `id` and `title` as column headers in the first row.
+4. Make sure your fork of Anna’s Annals is public, not private. That is required to use [GitHub Pages on GitHub Free](https://docs.github.com/en/pages/getting-started-with-github-pages/creating-a-github-pages-site).
+5. In your fork, open **Settings → Pages**. Under **Build and deployment**, choose **Deploy from a branch**, select `main` and **/ (root)**, then click **Save**.
+6. Check the **Actions** tab for the **pages build and deployment** run. Once it succeeds, open the site URL shown in **Settings → Pages**.
+7. On the published site, choose **Create new library** to start a new Sheet or **Connect Google Sheet** to open an existing Anna’s Annals library. An existing library must have a `Books` tab with `id` and `title` as column headers in the first row.
 
 ## 5. Setup Local Development
 > [!Warning]
