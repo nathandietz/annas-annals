@@ -1,9 +1,12 @@
 # Anna’s Annals
+Anna’s Annals is a free, minimal, opinionated progressive web app for cataloging and managing a personal library via a Google Sheet. The website UI is statically hosted on Github Pages while your catalog always lives in a your personal Google Drive. A Google Cloud project provides the API credentials and OAuth configuration for securely accessing, editing, and sharing.
 
-A minimal & opinionated book catalog / library management system (LMS) website that can be statically hosted and uses a private, shareable Google Sheet as its database. 
+## Why Google Cloud instead of an Apps Script?
+Other tools that I discovered, used Apps Scripts to setup a catalog but would request read/write access to the entire Google Drive...which I found unacceptable! Why would I give some random person and their script access to everything?
 
-## Why Google Cloud instead of Apps Script?
->Google Cloud gives the website access **only to the spreadsheets you choose** and lets you use familiar Google tools to sign in and control who can view or edit them.
+By using a Google Cloud project, I can restrict the Anna’s Annals to requesting access to a single file—**the spreadsheets you choose**—nothing else! Plus it lets you use familiar Google tools for sign-in and controlling who can view or edit.
+
+> [!NOTE] Requiring the full Google Drive access seems to be a limitation by AppsScript, but I’m not sure!
 
 <details>
 <summary>Compare Google Cloud and Apps Script</summary>
@@ -18,29 +21,32 @@ A minimal & opinionated book catalog / library management system (LMS) website t
 | **How Do You Choose a Spreadsheet?** | 🟢 Choose a spreadsheet with Google’s file picker. | 🟡 Paste the website URL (`/exec`) to connect to its configured spreadsheet. |
 | **How Do You Create a Spreadsheet?** | 🟢 Create a spreadsheet directly in the website. | 🟡 Create a spreadsheet in Google Sheets, then run the script to set up the library tabs and Drive folders. |
 | **How Do You Publish Updates?** | 🟢 Publish the updated website on GitHub Pages. | 🟡 For backend changes, create a new script version and update the existing deployment in the Apps Script editor. |
-
 </details>
 
-## What you will need
+## What you will need to get started
 
-1. **A Google account** to create the Google Sheet and to create [Google Cloud Project](https://console.cloud.google.com/projectcreate)
+1. **A Free Google account** to create Google Sheets and to create [Google Cloud Project](https://console.cloud.google.com/projectcreate).
 
-2. **A GitHub account** to fork this repo and publish the front end using GitHub Pages. Clone your fork if you want to make the setup changes locally.
+2. **A Free GitHub account** to fork this repo and publish your own website using [GitHub Pages](https://docs.github.com/en/pages).
+
+> [!TIP] No credit card or billing account is needed! Everything can be run for free on Google and Github.
 
 ## 1. Create Google Cloud Project & Enable APIs
-
-1. Open the [Google Cloud Console](https://console.cloud.google.com/) and create a project called something like `Home Library Catalog`. Use the same project for the enabled APIs, OAuth client, and browser API key.
+1. Open the [Google Cloud Console](https://console.cloud.google.com/) and create a project called `Anna’s Annals`. We will use this project for the enabled APIs, OAuth client, and browser API key.
 2. Visit each link and Enable APIs for the newly created project:
    - [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
    - [Google Picker API](https://console.cloud.google.com/apis/library/picker.googleapis.com)
    - [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com)
    - [Google Books API](https://console.cloud.google.com/apis/library/books.googleapis.com) (optional, but recommended)
+
+
+> **As of 2026.11.23, no credit card or cloud billing account is needed for standard use.** You can enable Sheets, Picker, Drive, and Books API with billing turned off. Google may reject requests that exceed usage limits, and higher Workspace API quotas may require billing. [Google Cloud billing requirements](https://docs.cloud.google.com/docs/starter-tier#what_happens_if_your_account_isnt_eligible) · [Workspace API quota policy](https://developers.google.com/workspace/tools-safety)
+
+
+
 ## 2. Configure Google authorization
 
 ### Set up the Consent Screen
-
-> Anna’s Annals automatically requests `drive.file` when a user connects. This lets the app read and save changes in the spreadsheet the user selects or creates, subject to their Google Sheets permissions.
-
 1. Open [Google Auth Platform → Overview](https://console.cloud.google.com/auth/overview). Make sure your **Home Library Catalog** project is selected.
 2. If you see **Google Auth Platform not configured yet**, click **Get started**.
 3. Under **App Information**, enter **Home Library Catalog** as the **App name**. Select your email for **User support email**, then click **Next**.
@@ -48,11 +54,11 @@ A minimal & opinionated book catalog / library management system (LMS) website t
 5. Under **Contact information**, enter your email address. Review the Google API Services User Data Policy under **Finish**, accept it if you agree, then click **Continue** and **Create**.
 
 ### Add Test Users
-> While the project is in **Testing**, each person needs to be on the test user list and have access to the spreadsheet. **Google will show an unverified-app warning during sign-in.**
-
-1. Open [Google Auth Platform → Audience](https://console.cloud.google.com/auth/audience) and check the **Publishing status**.
-2. Keep the status set to **Testing**, then scroll to **Test users** and click **Add users**.
-3. Enter the email address of the Google account you’ll use to connect to the website. Add anyone else who will use the website, then click **Save**.
+1. Open [Google Auth Platform → Audience](https://console.cloud.google.com/auth/audience) and check the Publishing status.
+2. Keep the status set to `Testing`, then scroll down to "Test Users" and click `Add users`
+3. Enter the email address of the Google account you’ll use to connect to the website.
+4. Add anyone else who will use the website, then click `Save`
+> [!WARNING] While the project is in Testing, each user must be on the "Test User" list to have access to the spreadsheet.
 
 ### Create the web client
 
