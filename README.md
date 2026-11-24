@@ -12,7 +12,9 @@ With a Google Cloud project you create and manage, Anna’s Annals asks for acce
 
 It does require a little more initial setup, but the end result is a catalog that lives in your own Google Sheet, with you in charge of who can see or edit it.
 
-## What you will need to get started
+# Setup Anna’s Annals
+
+### What you will need to get started
 1. **A Free GitHub account** to fork this repo and publish your own website using [GitHub Pages](https://docs.github.com/en/pages).
 
 2. **A Free Google account** to create Google Sheets and to create [Google Cloud Project](https://console.cloud.google.com/projectcreate).
