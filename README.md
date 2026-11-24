@@ -130,7 +130,9 @@ Save code changes and reload locally; changes reach GitHub Pages only after comm
 
 Make sure to use the exact hostname and port above. `127.0.0.1` is a different OAuth origin.
 
-## Compare Google Cloud and Apps Script
+<details>
+<summary>Compare Anna’s Annals with the Apps Script setup I tried</summary>
+
 | | Google Cloud Project | Google Apps Script |
 | --- | --- | --- |
 | **What can the website access in Google Drive?** | 🟢 Only the spreadsheet(s) you select or create. | 🔴 Drive-wide read and write access. |
@@ -141,3 +143,5 @@ Make sure to use the exact hostname and port above. `127.0.0.1` is a different O
 | **How Do You Choose a Spreadsheet?** | 🟢 Choose a spreadsheet with Google’s file picker. | 🟡 Paste the website URL (`/exec`) to connect to its configured spreadsheet. |
 | **How Do You Create a Spreadsheet?** | 🟢 Create a spreadsheet directly in the website. | 🟡 Create a spreadsheet in Google Sheets, then run the script to set up the library tabs and Drive folders. |
 | **How Do You Publish Updates?** | 🟢 Publish the updated website on GitHub Pages. | 🟡 For backend changes, create a new script version and update the existing deployment in the Apps Script editor. |
+
+</details>
