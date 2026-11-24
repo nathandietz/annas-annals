@@ -14,13 +14,10 @@ It does require a little more initial setup, but the end result is a catalog tha
 
 # Setup Anna’s Annals
 
-### What you will need to get started
+## What you will need to get started
 1. **A Free GitHub account** to fork this repo and publish your own website using [GitHub Pages](https://docs.github.com/en/pages).
 
 2. **A Free Google account** to create Google Sheets and to create [Google Cloud Project](https://console.cloud.google.com/projectcreate).
-
-> [!TIP]
-> No credit card or billing account is needed! Everything can be run for free on Google and Github.
 
 
 ## 1. Create Google Cloud Project & Enable APIs
@@ -29,12 +26,12 @@ It does require a little more initial setup, but the end result is a catalog tha
    - [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
    - [Google Picker API](https://console.cloud.google.com/apis/library/picker.googleapis.com)
    - [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com)
-   - [Google Books API](https://console.cloud.google.com/apis/library/books.googleapis.com) (optional, but recommended)
-
-
-> **As of 2026.11.23, no credit card or cloud billing account is needed for standard use.** You can enable Sheets, Picker, Drive, and Books API with billing turned off. Google may reject requests that exceed usage limits, and higher Workspace API quotas may require billing. [Google Cloud billing requirements](https://docs.cloud.google.com/docs/starter-tier#what_happens_if_your_account_isnt_eligible) · [Workspace API quota policy](https://developers.google.com/workspace/tools-safety)
-
-
+   - [Google Books API](https://console.cloud.google.com/apis/library/books.googleapis.com)
+     
+> [!Important]
+> **As of 2026.11.23, no credit card or cloud billing account is needed for standard use!** You can enable Sheets, Picker, Drive, and Books API with billing turned off.
+>
+> Google may reject requests that exceed usage limits, and higher Workspace API quotas may require billing. [Google Cloud billing requirements](https://docs.cloud.google.com/docs/starter-tier#what_happens_if_your_account_isnt_eligible) · [Workspace API quota policy](https://developers.google.com/workspace/tools-safety)
 
 ## 2. Setup Google Auth Platform
 
@@ -70,7 +67,7 @@ While the OAuth app is in **Testing**, the test-user list controls who can conne
 
 
 
-## 3. Setup Google Cloud Credentials 
+## D. Setup Google Cloud Credentials 
 > [!IMPORTANT]
 > The browser API key is public and identifies your Google Cloud project to Google Picker and Google Books. Access to your private Sheet requires Google sign-in and permission on the Sheet.
 
@@ -90,7 +87,7 @@ While the OAuth app is in **Testing**, the test-user list controls who can conne
 5. Click `Create` or `Save`.
 
 
-## 4. Setup Anna’s Annals and publish
+## E. Setup Anna’s Annals and publish
 
 1. Grab the `clientId`, `apiKey`, and `appId` values from the Google Links below
    | Field | Where to get the value |
@@ -116,7 +113,7 @@ While the OAuth app is in **Testing**, the test-user list controls who can conne
 
 7. On the published site, choose **Create new library** to start a new Sheet or **Connect Google Sheet** to open an existing Anna’s Annals library. An existing library must have a `Books` tab with `id` and `title` as column headers in the first row.
 
-## Setup Local Development
+## F. Setup Local Development
 > [!Warning]
 > Local and deployed instances can connect to the same Google Sheet, so local saves change real data. Create and select a separate test Sheet to avoid that.
 
