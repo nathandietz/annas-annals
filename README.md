@@ -114,7 +114,7 @@ While the OAuth app is in **Testing**, the test-user list controls who can conne
     3. Open the repository’s **Actions** tab and check that the latest **pages build and deployment** run succeeds for that branch and commit.
     4. Open the displayed site URL when it is published.
 
-7. On the published site, choose **Create new library** to start a new Sheet or **Connect Google Sheet** to select an existing one.
+7. On the published site, choose **Create new library** to start a new Sheet or **Connect Google Sheet** to open an existing Anna’s Annals library. An existing library must have a `Books` tab with `id` and `title` as column headers in the first row.
 
 ## Setup Local Development
 > [!Warning]
