@@ -8,9 +8,7 @@ Anna’s Annals is a free, minimal, opinionated progressive web app for catalogi
 ## Why Google Cloud instead of Google Apps Script?
 Other catalog tools I tried used a [Google Apps Scripts](https://developers.google.com/apps-script) to quickly setup a catalog in Google Sheets. However because of how they were built and their functionality, they requested read/write access to the entire Google Drive. **I found this unacceptable.**
 
-Anna’s Annals uses a Google Cloud project you create and manage. It requests Google’s drive.file permission, which limits the app’s access to spreadsheets you select or create through the app. You sign in with Google, and your Sheet’s sharing settings still control who can view or edit your catalog.
-
-By using a Google Cloud project, I can restrict the Anna’s Annals to requesting access to a single file—**the spreadsheets you choose**—nothing else! Plus it lets you use familiar Google tools for sign-in and controlling who can view or edit. 
+With a Google Cloud project you create and manage, Anna’s Annals asks for access to only the spreadsheets you choose or create in the app. Plus, you get to use familiar Google tools to sign in and decide who can view or edit your catalog.
 
 
 ## What you will need to get started
@@ -44,6 +42,9 @@ By using a Google Cloud project, I can restrict the Anna’s Annals to requestin
 5. Under **Audience**, choose `External` and click `Next`
 6. Under **Contact information**, enter your email address.
 7. Under **Finish** review the Google API Services User Data Policy, accept it if you agree, then click `Continue` and `Create`.
+
+> [!NOTE]
+> Anna’s Annals automatically requests `drive.file` when you click **Connect Google Sheet**. The app can work in **Testing** with that scope unlisted under **Data Access**. Google recommends listing `https://www.googleapis.com/auth/drive.file` under **Google Auth Platform → Data Access** for External apps so the permissions declared in the console match what the app requests at sign-in. [Google’s OAuth setup guide](https://developers.google.com/workspace/guides/configure-oauth-consent#configure_oauth_consent)
 
 ### Add Users to can Access
 1. Open [Google Auth Platform → Audience](https://console.cloud.google.com/auth/audience) and check the Publishing status.
