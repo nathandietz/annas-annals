@@ -1,10 +1,9 @@
 # Anna’s Annals
 Anna’s Annals is a free, minimal, opinionated progressive web app for cataloging and managing your personal library in a Google Sheet.
-
 - Your [**GitHub Account**](https://docs.github.com/en/pages) hosts the web app via Github Pages
 - Your [**Google Drive**](https://drive.google.com) stores the catalog in a private Google Sheet.
 - Your [**Google Cloud project**](https://console.cloud.google.com/) provides Google sign-in and API access.
-  
+- 
 ## Why Google Cloud instead of Google Apps Script?
 Other catalog tools I tried, used a [Google Apps Script](https://developers.google.com/apps-script) to quickly setup a catalog in Google Sheets. However because of how they were built and their functionality, they requested read/write access to the entire Google Drive. **I found this unacceptable.**
 
@@ -15,9 +14,8 @@ It does require a little more initial setup, but the end result is a catalog tha
 # Setup Anna’s Annals
 
 ## What you will need to get started
-1. **A Free GitHub account** to fork this repo and publish your own website using [GitHub Pages](https://docs.github.com/en/pages).
-
-2. **A Free Google account** to create Google Sheets and to create [Google Cloud Project](https://console.cloud.google.com/projectcreate).
+1. A **free GitHub account** to fork this repository and publish the app on [GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages#who-can-use-this-feature)
+2. A **Free Google account** to create Google Sheets and to create [Google Cloud Project](https://console.cloud.google.com/projectcreate).
 
 
 ## 1. Create Google Cloud Project & Enable APIs
