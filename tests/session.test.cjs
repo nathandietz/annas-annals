@@ -4,16 +4,16 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const headers = ['id','isbn','title','author','language','notes','created_at','publisher','publication_year','shelf_location','category','description','series_name','volume_number','pages','updated_at'];
 function storage(initial = {}) { const data = new Map(Object.entries(initial)); return { getItem: k => data.get(k) ?? null, setItem: (k,v) => data.set(k,String(v)), removeItem: k => data.delete(k) }; }
-async function openWindow(shared, responseStatus = 200, mobile = false, editable = true, { tabStorage = storage(), permissionReady } = {}) {
+async function openWindow(shared, responseStatus = 200, mobile = false, editable = true, { tabStorage = storage(), permissionReady, now = Date.now, refreshDelay = queueMicrotask, standalone = false } = {}) {
   const elements = {}, handlers = {}, requests = [], scanners = [], timers = [];
-  const el = id => elements[id] ||= { hidden: false, value: '', textContent: '', children: [], classList: { values: new Set(), toggle(name, force) { if (force) this.values.add(name); else this.values.delete(name); }, remove(name) { this.values.delete(name); }, add(name) { this.values.add(name); }, contains(name) { return this.values.has(name); } }, addEventListener(type, fn) { handlers[id + ':' + type] = fn; }, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute() {}, append(...children) { this.children.push(...children); }, replaceChildren() { this.children = []; } };
+  const el = id => elements[id] ||= { hidden: false, value: '', textContent: '', children: [], classList: { values: new Set(), toggle(name, force) { if (force) this.values.add(name); else this.values.delete(name); }, remove(name) { this.values.delete(name); }, add(name) { this.values.add(name); }, contains(name) { return this.values.has(name); } }, addEventListener(type, fn) { handlers[id + ':' + type] = fn; }, style: { setProperty(name, value) { this[name] = value; } }, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute() {}, append(...children) { this.children.push(...children); }, replaceChildren() { this.children = []; } };
   let deletedCache;
-  let navigatedTo;
-  const window = { LIBRARY_CONFIG: {}, location: { href:'https://example.com/annals/?view=library', replace: value => { navigatedTo = value; } }, caches: { keys: async () => deletedCache ? [] : ['annas-annals-covers-v1'], open: async () => ({ keys: async () => [{}, {}] }), delete: async name => { deletedCache = name; } }, navigator: { storage: { estimate: async () => ({usage: 1048576}) } }, matchMedia: () => ({ matches: mobile }), addEventListener: (type, fn) => { handlers['window:' + type] = fn; } };
-  const context = vm.createContext({ URL, document: { getElementById: el, createElement: () => ({ textContent: '', setAttribute() {}, addEventListener() {}, append() {} }) }, window, localStorage: shared, sessionStorage: tabStorage, findDuplicateGroups: () => [], normalizeIsbn: require('../isbn.js').normalizeIsbn, matchBook: () => ({kind:'exact', books:[]}), createLibraryScanner: () => { const scanner = { stops: 0, start: async (callback, onStatus) => { scanner.decoded = callback; onStatus('Starting camera…'); }, hold: duration => { scanner.holdDuration = duration; }, stop: async () => { scanner.stops++; } }; scanners.push(scanner); return scanner; }, setTimeout: fn => timers.push(fn) - 1, clearTimeout: id => { if (id !== undefined) timers[id] = () => {}; }, fetch: async (url, options) => { requests.push({url, options}); if (url.includes('capabilities(canEdit)') && permissionReady) await permissionReady; return { ok: responseStatus === 200, status: responseStatus, json: async () => url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: editable } } : url.includes('fields=properties') ? { properties: {title: 'My library'}, sheets: [{properties: {title:'Books', gridProperties:{frozenRowCount:1}}}] } : { values: [headers] } }; }, console });
+  let navigatedTo, tickUpdateAge;
+  const window = { LIBRARY_CONFIG: {}, location: { href:'https://example.com/annals/?view=library', replace: value => { navigatedTo = value; } }, caches: { keys: async () => deletedCache ? [] : ['annas-annals-covers-v1'], open: async () => ({ keys: async () => [{}, {}] }), delete: async name => { deletedCache = name; } }, navigator: { storage: { estimate: async () => ({usage: 1048576}) } }, matchMedia: query => ({ matches: query === '(display-mode: standalone)' ? standalone : mobile }), setInterval: (fn, delay) => { if (delay === 60000) tickUpdateAge = fn; }, addEventListener: (type, fn) => { handlers['window:' + type] = fn; } };
+  const context = vm.createContext({ URL, Date: class extends Date { static now() { return now(); } }, document: { getElementById: el, createElement: () => ({ textContent: '', setAttribute() {}, addEventListener() {}, append() {} }) }, window, localStorage: shared, sessionStorage: tabStorage, findDuplicateGroups: () => [], normalizeIsbn: require('../isbn.js').normalizeIsbn, matchBook: () => ({kind:'exact', books:[]}), createLibraryScanner: () => { const scanner = { stops: 0, start: async (callback, onStatus) => { scanner.decoded = callback; onStatus('Starting camera…'); }, hold: duration => { scanner.holdDuration = duration; }, stop: async () => { scanner.stops++; } }; scanners.push(scanner); return scanner; }, setTimeout: (fn, delay) => delay === 1000 ? refreshDelay(fn) : timers.push(fn) - 1, clearTimeout: id => { if (id !== undefined) timers[id] = () => {}; }, fetch: async (url, options) => { requests.push({url, options}); if (url.includes('capabilities(canEdit)') && permissionReady) await permissionReady; return { ok: responseStatus === 200, status: responseStatus, json: async () => url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: editable } } : url.includes('fields=properties') ? { properties: {title: 'My library'}, sheets: [{properties: {title:'Books', gridProperties:{frozenRowCount:1}}}] } : { values: [headers] } }; }, console });
   vm.runInContext(fs.readFileSync('app.js', 'utf8'), context);
   await new Promise(resolve => setImmediate(resolve));
-  return { el, handlers, requests, scanners, timers, window, navigatedTo: () => navigatedTo, cacheDeleted: () => deletedCache };
+  return { el, handlers, requests, scanners, timers, window, tickUpdateAge, navigatedTo: () => navigatedTo, cacheDeleted: () => deletedCache };
 }
 const sheetKey = 'annas-annals-sheet-id', sessionKey = 'annas-annals-google-session';
 test('a new window restores a valid session without reconnecting', async () => {
@@ -21,6 +21,86 @@ test('a new window restores a valid session without reconnecting', async () => {
   const first = await openWindow(shared), second = await openWindow(shared);
   for (const view of [first, second]) { assert.equal(view.el('library').hidden, false); assert.equal(view.el('connect').hidden, true); assert.equal(view.requests.length, 3); assert.equal(view.el('add').hidden, false); }
 });
+test('a fast catalog refresh keeps its progress indicator visible for one second', async () => {
+  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
+  let finishDelay;
+  const view = await openWindow(shared, 200, false, true, { refreshDelay: fn => { finishDelay = fn; } });
+  const status = view.el('status');
+
+  assert.equal(status.textContent, 'Refreshing Catalog');
+  assert.equal(status.classList.contains('is-refreshing'), true);
+  assert.equal(typeof finishDelay, 'function');
+
+  finishDelay();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(status.textContent, 'Updated just now');
+  assert.equal(status.classList.contains('is-refreshing'), false);
+});
+test('only a standalone pull from the top refreshes the catalog', async () => {
+  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
+  const browser = await openWindow(shared, 200, true);
+  assert.equal(browser.handlers['window:touchmove'], undefined);
+
+  const app = await openWindow(shared, 200, true, true, { standalone: true });
+  const pull = (distance, across = 0, duringPull = () => {}) => {
+    const touch = (x, y) => ({ identifier: 1, clientX: x, clientY: y });
+    let prevented = false;
+    const target = { closest: () => null };
+    app.handlers['window:touchstart']({ target, touches: [touch(100, 160)] });
+    app.handlers['window:touchmove']({ touches: [touch(100 + across, 160 + distance)], cancelable: true, preventDefault: () => { prevented = true; } });
+    duringPull();
+    app.handlers['window:touchend']({ changedTouches: [touch(100 + across, 160 + distance)] });
+    return prevented;
+  };
+
+  const initialRequests = app.requests.length;
+  app.window.scrollY = 30;
+  assert.equal(pull(120), false);
+  app.window.scrollY = 0;
+  assert.equal(pull(15, 70), false);
+  const page = app.el('app-page');
+  const displacement = () => parseFloat(page.style['--pull-distance']);
+  assert.equal(pull(25, 0, () => {
+    assert.ok(displacement() > 0);
+    assert.equal(page.classList.contains('is-pulling'), true);
+  }), true);
+  assert.equal(displacement(), 0);
+  assert.equal(page.classList.contains('is-pulling'), false);
+  assert.equal(app.el('pull-refresh').hidden, true);
+  assert.equal(app.requests.length, initialRequests);
+  let draggedDistance;
+  assert.equal(pull(120, 0, () => { draggedDistance = displacement(); }), true);
+  assert.ok(displacement() > 0 && displacement() < draggedDistance);
+  assert.equal(app.el('pull-refresh').hidden, false);
+  assert.equal(app.el('status').textContent, 'Refreshing Catalog');
+  assert.equal(pull(120), false);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(app.requests.length, initialRequests + 2);
+  assert.equal(displacement(), 0);
+  assert.equal(app.el('pull-refresh').hidden, true);
+  assert.equal(app.el('status').textContent, 'Updated just now');
+});
+
+test('catalog update age advances and stays in the header across views', async () => {
+  let now = Date.now();
+  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: now + 120000 }) });
+  const view = await openWindow(shared, 200, true, true, { now: () => now });
+  const status = view.el('status');
+  assert.equal(status.textContent, 'Updated just now');
+
+  now += 60000;
+  view.tickUpdateAge();
+  assert.equal(status.textContent, 'Updated 1 minute ago');
+  view.handlers['mode-library:click']();
+  view.handlers['settings-open:click']();
+  assert.equal(view.el('library-meta').children.includes(status), false);
+  assert.equal(view.el('settings-meta').children.includes(status), false);
+
+  now += 60000;
+  view.tickUpdateAge();
+  assert.equal(status.textContent, 'Updated 2 minutes ago');
+});
+
 test('desktop reload keeps Add book in place while editor access is verified once', async () => {
   const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
   const tabStorage = storage();

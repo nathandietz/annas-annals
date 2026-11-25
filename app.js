@@ -52,11 +52,16 @@
   let mainView = compactLayout?.matches ? 'scan' : 'library', canEdit = false, checkSequence = 0;
   try { const savedMainView = localStorage.getItem('annas-annals-main-view'); if (['scan', 'library', 'settings'].includes(savedMainView)) mainView = savedMainView; } catch {}
   let lastCatalogUpdate = 0, showingUpdateAge = false;
-  const status = message => { showingUpdateAge = false; $('status').textContent = message; };
+  const headerStatus = $('status');
+  const status = (message, refreshing = false) => {
+    showingUpdateAge = false;
+    headerStatus.classList.toggle('is-refreshing', refreshing);
+    headerStatus.textContent = message;
+  };
   function showUpdateAge() {
     if (!showingUpdateAge || !lastCatalogUpdate) return;
     const minutes = Math.max(0, Math.floor((Date.now() - lastCatalogUpdate) / 60000));
-    $('status').textContent = minutes === 0 ? 'Updated just now' : 'Updated ' + minutes + (minutes === 1 ? ' minute ago' : ' minutes ago');
+    headerStatus.textContent = minutes === 0 ? 'Updated just now' : 'Updated ' + minutes + (minutes === 1 ? ' minute ago' : ' minutes ago');
   }
   window.setInterval?.(showUpdateAge, 60000);
   const formStatus = message => { $('form-status').textContent = message; };
@@ -95,7 +100,6 @@
   }
   updateConnect();
   function clearSession() {
-    document.querySelector?.('.site-header')?.append($('status'));
     canEdit = false;
     checkScanner.stop?.().catch(() => {});
     try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); sessionStorage.removeItem(editAccessKey); } catch {}
@@ -126,11 +130,14 @@
     return data;
   }
   async function refresh() {
-    status('Refreshing catalog…');
+    status('Refreshing Catalog', true);
+    const minimumRefreshTime = new Promise(resolve => setTimeout(resolve, 1000));
+    const refreshSheet = sheetId, refreshToken = token;
     const [data, spreadsheet] = await Promise.all([
       api('/values/' + encodeURIComponent("'Books'!A:ZZ")),
       api('?fields=properties(title),sheets(properties(title,gridProperties(frozenRowCount)))')
-    ]);
+    ]).finally(() => minimumRefreshTime);
+    if (sheetId !== refreshSheet || token !== refreshToken) return;
     const rows = data.values || [];
     const foundHeaders = rows[0] || [];
     sheetHeaders = readHeaders(foundHeaders); libraryWidth = sheetHeaders.length;
@@ -141,7 +148,81 @@
     setLibraryLinkLabel(title);
     const updatedAt = Date.now();
     try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title, books, updatedAt, sheetHeaders, headerFrozen })); } catch {}
-    render(); lastCatalogUpdate = updatedAt; showingUpdateAge = true; showUpdateAge();
+    render(); lastCatalogUpdate = updatedAt; showingUpdateAge = true;
+    headerStatus.classList.remove('is-refreshing');
+    showUpdateAge();
+  }
+  if (window.navigator?.standalone || window.matchMedia?.('(display-mode: standalone)')?.matches) {
+    enablePullToRefresh();
+  }
+  function enablePullToRefresh() {
+    const page = $('app-page');
+    const indicator = $('pull-refresh');
+    const threshold = 84;
+    let origin, distance = 0, refreshing = false;
+    page.classList.add('has-pull-refresh');
+
+    function resetPull() {
+      origin = undefined;
+      distance = 0;
+      page.classList.remove('is-pulling');
+      if (!refreshing) {
+        page.style.setProperty('--pull-distance', '0px');
+        indicator.hidden = true;
+      }
+    }
+
+    window.addEventListener('touchstart', event => {
+      resetPull();
+      if (!sheetId || busy || refreshing || headerStatus.classList.contains('is-refreshing') ||
+          window.scrollY > 0 || event.touches.length !== 1 ||
+          event.target.closest?.('dialog, input, textarea, select, [contenteditable], .mode-toggle')) return;
+      origin = event.touches[0];
+    }, { passive: true });
+
+    window.addEventListener('touchmove', event => {
+      if (!origin) return;
+      const touch = event.touches[0];
+      if (!event.cancelable || event.touches.length !== 1 || touch.identifier !== origin.identifier || window.scrollY > 0) {
+        resetPull();
+        return;
+      }
+      const down = touch.clientY - origin.clientY;
+      const across = Math.abs(touch.clientX - origin.clientX);
+      if (!distance && Math.max(Math.abs(down), across) < 8) return;
+      if (!distance && down <= across) {
+        resetPull();
+        return;
+      }
+      event.preventDefault();
+      distance = Math.max(0, down);
+      page.classList.add('is-pulling');
+      page.style.setProperty('--pull-distance', Math.min(280, distance * 0.8) + 'px');
+      indicator.hidden = distance === 0;
+      indicator.style.setProperty('--pull-opacity', Math.min(1, distance / threshold));
+    }, { passive: false });
+
+    window.addEventListener('touchend', async event => {
+      if (!origin || event.changedTouches[0]?.identifier !== origin.identifier) return;
+      if (distance < threshold || !sheetId || busy || headerStatus.classList.contains('is-refreshing')) {
+        resetPull();
+        return;
+      }
+      refreshing = true;
+      resetPull();
+      page.style.setProperty('--pull-distance', '56px');
+      indicator.classList.add('is-refreshing');
+      try {
+        await refresh();
+      } catch (error) {
+        if (sheetId) status('Catalog refresh failed: ' + message(error));
+      } finally {
+        indicator.classList.remove('is-refreshing');
+        refreshing = false;
+        resetPull();
+      }
+    }, { passive: true });
+    window.addEventListener('touchcancel', resetPull, { passive: true });
   }
   function render() {
     $('duplicates-toggle').setAttribute('aria-pressed', String(duplicatesMode));
@@ -350,7 +431,6 @@
     mainView = view;
     try { localStorage.setItem('annas-annals-main-view', view); } catch {}
     if (view === 'settings') updateCoverCacheInfo();
-    $(view === 'scan' ? 'scan-meta' : view === 'settings' ? 'settings-meta' : 'library-meta').append($('status'));
     $('scan-view').hidden = view !== 'scan';
     $('library').hidden = view !== 'library';
     $('settings-dialog').hidden = view !== 'settings';
@@ -832,7 +912,7 @@
     } catch {}
     try {
       await refresh();
-      if (!cached) showLibrary();
+      if (!cached && sheetId) showLibrary();
     } catch (error) {
       if (cached && error.status !== 401 && error.status !== 403) {
         status('Showing saved catalog; refresh failed: ' + message(error));
@@ -959,7 +1039,6 @@
       const skipped = importRows.length - additions.length; importRows = [];
       const result = 'Imported ' + additions.length + ' books' + (skipped ? '; skipped ' + skipped + ' matches.' : '.');
       $('import-dialog').close();
-      status(result + ' Refreshing catalog…');
       refresh().then(() => status(result)).catch(error => status(result + ' Catalog refresh failed: ' + message(error)));
     } catch (error) { $('import-status').textContent = 'Import failed or could not be confirmed: ' + message(error) + ' Refresh and check the Sheet before retrying.'; }
     finally { busy = false; $('import-confirm').disabled = !importRows.length; $('import-cancel').disabled = false; $('import-file').disabled = false; }
@@ -1043,7 +1122,7 @@
     return matches[0].number;
   }
   async function finishChange(label) {
-    $('editor').close(); status(label + ' Refreshing catalog…');
+    $('editor').close();
     try { await refresh(); } catch (error) { status(label + ' Refresh failed: ' + message(error)); }
   }
   $('delete').addEventListener('click', async () => {
