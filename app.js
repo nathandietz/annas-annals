@@ -129,9 +129,11 @@
     if (!response.ok) { const error = new Error(response.status === 401 ? 'Google authorization expired. Disconnect and connect again.' : (data.error?.message || 'Google Sheets request failed.')); error.status = response.status; throw error; }
     return data;
   }
-  async function refresh() {
+  async function refresh({ minimumIndicatorTime = 1000 } = {}) {
     status('Refreshing Catalog', true);
-    const minimumRefreshTime = new Promise(resolve => setTimeout(resolve, 1000));
+    const minimumRefreshTime = minimumIndicatorTime
+      ? new Promise(resolve => setTimeout(resolve, minimumIndicatorTime))
+      : undefined;
     const refreshSheet = sheetId, refreshToken = token;
     const [data, spreadsheet] = await Promise.all([
       api('/values/' + encodeURIComponent("'Books'!A:ZZ")),
@@ -158,7 +160,8 @@
   function enablePullToRefresh() {
     const page = $('app-page');
     const indicator = $('pull-refresh');
-    const threshold = 84;
+    const spokes = $('pull-refresh-spokes').children;
+    const revealStart = 36, refreshThreshold = 144;
     let origin, distance = 0, refreshing = false;
     page.classList.add('has-pull-refresh');
 
@@ -168,6 +171,7 @@
       page.classList.remove('is-pulling');
       if (!refreshing) {
         page.style.setProperty('--pull-distance', '0px');
+        indicator.classList.remove('is-armed');
         indicator.hidden = true;
       }
     }
@@ -195,28 +199,37 @@
         return;
       }
       event.preventDefault();
-      distance = Math.max(0, down);
+      const resistance = Math.max(0, down) * 0.55;
+      const height = window.innerHeight;
+      distance = height * resistance / (height + resistance);
       page.classList.add('is-pulling');
-      page.style.setProperty('--pull-distance', Math.min(280, distance * 0.8) + 'px');
-      indicator.hidden = distance === 0;
-      indicator.style.setProperty('--pull-opacity', Math.min(1, distance / threshold));
+      page.style.setProperty('--pull-distance', distance + 'px');
+      indicator.hidden = distance <= revealStart;
+      indicator.classList.toggle('is-armed', distance >= refreshThreshold);
+      const progress = (distance - revealStart) / (refreshThreshold - revealStart);
+      for (let index = 0; index < spokes.length; index++) {
+        const opacity = Math.max(0, Math.min(1, progress * spokes.length - index));
+        spokes[index].style.setProperty('--spoke-opacity', opacity);
+      }
     }, { passive: false });
 
     window.addEventListener('touchend', async event => {
       if (!origin || event.changedTouches[0]?.identifier !== origin.identifier) return;
-      if (distance < threshold || !sheetId || busy || headerStatus.classList.contains('is-refreshing')) {
+      if (distance < refreshThreshold || !sheetId || busy || headerStatus.classList.contains('is-refreshing')) {
         resetPull();
         return;
       }
       refreshing = true;
       resetPull();
-      page.style.setProperty('--pull-distance', '56px');
+      page.style.setProperty('--pull-distance', '0px');
       indicator.classList.add('is-refreshing');
+      const spinnerExit = indicator.getAnimations?.()[0]?.finished;
       try {
-        await refresh();
+        await refresh({ minimumIndicatorTime: 0 });
       } catch (error) {
         if (sheetId) status('Catalog refresh failed: ' + message(error));
       } finally {
+        await spinnerExit?.catch(() => {});
         indicator.classList.remove('is-refreshing');
         refreshing = false;
         resetPull();

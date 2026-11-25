@@ -18,7 +18,7 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_upward,barcode_scanner,book_2,edit,expand_less,expand_more,search,settings,unfold_more&display=block"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="style.css?v=standalone-refresh-2" />
+    <link rel="stylesheet" href="style.css?v=standalone-refresh-8" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
     <script
@@ -31,11 +31,31 @@
     <script src="duplicates.js?v=017c5b1b32ae" defer></script>
     <script src="csv.js?v=017c5b1b32ae" defer></script>
     <script src="config.js?v=017c5b1b32ae" defer></script>
-    <script src="app.js?v=standalone-refresh-2" defer></script>
+    <script src="app.js?v=standalone-refresh-8" defer></script>
   </head>
   <body>
     <main id="app-page">
-      <div id="pull-refresh" aria-hidden="true" hidden></div>
+      <div id="pull-refresh" aria-hidden="true" hidden>
+        <svg
+          id="pull-refresh-spokes"
+          width="32"
+          height="32"
+          viewBox="0 0 32 32"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="4"
+          stroke-linecap="round"
+        >
+          <path d="M16 3v7" />
+          <path d="M16 3v7" transform="rotate(45 16 16)" opacity=".3" />
+          <path d="M16 3v7" transform="rotate(90 16 16)" opacity=".4" />
+          <path d="M16 3v7" transform="rotate(135 16 16)" opacity=".5" />
+          <path d="M16 3v7" transform="rotate(180 16 16)" opacity=".6" />
+          <path d="M16 3v7" transform="rotate(225 16 16)" opacity=".7" />
+          <path d="M16 3v7" transform="rotate(270 16 16)" opacity=".8" />
+          <path d="M16 3v7" transform="rotate(315 16 16)" opacity=".9" />
+        </svg>
+      </div>
       <header class="site-header">
         <div class="brand">
           <span class="material-symbol" aria-hidden="true">book_2</span>
