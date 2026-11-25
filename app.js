@@ -77,7 +77,10 @@
   function showLibrary() {
     $('mode-toggle').hidden = false;
     checkPermission();
-    $('library-link').href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit';
+    const link = $('library-link');
+    link.href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit';
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
     $('connect').hidden = true;
     $('disconnect').hidden = false;
     $('new-library-connected').hidden = false;
@@ -104,8 +107,7 @@
     }
     $('count').textContent = '';
     $('library-link').textContent = appName;
-    $('library-link').removeAttribute('href');
-    $('library-link').removeAttribute('title');
+    for (const attribute of ['href', 'target', 'rel', 'title']) $('library-link').removeAttribute(attribute);
     $('books').replaceChildren();
     $('search').value = '';
     $('search').disabled = true;
@@ -566,8 +568,10 @@
     const isbn = normalizeIsbn(value);
     const result = $('check-result');
     const heading = document.createElement('h2');
+    heading.id = 'check-result-title';
     heading.className = 'page-title';
     heading.setAttribute('tabindex', '-1');
+    result.setAttribute('aria-labelledby', heading.id);
     const detail = document.createElement('p');
     detail.className = 'page-subtitle';
     resultActions = undefined;
@@ -693,7 +697,6 @@
     setCameraOpen(false);
     checkScanner.stop().catch(() => {});
   });
-  $('check-form').addEventListener('submit', event => { event.preventDefault(); });
   $('check-photo-open').addEventListener('click', () => $('check-photo').click());
   $('check-photo').addEventListener('change', async event => {
     const file = event.target.files?.[0];
@@ -1005,7 +1008,13 @@
     if (showCovers && isbn) image.src = 'https://covers.openlibrary.org/b/isbn/' + isbn + '-M.jpg?default=false';
     else image.removeAttribute('src');
   }
-  $('book-cover-image').addEventListener('load', () => { if (showCovers) { $('book-cover-image').hidden = false; $('book-cover-placeholder').hidden = true; } });
+  $('book-cover-image').addEventListener('load', event => {
+    const image = event.currentTarget;
+    if (showCovers && image.currentSrc.startsWith('https://covers.openlibrary.org/')) {
+      image.hidden = false;
+      $('book-cover-placeholder').hidden = true;
+    }
+  });
   $('book-cover-image').addEventListener('error', () => { $('book-cover-image').hidden = true; $('book-cover-placeholder').hidden = false; });
   $('book-form').elements?.isbn?.addEventListener?.('input', updateBookCover);
   function openEditor(book = null, editable = true) {
