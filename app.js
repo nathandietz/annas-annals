@@ -6,8 +6,12 @@
   window.addEventListener('load', () => {
     window.navigator?.serviceWorker?.register('service-worker.js').catch(() => {});
   });
-  window.addEventListener('scroll', () => { $('scroll-top').hidden = window.scrollY < 300; }, { passive: true });
-  $('scroll-top').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  const scrollTopButton = $('scroll-top');
+  window.addEventListener('scroll', () => {
+    const hidden = window.scrollY < 300;
+    if (scrollTopButton.hidden !== hidden) scrollTopButton.hidden = hidden;
+  }, { passive: true });
+  scrollTopButton.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
   if (typeof ResizeObserver !== 'undefined' && document.documentElement) {
     const toolbar = document.querySelector('.toolbar');
     if (toolbar) new ResizeObserver(() => document.documentElement.style.setProperty('--toolbar-height', toolbar.offsetHeight + 'px')).observe(toolbar);

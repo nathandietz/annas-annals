@@ -1,0 +1,13 @@
+{
+  "name": "annas-annals",
+  "private": true,
+  "scripts": {
+    "markup": "prettier --write \"*.html\" \"*.css\" && html-validate \"*.html\" && stylelint \"*.css\""
+  },
+  "devDependencies": {
+    "html-validate": "9.7.2",
+    "prettier": "3.5.3",
+    "stylelint": "16.26.1",
+    "stylelint-config-standard": "38.0.0"
+  }
+}

@@ -63,6 +63,18 @@ test('mobile opens scan view and viewers cannot add books', async () => {
   assert.equal(view.el('scan-view').hidden, true);
 });
 
+test('the mobile Library tab bar stays full-size while scrolling in either direction', async () => {
+  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
+  const view = await openWindow(shared, 200, true);
+  view.handlers['mode-library:click']();
+  for (const y of [0, 110, 400, 170, 0]) {
+    view.window.scrollY = y;
+    view.handlers['window:scroll']();
+    assert.equal(view.el('mode-toggle').classList.contains('is-compact'), false, `tab bar at scroll position ${y}`);
+    assert.equal(view.el('scroll-top').hidden, y < 300);
+  }
+});
+
 test('book covers default to off and an explicit preference is respected', async () => {
   const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
   const first = await openWindow(shared);

@@ -12,6 +12,7 @@
   --muted: #50505a;
   --accent: #0062cc;
   --separator: #d1d1d6;
+  --page-top-inset: env(safe-area-inset-top, 0px);
   --bottom-nav-gap: max(3px, calc(env(safe-area-inset-bottom) * 0.6));
   --bottom-nav-height: calc(62px + var(--bottom-nav-gap));
 }
@@ -31,7 +32,7 @@ main {
   padding: 0 16px 48px;
   padding-inline: max(16px, env(safe-area-inset-left))
     max(16px, env(safe-area-inset-right));
-  padding-top: env(safe-area-inset-top);
+  padding-top: var(--page-top-inset);
 }
 
 h1,
@@ -1694,6 +1695,10 @@ button.scan-book {
     padding-right: var(--mobile-content-right);
   }
 
+  main:has(> .site-header) {
+    --page-top-inset: calc(env(safe-area-inset-top, 0px) + 12px);
+  }
+
   main:has(#mode-toggle:not([hidden])) {
     padding-bottom: calc(var(--bottom-nav-height) + 20px);
   }
@@ -1710,6 +1715,8 @@ button.scan-book {
   }
 
   .mode-toggle {
+    --selection-index: 0;
+
     position: fixed;
     z-index: 12;
     inset: auto var(--mobile-content-right) var(--bottom-nav-gap)
@@ -1725,6 +1732,25 @@ button.scan-book {
       inset 0 1px 0 #fff,
       0 5px 16px #20253a24,
       0 1px 3px #20253a14;
+  }
+
+  .mode-toggle:has(#mode-library[aria-pressed="true"]) {
+    --selection-index: 1;
+  }
+
+  .mode-toggle:has(#settings-open[aria-pressed="true"]) {
+    --selection-index: 2;
+  }
+
+  .mode-toggle::before {
+    position: absolute;
+    inset: 4px auto 4px 4px;
+    width: calc((100% - 12px) / 3);
+    border-radius: 26px;
+    background: #b3d5ff72;
+    pointer-events: none;
+    content: "";
+    transform: translateX(calc(var(--selection-index) * (100% + 2px)));
   }
 
   @supports (
@@ -1744,7 +1770,9 @@ button.scan-book {
   }
 
   .mode-toggle button {
+    position: relative;
     flex: 1 1 0;
+    min-width: 0;
     min-height: 52px;
     flex-direction: column;
     justify-content: center;
@@ -1754,6 +1782,7 @@ button.scan-book {
     line-height: 1.15;
     text-shadow: 0 1px 3px #ffffffeb;
     padding: 3px;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .mode-toggle button:hover {
@@ -1761,12 +1790,8 @@ button.scan-book {
   }
 
   .mode-toggle button[aria-pressed="true"] {
-    background: #b3d5ff72;
+    background: transparent;
     font-weight: 700;
-  }
-
-  .mode-toggle button:active {
-    background: #b3d5ffaf;
   }
 
   .mode-toggle .material-symbol {
@@ -1775,6 +1800,20 @@ button.scan-book {
 
   .mode-toggle button[aria-pressed="true"] .material-symbol {
     font-variation-settings: "FILL" 1;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .mode-toggle::before {
+      transition: transform 280ms cubic-bezier(0.25, 0.35, 0.35, 1);
+    }
+
+    .mode-toggle .material-symbol {
+      transition: transform 140ms ease-out;
+    }
+
+    .mode-toggle button:active .material-symbol {
+      transform: scale(0.88);
+    }
   }
 
   .scroll-top {
@@ -1796,7 +1835,7 @@ button.scan-book {
   #scan-view {
     box-sizing: border-box;
     min-height: calc(
-      100dvh - 54px - var(--bottom-nav-height) - env(safe-area-inset-top)
+      100dvh - 54px - var(--bottom-nav-height) - var(--page-top-inset)
     );
     padding-bottom: 13px;
   }

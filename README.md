@@ -130,3 +130,14 @@ While the OAuth app is in **Testing**, the test-user list controls who can conne
 Save code changes and reload locally; changes reach GitHub Pages only after committing and pushing. Run scanner checks with `node --test tests/*.test.cjs`. 
 
 Make sure to use the exact hostname and port above. `127.0.0.1` is a different OAuth origin.
+
+## Format and lint HTML and CSS
+
+Run `npm ci` once from the repository folder to install the development tools.
+After editing the HTML or CSS, run:
+
+```sh
+npm run markup
+```
+
+The command formats the root-level HTML and CSS files in place and then reports any lint errors.
