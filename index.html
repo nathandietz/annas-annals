@@ -18,7 +18,7 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_upward,barcode_scanner,book_2,edit,expand_less,expand_more,search,settings,unfold_more&display=block"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="style.css?v=standalone-refresh-10" />
+    <link rel="stylesheet" href="style.css?v=standalone-refresh-11" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
     <script
@@ -37,7 +37,6 @@
     <main id="app-page">
       <div id="pull-refresh" aria-hidden="true" hidden>
         <svg
-          id="pull-refresh-spokes"
           width="32"
           height="32"
           viewBox="0 0 32 32"
@@ -46,34 +45,44 @@
           stroke-width="4"
           stroke-linecap="round"
         >
-          <path d="M16 3v6" />
-          <path d="M16 3v6" transform="rotate(45 16 16)" stroke-opacity=".96" />
-          <path d="M16 3v6" transform="rotate(90 16 16)" stroke-opacity=".92" />
-          <path
-            d="M16 3v6"
-            transform="rotate(135 16 16)"
-            stroke-opacity=".88"
-          />
-          <path
-            d="M16 3v6"
-            transform="rotate(180 16 16)"
-            stroke-opacity=".83"
-          />
-          <path
-            d="M16 3v6"
-            transform="rotate(225 16 16)"
-            stroke-opacity=".79"
-          />
-          <path
-            d="M16 3v6"
-            transform="rotate(270 16 16)"
-            stroke-opacity=".75"
-          />
-          <path
-            d="M16 3v6"
-            transform="rotate(315 16 16)"
-            stroke-opacity=".71"
-          />
+          <g id="pull-refresh-spokes">
+            <path d="M16 3v6" />
+            <path
+              d="M16 3v6"
+              transform="rotate(45 16 16)"
+              stroke-opacity=".96"
+            />
+            <path
+              d="M16 3v6"
+              transform="rotate(90 16 16)"
+              stroke-opacity=".92"
+            />
+            <path
+              d="M16 3v6"
+              transform="rotate(135 16 16)"
+              stroke-opacity=".88"
+            />
+            <path
+              d="M16 3v6"
+              transform="rotate(180 16 16)"
+              stroke-opacity=".83"
+            />
+            <path
+              d="M16 3v6"
+              transform="rotate(225 16 16)"
+              stroke-opacity=".79"
+            />
+            <path
+              d="M16 3v6"
+              transform="rotate(270 16 16)"
+              stroke-opacity=".75"
+            />
+            <path
+              d="M16 3v6"
+              transform="rotate(315 16 16)"
+              stroke-opacity=".71"
+            />
+          </g>
         </svg>
       </div>
       <header class="site-header">
