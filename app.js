@@ -161,13 +161,14 @@
     const page = $('app-page');
     const indicator = $('pull-refresh');
     const spokes = $('pull-refresh-spokes').children;
-    const revealStart = 36, refreshThreshold = 144;
-    let origin, distance = 0, refreshing = false;
+    const revealStart = 48, refreshThreshold = 144;
+    let origin, distance = 0, refreshing = false, hasPulsed = false;
     page.classList.add('has-pull-refresh');
 
     function resetPull() {
       origin = undefined;
       distance = 0;
+      hasPulsed = false;
       page.classList.remove('is-pulling');
       if (!refreshing) {
         page.style.setProperty('--pull-distance', '0px');
@@ -205,7 +206,12 @@
       page.classList.add('is-pulling');
       page.style.setProperty('--pull-distance', distance + 'px');
       indicator.hidden = distance <= revealStart;
-      indicator.classList.toggle('is-armed', distance >= refreshThreshold);
+      const armed = distance >= refreshThreshold;
+      indicator.classList.toggle('is-armed', armed);
+      if (armed && !hasPulsed) {
+        hasPulsed = true;
+        window.navigator?.vibrate?.(12);
+      }
       const progress = (distance - revealStart) / (refreshThreshold - revealStart);
       for (let index = 0; index < spokes.length; index++) {
         const opacity = Math.max(0, Math.min(1, progress * spokes.length - index));

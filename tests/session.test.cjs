@@ -107,6 +107,33 @@ test('only a standalone pull from the top refreshes the catalog', async () => {
   assert.equal(app.el('status').textContent, 'Updated just now');
 });
 
+test('the pull threshold requests a single haptic pulse per gesture', async () => {
+  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
+  const app = await openWindow(shared, 200, true, true, { standalone: true });
+  const pulses = [];
+  app.window.navigator.vibrate = duration => pulses.push(duration);
+  const touch = clientY => ({ identifier: 1, clientX: 100, clientY });
+  const start = () => app.handlers['window:touchstart']({ target: {}, touches: [touch(100)] });
+  const move = clientY => app.handlers['window:touchmove']({
+    touches: [touch(clientY)], cancelable: true, preventDefault() {}
+  });
+
+  start();
+  move(260);
+  assert.deepEqual(pulses, []);
+  move(500);
+  assert.deepEqual(pulses, [12]);
+  move(600);
+  move(260);
+  move(500);
+  assert.deepEqual(pulses, [12]);
+
+  app.handlers['window:touchcancel']();
+  start();
+  move(500);
+  assert.deepEqual(pulses, [12, 12]);
+});
+
 test('catalog update age advances and stays in the header across views', async () => {
   let now = Date.now();
   const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: now + 120000 }) });
