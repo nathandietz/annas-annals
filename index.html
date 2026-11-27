@@ -10,7 +10,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Annals" />
     <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="icons/icon-180.png" />
+    <link rel="apple-touch-icon" href="assets/icons/icon-180.png" />
     <title>Anna’s Annals</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -18,20 +18,20 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_upward,barcode_scanner,book_2,edit,expand_less,expand_more,search,settings,unfold_more&display=block"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="style.css?v=local-cover-thumbnails-1" />
+    <link rel="stylesheet" href="assets/css/style.css?v=html-templates-1" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
     <script
       src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"
       async
     ></script>
-    <script src="scanner.js?v=canvas-preview-1" defer></script>
-    <script src="isbn.js?v=017c5b1b32ae" defer></script>
-    <script src="book-match.js?v=017c5b1b32ae" defer></script>
-    <script src="duplicates.js?v=017c5b1b32ae" defer></script>
-    <script src="csv.js?v=017c5b1b32ae" defer></script>
-    <script src="config.js?v=017c5b1b32ae" defer></script>
-    <script src="app.js?v=local-cover-thumbnails-2" defer></script>
+    <script src="assets/js/scanner.js?v=canvas-preview-1" defer></script>
+    <script src="assets/js/isbn.js?v=017c5b1b32ae" defer></script>
+    <script src="assets/js/book-match.js?v=017c5b1b32ae" defer></script>
+    <script src="assets/js/duplicates.js?v=017c5b1b32ae" defer></script>
+    <script src="assets/js/csv.js?v=017c5b1b32ae" defer></script>
+    <script src="assets/js/config.js?v=017c5b1b32ae" defer></script>
+    <script src="assets/js/app.js?v=html-templates-1" defer></script>
   </head>
   <body>
     <template id="catalog-search-template">
@@ -60,6 +60,176 @@
       >
         <span class="add-symbol" aria-hidden="true"></span>
       </button>
+    </template>
+    <template id="catalog-table-template">
+      <table class="catalog-table">
+        <thead>
+          <tr>
+            <th scope="col" data-sort="title">
+              <button class="sort-button" type="button">
+                <span data-sort-label>Title</span>
+                <span class="sort-indicator" aria-hidden="true"
+                  >unfold_more</span
+                >
+              </button>
+            </th>
+            <th scope="col" data-sort="author">
+              <button class="sort-button" type="button">
+                <span data-sort-label>Author</span>
+                <span class="sort-indicator" aria-hidden="true"
+                  >unfold_more</span
+                >
+              </button>
+            </th>
+            <th scope="col" data-sort="publisher">
+              <button class="sort-button" type="button">
+                <span data-sort-label>Publisher</span>
+                <span class="sort-indicator" aria-hidden="true"
+                  >unfold_more</span
+                >
+              </button>
+            </th>
+            <th scope="col" data-sort="category">
+              <button class="sort-button" type="button">
+                <span data-sort-label>Category</span>
+                <span class="sort-indicator" aria-hidden="true"
+                  >unfold_more</span
+                >
+              </button>
+            </th>
+            <th scope="col" data-sort="shelf_location">
+              <button class="sort-button" type="button">
+                <span data-sort-label>Location</span>
+                <span class="sort-indicator" aria-hidden="true"
+                  >unfold_more</span
+                >
+              </button>
+            </th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </template>
+    <template id="book-row-template">
+      <tr class="book-row">
+        <td>
+          <div class="book-cover list-cover" aria-hidden="true">
+            <div class="book-cover-fallback"></div>
+          </div>
+          <button class="book-title-button" type="button">Book title</button>
+          <div class="duplicate-reason" hidden></div>
+        </td>
+        <td data-book="author"></td>
+        <td data-book="publisher"></td>
+        <td data-book="category"></td>
+        <td data-book="shelf_location"></td>
+        <td class="list-actions">
+          <button
+            class="secondary icon-button"
+            type="button"
+            data-edit-book
+            title="Edit details"
+            aria-label="Edit details"
+          >
+            <span class="material-symbol" aria-hidden="true">edit</span>
+          </button>
+        </td>
+      </tr>
+    </template>
+    <template id="book-card-template">
+      <article class="book">
+        <div class="book-content">
+          <div class="book-cover card-cover" aria-hidden="true">
+            <div class="book-cover-fallback"></div>
+          </div>
+          <div class="book-details">
+            <h3>
+              <button class="book-title-button" type="button">
+                Book title
+              </button>
+            </h3>
+            <p data-book="author"></p>
+            <p data-book="series"></p>
+            <p data-book="shelf_location"></p>
+            <p class="duplicate-reason" hidden></p>
+          </div>
+        </div>
+        <p class="hint" hidden>
+          This book needs an ID before it can be edited.
+        </p>
+        <div class="book-actions">
+          <button
+            class="secondary book-edit"
+            type="button"
+            data-edit-book
+            title="Edit details"
+            aria-label="Edit details"
+          >
+            <span class="material-symbol" aria-hidden="true">edit</span>
+          </button>
+        </div>
+      </article>
+    </template>
+    <template id="scan-book-template">
+      <button class="scan-book quiet-button" type="button">
+        <span class="book-cover" aria-hidden="true">
+          <span class="book-cover-fallback"></span>
+        </span>
+        <span class="scan-book-label">
+          <strong>Book title</strong>
+          <span data-book="author"></span>
+        </span>
+      </button>
+    </template>
+    <template id="check-result-template">
+      <h2 id="check-result-title" class="page-title" tabindex="-1">
+        Check a book
+      </h2>
+      <p class="page-subtitle"></p>
+      <p class="scanned-isbn" hidden></p>
+    </template>
+    <template id="check-actions-template">
+      <div class="check-result-actions">
+        <button class="check-primary" data-add-edition type="button" hidden>
+          Add book
+        </button>
+        <button data-scan-again type="button">Scan another</button>
+      </div>
+    </template>
+    <template id="owned-editions-template">
+      <div class="owned-editions"><h3>Editions you own</h3></div>
+    </template>
+    <template id="owned-edition-template">
+      <div class="owned-edition">
+        <button class="owned-book quiet-button" type="button">
+          <span class="book-cover" aria-hidden="true">
+            <span class="book-cover-fallback"></span>
+          </span>
+          <span>
+            <strong>Book title</strong>
+            <small data-book="author"></small>
+            <small data-book="edition"></small>
+          </span>
+        </button>
+        <p class="owned-shelf"></p>
+      </div>
+    </template>
+    <template id="book-detail-row-template">
+      <div class="book-detail-row">
+        <dt></dt>
+        <dd></dd>
+      </div>
+    </template>
+    <template id="lookup-suggestion-template">
+      <div class="lookup-suggestion">
+        <p></p>
+        <p class="lookup-source"></p>
+        <button class="secondary" type="button">Use suggestion</button>
+      </div>
+    </template>
+    <template id="upgrade-item-template">
+      <li></li>
     </template>
     <main id="app-page">
       <div id="pull-refresh" aria-hidden="true" hidden>

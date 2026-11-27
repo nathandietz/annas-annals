@@ -1,5 +1,7 @@
 #!/bin/bash
 
+cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
+
 python3 -m http.server 8000 &
 SERVER_PID=$!
 

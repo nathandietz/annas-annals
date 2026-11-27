@@ -1,12 +1,13 @@
 'use strict';
 (() => {
   const $ = id => document.getElementById(id);
+  const cloneTemplate = name => $(name + '-template').content.cloneNode(true);
   const searchBars = [
     ['library-search', 'search', 'add', 'library-search-clear'],
     ['check-search', 'scan-search', 'check-add', 'check-search-clear']
   ];
   for (const [container, inputId, buttonId, clearId] of searchBars) {
-    const controls = $('catalog-search-template').content.cloneNode(true);
+    const controls = cloneTemplate('catalog-search');
     controls.querySelector('input').id = inputId;
     controls.querySelector('.catalog-add').id = buttonId;
     controls.querySelector('.search-clear').id = clearId;
@@ -311,61 +312,67 @@
     });
     const container = $('books'); container.replaceChildren(); container.className = 'books view-' + layout;
     for (const mode of ['card', 'list']) $('view-' + mode).setAttribute('aria-pressed', String(viewMode === mode));
-    let listBody;
-    if (layout === 'list') {
-      const table = document.createElement('table'); table.className = 'catalog-table';
-      const head = document.createElement('thead'), row = document.createElement('tr');
-      for (const [label, field] of [['Title','title'], ['Author','author'], ['Publisher','publisher'], ['Category','category'], ['Location','shelf_location'], ['Actions','']]) {
-        const cell = document.createElement('th'); cell.scope = 'col';
-        if (!field) cell.textContent = label;
-        else {
-          if (sortField === field) cell.setAttribute('aria-sort', sortDirection === 1 ? 'ascending' : 'descending');
-          const button = document.createElement('button'); button.type = 'button'; button.className = 'sort-button';
-          button.textContent = label;
-          const indicator = document.createElement('span'); indicator.className = 'sort-indicator' + (sortField === field ? (sortDirection === 1 ? ' ascending' : ' descending') : ''); indicator.setAttribute('aria-hidden', 'true');
-          indicator.textContent = 'unfold_more'; button.append(indicator);
-          button.setAttribute('aria-label', 'Sort by ' + label + (sortField === field && sortDirection === 1 ? ', descending' : ', ascending'));
-          button.addEventListener('click', () => { sortDirection = sortField === field ? -sortDirection : 1; sortField = field; render(); });
-          cell.append(button);
+    const list = layout === 'list';
+    let entries = container;
+    if (list) {
+      const table = cloneTemplate('catalog-table').firstElementChild;
+      for (const cell of table.querySelectorAll('[data-sort]')) {
+        const field = cell.getAttribute('data-sort');
+        const button = cell.querySelector('button');
+        const label = button.querySelector('[data-sort-label]').textContent;
+        const active = sortField === field;
+        if (active) {
+          const direction = sortDirection === 1 ? 'ascending' : 'descending';
+          cell.setAttribute('aria-sort', direction);
+          button.querySelector('.sort-indicator').classList.add(direction);
         }
-        row.append(cell);
+        button.setAttribute('aria-label', 'Sort by ' + label + (active && sortDirection === 1 ? ', descending' : ', ascending'));
+        button.addEventListener('click', () => {
+          sortDirection = sortField === field ? -sortDirection : 1;
+          sortField = field;
+          render();
+        });
       }
-      head.append(row); table.append(head); listBody = document.createElement('tbody'); table.append(listBody); container.append(table);
+      entries = table.querySelector('tbody');
+      container.append(table);
     }
     for (const book of filtered) {
-      if (layout === 'list') {
-        const row = document.createElement('tr'); row.className = 'book-row'; row.addEventListener('click', () => showDetails(book));
-        for (const [index, value] of [book.title, book.author, book.publisher, book.category, book.shelf_location].entries()) {
-          const cell = document.createElement('td');
-          if (index === 0) { cell.append(makeBookCover('list-cover')); const title = document.createElement('button'); title.type = 'button'; title.className = 'book-title-button'; title.textContent = value; title.addEventListener('click', event => { event.stopPropagation(); showDetails(book); }); cell.append(title); }
-          else cell.textContent = value || '—';
-          if (index === 0 && duplicatesMode) { const reason = document.createElement('div'); reason.className = 'duplicate-reason'; reason.textContent = duplicateReasons.get(book).join(' · '); cell.append(reason); }
-          row.append(cell);
-        }
-        const actions = document.createElement('td'); actions.className = 'list-actions';
-        const edit = document.createElement('button'); edit.hidden = !canEdit; edit.type = 'button'; edit.className = 'secondary' + (book.id ? ' icon-button' : ''); edit.title = book.id ? 'Edit details' : 'Assign ID'; edit.setAttribute('aria-label', (book.id ? 'Edit ' : 'Assign ID to ') + book.title);
-        if (book.id) { const icon = document.createElement('span'); icon.className = 'material-symbol'; icon.textContent = 'edit'; icon.setAttribute('aria-hidden', 'true'); edit.append(icon); } else edit.textContent = 'Assign ID';
-        edit.addEventListener('click', event => { event.stopPropagation(); if (book.id) openEditor(book); else assignBookId(book, edit); }); actions.append(edit);
-        row.append(actions); listBody.append(row); continue;
+      const entry = cloneTemplate(list ? 'book-row' : 'book-card').firstElementChild;
+      entry.querySelector('.book-cover').hidden = !showFallbackCovers;
+      entry.addEventListener('click', () => showDetails(book));
+      const title = entry.querySelector('.book-title-button');
+      title.textContent = book.title;
+      if (!list) entry.querySelector('h3').hidden = !book.title;
+      title.addEventListener('click', event => {
+        event.stopPropagation();
+        showDetails(book);
+      });
+      const series = [book.series_name, book.volume_number ? 'Vol. ' + book.volume_number : ''].filter(Boolean).join(' · ');
+      for (const slot of entry.querySelectorAll('[data-book]')) {
+        const field = slot.getAttribute('data-book');
+        const value = field === 'series' ? series : book[field];
+        slot.textContent = value || (list ? '—' : '');
+        slot.hidden = !list && !value;
       }
-      const card = document.createElement('article'); card.className = 'book'; card.addEventListener('click', () => showDetails(book));
-      const content = document.createElement('div'); content.className = 'book-content';
-      content.append(makeBookCover('card-cover'));
-      const details = document.createElement('div'); details.className = 'book-details';
-      for (const [tag, value] of [['h3', book.title], ['p', book.author], ['p', [book.series_name, book.volume_number ? 'Vol. ' + book.volume_number : ''].filter(Boolean).join(' · ')], ['p', book.shelf_location]]) {
-        if (value) { const el = document.createElement(tag); if (tag === 'h3') { const title = document.createElement('button'); title.type = 'button'; title.className = 'book-title-button'; title.textContent = value; title.addEventListener('click', event => { event.stopPropagation(); showDetails(book); }); el.append(title); } else el.textContent = value; details.append(el); }
-      }
-      if (duplicatesMode) { const reason = document.createElement('p'); reason.className = 'duplicate-reason'; reason.textContent = duplicateReasons.get(book).join(' · '); details.append(reason); }
-      content.append(details); card.append(content);
-      const actions = document.createElement('div'); actions.className = 'book-actions';
-      const edit = document.createElement('button'); edit.hidden = !canEdit; edit.type = 'button'; edit.className = 'secondary book-edit'; edit.title = 'Edit details'; edit.setAttribute('aria-label', 'Edit ' + book.title);
+      const reason = entry.querySelector('.duplicate-reason');
+      reason.hidden = !duplicatesMode;
+      if (duplicatesMode) reason.textContent = duplicateReasons.get(book).join(' · ');
+
+      const edit = entry.querySelector('[data-edit-book]');
+      edit.hidden = !canEdit;
+      edit.setAttribute('aria-label', (book.id ? 'Edit ' : 'Assign ID to ') + book.title);
       if (!book.id) {
-        edit.textContent = 'Assign ID'; edit.setAttribute('aria-label', 'Assign ID to ' + book.title);
-        const hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = 'This book needs an ID before it can be edited.'; card.append(hint);
-        edit.addEventListener('click', event => { event.stopPropagation(); assignBookId(book, edit); });
-      } else { const icon = document.createElement('span'); icon.className = 'material-symbol'; icon.textContent = 'edit'; icon.setAttribute('aria-hidden', 'true'); edit.append(icon); edit.addEventListener('click', event => { event.stopPropagation(); openEditor(book); }); }
-      actions.append(edit); card.append(actions);
-      $('books').append(card);
+        edit.textContent = 'Assign ID';
+        edit.classList.remove('icon-button');
+        if (list) edit.title = 'Assign ID';
+        else entry.querySelector('.hint').hidden = false;
+      }
+      edit.addEventListener('click', event => {
+        event.stopPropagation();
+        if (book.id) openEditor(book);
+        else assignBookId(book, edit);
+      });
+      entries.append(entry);
     }
     $('count').textContent = filtered.length + (filtered.length === 1 ? ' book' : ' books');
     const empty = $('library-empty');
@@ -374,16 +381,6 @@
     renderScanBooks();
   }
 
-  function makeBookCover(sizeClass = '') {
-    const cover = document.createElement('div');
-    cover.className = sizeClass ? 'book-cover ' + sizeClass : 'book-cover';
-    cover.setAttribute('aria-hidden', 'true');
-    cover.hidden = !showFallbackCovers;
-    const fallback = document.createElement('div');
-    fallback.className = 'book-cover-fallback';
-    cover.append(fallback);
-    return cover;
-  }
   $('show-fallback-covers').addEventListener('change', () => {
     showFallbackCovers = $('show-fallback-covers').checked;
     try { localStorage.setItem(fallbackCoverStorageKey, String(showFallbackCovers)); } catch {}
@@ -478,12 +475,10 @@
       ? filtered.length + (filtered.length === 1 ? ' book found' : ' books found')
       : 'No books match your search. Try a different title or author.';
     for (const book of filtered) {
-      const button = document.createElement('button'); button.type = 'button'; button.className = 'scan-book quiet-button';
-      const details = document.createElement('span');
-      const title = document.createElement('strong'); title.textContent = book.title;
-      const author = document.createElement('span'); author.textContent = book.author || 'Unknown author';
-      details.append(title, author);
-      button.append(makeBookCover(), details);
+      const button = cloneTemplate('scan-book').firstElementChild;
+      button.querySelector('.book-cover').hidden = !showFallbackCovers;
+      button.querySelector('strong').textContent = book.title;
+      button.querySelector('[data-book="author"]').textContent = book.author || 'Unknown author';
       button.addEventListener('click', () => showDetails(book));
       container.append(button);
     }
@@ -650,34 +645,21 @@
   }
   function showOwnedEditions(result, matchingBooks) {
     if (!matchingBooks.length) return;
-    const editions = document.createElement('div');
-    editions.className = 'owned-editions';
-    const label = document.createElement('h3');
-    label.textContent = matchingBooks.length === 1 ? 'Edition you own' : 'Editions you own';
-    editions.append(label);
+    const editions = cloneTemplate('owned-editions').firstElementChild;
+    editions.querySelector('h3').textContent = matchingBooks.length === 1 ? 'Edition you own' : 'Editions you own';
     for (const book of matchingBooks) {
-      const edition = document.createElement('div');
-      edition.className = 'owned-edition';
-      const link = document.createElement('button');
-      link.type = 'button';
-      link.className = 'owned-book quiet-button';
+      const edition = cloneTemplate('owned-edition').firstElementChild;
+      const link = edition.querySelector('.owned-book');
       link.addEventListener('click', () => showDetails(book));
-      link.append(makeBookCover());
-      const details = document.createElement('span');
-      const title = document.createElement('strong');
-      title.textContent = book.title;
-      details.append(title);
-      for (const text of [book.author, [book.publisher, book.publication_year, book.isbn && 'ISBN ' + book.isbn].filter(Boolean).join(' · ')]) {
-        if (!text) continue;
-        const metadata = document.createElement('small');
-        metadata.textContent = text;
-        details.append(metadata);
-      }
-      link.append(details);
-      const shelf = document.createElement('p');
-      shelf.className = 'owned-shelf';
-      shelf.textContent = book.shelf_location.trim() || 'Shelf location not recorded';
-      edition.append(link, shelf);
+      link.querySelector('.book-cover').hidden = !showFallbackCovers;
+      link.querySelector('strong').textContent = book.title;
+      const author = link.querySelector('[data-book="author"]');
+      author.textContent = book.author;
+      author.hidden = !book.author;
+      const metadata = link.querySelector('[data-book="edition"]');
+      metadata.textContent = [book.publisher, book.publication_year, book.isbn && 'ISBN ' + book.isbn].filter(Boolean).join(' · ');
+      metadata.hidden = !metadata.textContent;
+      edition.querySelector('.owned-shelf').textContent = book.shelf_location.trim() || 'Shelf location not recorded';
       editions.append(edition);
     }
     result.append(editions);
@@ -687,16 +669,10 @@
     const sequence = ++checkSequence;
     const isbn = normalizeIsbn(value);
     const result = $('check-result');
-    const heading = document.createElement('h2');
-    heading.id = 'check-result-title';
-    heading.className = 'page-title';
-    heading.setAttribute('tabindex', '-1');
+    const [heading, detail, scanned] = cloneTemplate('check-result').children;
     result.setAttribute('aria-labelledby', heading.id);
-    const detail = document.createElement('p');
-    detail.className = 'page-subtitle';
     resultActions = undefined;
-    result.replaceChildren();
-    result.append(heading, detail);
+    result.replaceChildren(heading, detail, scanned);
     showIsbnForm(false);
     showCheckResult(true);
     window.scrollTo?.(0, 0);
@@ -725,19 +701,13 @@
       none: [metadata?.title, metadata?.author].filter(Boolean).join(' · '),
       unknown: 'Try searching by title or author to check your library.'
     }[match.kind];
-    const scanned = document.createElement('p');
-    scanned.className = 'scanned-isbn';
     scanned.textContent = 'Scanned ISBN ' + isbn;
-    result.append(scanned);
+    scanned.hidden = false;
     showOwnedEditions(result, match.books);
 
-    const actions = document.createElement('div');
-    actions.className = 'check-result-actions';
-    let add;
-    if (match.kind !== 'exact') {
-      add = document.createElement('button');
-      add.type = 'button';
-      add.className = 'check-primary';
+    const actions = cloneTemplate('check-actions').firstElementChild;
+    const add = match.kind === 'exact' ? undefined : actions.querySelector('[data-add-edition]');
+    if (add) {
       add.textContent = match.kind === 'possible' ? 'Add this edition anyway' : 'Add book';
       add.addEventListener('click', () => {
         if (!canEdit) return;
@@ -747,17 +717,13 @@
         if (metadata) for (const [key, value] of Object.entries(metadata)) if (value) form.elements[key].value = value;
         if (bookData) enrichScannedBook(bookData, editorGeneration, isbn);
       });
-      actions.append(add);
     }
-    const again = document.createElement('button');
-    again.type = 'button';
-    again.textContent = 'Scan another';
+    const again = actions.querySelector('[data-scan-again]');
     again.addEventListener('click', () => {
       returnToCheck();
       startCheckScanner();
       $('scan-start').focus?.();
     });
-    actions.append(again);
     resultActions = { add, again };
     updateCheckActions();
     result.append(actions);
@@ -904,7 +870,7 @@
     } finally { creatingLibrary = false; }
   }
   function connect(mode = 'connect', libraryName = '') {
-    if (!config.clientId || !config.apiKey || !config.appId) { status('Setup needed: add the Google Cloud identifiers to config.js. See the setup guide.'); return; }
+    if (!config.clientId || !config.apiKey || !config.appId) { status('Setup needed: add the Google Cloud identifiers to assets/js/config.js. See the setup guide.'); return; }
     if (!window.google?.accounts?.oauth2 || !window.gapi) { status('Google sign-in is still loading. Please try again.'); return; }
     const client = google.accounts.oauth2.initTokenClient({ client_id: config.clientId, scope, callback: async response => {
       if (response.error) { status('Google authorization was not completed: ' + response.error); return; }
@@ -989,12 +955,16 @@
   $('upgrade-library').addEventListener('click', () => {
     if (busy || !libraryWidth || !needsUpdate()) return;
     const labels = { publisher: 'Publisher', publication_year: 'Publication year', shelf_location: 'Shelf location', category: 'Category', description: 'Description', series_name: 'Series name', volume_number: 'Volume number', pages: 'Pages', updated_at: 'Updated at' };
-    const list = $('upgrade-columns'); list.replaceChildren();
-    missingHeaders().forEach(key => {
-      const item = document.createElement('li'); item.textContent = 'Add ' + (labels[key] || key); list.append(item);
-    });
-    if (!headerFrozen) { const item = document.createElement('li'); item.textContent = 'Freeze the header row.'; list.append(item); }
-    if (JSON.stringify(sheetHeaders) !== JSON.stringify(desiredOrder(sheetHeaders)) || missingHeaders().length) { const item = document.createElement('li'); item.textContent = 'Reorder library columns into the standard layout; custom columns follow.'; list.append(item); }
+    const changes = missingHeaders().map(key => 'Add ' + (labels[key] || key));
+    if (!headerFrozen) changes.push('Freeze the header row.');
+    if (JSON.stringify(sheetHeaders) !== JSON.stringify(desiredOrder(sheetHeaders)) || missingHeaders().length) changes.push('Reorder library columns into the standard layout; custom columns follow.');
+    const list = $('upgrade-columns');
+    list.replaceChildren();
+    for (const change of changes) {
+      const item = cloneTemplate('upgrade-item').firstElementChild;
+      item.textContent = change;
+      list.append(item);
+    }
     $('upgrade-dialog').showModal();
   });
   $('cancel-upgrade').addEventListener('click', () => $('upgrade-dialog').close());
@@ -1125,10 +1095,10 @@
         if (key === 'language' && /^[a-z]{2,3}$/i.test(text) && Intl.DisplayNames) {
           text = new Intl.DisplayNames('en', { type: 'language', fallback: 'none' }).of(text) || text;
         }
-        const row = document.createElement('div'), term = document.createElement('dt'), detail = document.createElement('dd');
-        row.className = 'book-detail-row';
-        term.textContent = label; detail.textContent = text;
-        row.append(term, detail); list.append(row);
+        const row = cloneTemplate('book-detail-row').firstElementChild;
+        row.querySelector('dt').textContent = label;
+        row.querySelector('dd').textContent = text;
+        list.append(row);
         hasValues = true;
       }
       $('book-' + section + '-section').hidden = !hasValues;
@@ -1318,12 +1288,13 @@
         if (!current) continue;
         if (form.elements[key].value.trim() === value) continue;
         alternatives++;
-        const item = document.createElement('div'); item.className = 'lookup-suggestion';
-        const description = document.createElement('p'); description.textContent = label + ': ' + value;
-        const source = document.createElement('p'); source.className = 'lookup-source'; source.textContent = 'Source: ' + fieldSources[key];
-        const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary'; button.textContent = 'Use this ' + label.toLowerCase();
+        const item = cloneTemplate('lookup-suggestion').firstElementChild;
+        item.querySelector('p').textContent = label + ': ' + value;
+        item.querySelector('.lookup-source').textContent = 'Source: ' + fieldSources[key];
+        const button = item.querySelector('button');
+        button.textContent = 'Use this ' + label.toLowerCase();
         button.addEventListener('click', () => { form.elements[key].value = value; item.remove(); });
-        item.append(description); item.append(source); item.append(button); suggestions.append(item);
+        suggestions.append(item);
       }
       resultStatus.textContent = filled ? 'Filled ' + filled + (filled === 1 ? ' empty field.' : ' empty fields.') + ' Review the details and save.' : 'No empty fields were filled. Review the details and save.';
       if (alternatives) resultStatus.textContent += ' The lookup also suggested alternatives below.';

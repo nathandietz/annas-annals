@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { findDuplicateGroups } = require('../duplicates.js');
-const { normalizeIsbn } = require('../isbn.js');
+const { findDuplicateGroups } = require('../assets/js/duplicates.js');
+const { normalizeIsbn } = require('../assets/js/isbn.js');
 test('groups equivalent ISBNs and matching titles with authors', () => {
   const books = [{ title: 'Book', author: 'Writer', isbn: '0-306-40615-2' }, { title: ' book ', author: 'WRITER', isbn: '9780306406157' }];
   const groups = findDuplicateGroups(books, normalizeIsbn);

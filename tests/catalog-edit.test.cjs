@@ -1,10 +1,12 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const path = require('node:path');
 const vm = require('node:vm');
-const { findDuplicateGroups } = require('../duplicates.js');
-const { normalizeIsbn } = require('../isbn.js');
-const { matchBook } = require('../book-match.js');
+const { installTemplates } = require('./helpers/templates.cjs');
+const { findDuplicateGroups } = require('../assets/js/duplicates.js');
+const { normalizeIsbn } = require('../assets/js/isbn.js');
+const { matchBook } = require('../assets/js/book-match.js');
 
 async function fixture({ initialRow, legacy = false, extraData = false, nine = false, reordered = false, deferLookup = false, bookData = null, editionData = null, workData = null, googleData = null, googleFails = false } = {}) {
   let scanTimer, resolveLookup;
@@ -16,13 +18,13 @@ async function fixture({ initialRow, legacy = false, extraData = false, nine = f
   const addedRows = [];
   let row = initialRow || ['id-1', '9780306406157', 'Original', 'Author', '', '', '2026-01-01', ...(extraData ? ['occupied'] : [])];
   if (reordered) { [headers[0], headers[2]] = [headers[2], headers[0]]; [row[0], row[2]] = [row[2], row[0]]; }
-  function element(id) { return elements[id] ||= { hidden: false, value: '', textContent: '', disabled: false, classList: { toggle() {}, add() {}, remove() {} }, children: [], addEventListener(type, fn) { handlers[id + ':' + type] = fn; this['on' + type] = fn; }, replaceChildren() { this.children = []; }, append(...children) { this.children.push(...children); }, setAttribute() {}, removeAttribute() {}, showModal() { this.open = true; }, close() { this.open = false; }, reset() {} }; }
+  function element(id) { return elements[id] ||= { hidden: false, value: '', textContent: '', disabled: false, classList: { toggle() {}, add() {}, remove() {} }, children: [], addEventListener(type, fn) { handlers[id + ':' + type] = fn; this['on' + type] = fn; }, replaceChildren(...children) { this.children = []; this.append(...children); }, append(...children) { for (const child of children) child.parent = this; this.children.push(...children); }, setAttribute() {}, removeAttribute() {}, showModal() { this.open = true; }, close() { this.open = false; }, reset() {} }; }
   const form = element('book-form'); form.elements = Object.fromEntries(['isbn','title','author','language','notes','publisher','publication_year','shelf_location','category','description','series_name','volume_number','pages'].map(k => [k, { value: '' }]));
-  element('catalog-search-template').content = { cloneNode: () => ({ querySelector: () => ({}) }) };
+  installTemplates(element);
   const localStorage = { getItem: key => key === 'annas-annals-show-covers' ? 'true' : key === 'annas-annals-sheet-id' ? 'sheet-id' : key === 'annas-annals-google-session' ? JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }) : null, setItem() {}, removeItem() {} };
   const sessionStorage = { getItem: () => JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }), setItem() {}, removeItem() {} };
   const context = vm.createContext({ document: { getElementById: element, createElement: tag => element('created-' + tag + '-' + Math.random()) }, window: { LIBRARY_CONFIG: {apiKey:'test-key'}, confirm: () => true, addEventListener() {} }, localStorage, sessionStorage, createLibraryScanner: () => ({ stop: async () => {} }), normalizeIsbn, matchBook, findDuplicateGroups, setTimeout: (fn, delay) => { if (delay === 400) scanTimer = fn; if (delay === 1000) queueMicrotask(fn); return 1; }, clearTimeout: () => {}, crypto: { randomUUID: () => 'new-id' }, fetch: async (url, options) => { requests.push({ url, options }); if (googleFails && url.includes('googleapis.com/books/')) throw new Error('unavailable'); if (deferLookup && url.includes('openlibrary.org')) return lookupWait; if (url.includes(':append') && options?.body) addedRows.push(JSON.parse(options.body).values[0]); return { ok: true, json: async () => url.includes('googleapis.com/books/') ? {items:googleData ? [{volumeInfo:googleData}] : []} : url.includes('openlibrary.org/api/books') ? { 'ISBN:9780140328721': bookData } : url.includes('openlibrary.org/books/') ? editionData : url.includes('openlibrary.org/works/') ? workData : url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: true } } : url.includes('fields=properties') ? { properties: { title: 'Library' }, sheets: [{ properties: { title: 'Books', gridProperties: { frozenRowCount: 1 } } }] } : url.includes('fields=sheets') ? { sheets: [{ properties: { title: 'Books', sheetId: 0 } }] } : { values: [headers, row, ...addedRows] } }; }, console });
-  vm.runInContext(fs.readFileSync('app.js', 'utf8'), context);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/js/app.js'), 'utf8'), context);
   await new Promise(resolve => setImmediate(resolve));
   const card = element('books').children[0];
   const edit = card.children.find(child => child.className === 'book-actions').children.find(child => child.className.includes('book-edit'));
@@ -118,11 +120,30 @@ test('cards show identification and shelf information while details retain the o
     initialRow: ['id-1','9780306406157','Original','Author','English','Notes','2026-01-01','Publisher','1991','Top shelf','Fiction','Description','Series','2','240','2026-01-01']
   });
   const details = f.element('books').children[0].children[0].children.find(child => child.className === 'book-details');
-  assert.deepEqual(details.children.map(child => child.children[0]?.textContent || child.textContent), ['Original','Author','Series · Vol. 2','Top shelf']);
+  assert.deepEqual(details.children.filter(child => !child.hidden).map(child => child.textContent), ['Original','Author','Series · Vol. 2','Top shelf']);
   f.element('books').children[0].onclick();
   assert.equal(f.form.elements.publisher.value, 'Publisher');
   assert.equal(f.form.elements.category.value, 'Fiction');
   assert.equal(f.form.elements.pages.value, '240');
+});
+
+test('catalog list binds HTML template fields, sort controls, and literal titles', async () => {
+  const title = '<em>Original</em>';
+  const f = await fixture({ initialRow: ['id-1', '9780306406157', title, 'Author'] });
+  f.handlers['view-list:click']();
+
+  const table = () => f.element('books').children[0];
+  const titleHeader = () => table().querySelector('[data-sort]');
+  const row = () => table().querySelector('tbody').children[0];
+  assert.equal(row().querySelector('.book-title-button').textContent, title);
+  assert.equal(row().querySelector('.book-title-button').children.length, 0);
+  assert.equal(row().querySelector('[data-book="publisher"]').textContent, '—');
+  titleHeader().querySelector('button').onclick();
+  assert.equal(titleHeader().getAttribute('aria-sort'), 'ascending');
+  titleHeader().querySelector('button').onclick();
+  assert.equal(titleHeader().getAttribute('aria-sort'), 'descending');
+  row().querySelector('.book-title-button').onclick({ stopPropagation() {} });
+  assert.equal(f.element('book-details-title').textContent, title);
 });
 
 test('book details use a Library label and readable language without changing the saved language code', async () => {

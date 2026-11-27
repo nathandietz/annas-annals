@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseCsv, formatCsv } = require('../csv.js');
+const { parseCsv, formatCsv } = require('../assets/js/csv.js');
 test('CSV round trips quotes, commas, Unicode, and multiline fields', () => {
   const rows = [['title', 'notes'], ['A, B', 'He said "hello"\nnext line'], ['മലയാളം', '']];
   assert.deepEqual(parseCsv(formatCsv(rows)), rows);

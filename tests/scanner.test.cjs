@@ -31,7 +31,7 @@ function fixture(behavior = {}) {
       }
     }
   });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../scanner.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/js/scanner.js'), 'utf8'), context);
   return { scanner: context.createLibraryScanner(), instances, context, formats, timers };
 }
 

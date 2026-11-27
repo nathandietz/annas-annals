@@ -2,7 +2,7 @@
   "name": "annas-annals",
   "private": true,
   "scripts": {
-    "markup": "prettier --write \"*.html\" \"*.css\" && html-validate \"*.html\" && stylelint \"*.css\""
+    "markup": "prettier --write \"*.html\" \"assets/css/**/*.css\" && html-validate \"*.html\" && stylelint \"assets/css/**/*.css\""
   },
   "devDependencies": {
     "html-validate": "9.7.2",

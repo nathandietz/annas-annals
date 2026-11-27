@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizeIsbn } = require('../isbn.js');
+const { normalizeIsbn } = require('../assets/js/isbn.js');
 test('normalizes ISBN-10 and ISBN-13 to the same ISBN-13', () => {
   assert.equal(normalizeIsbn('0-306-40615-2'), '9780306406157');
   assert.equal(normalizeIsbn('978-0-306-40615-7'), '9780306406157');

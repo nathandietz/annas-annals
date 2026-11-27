@@ -1580,12 +1580,12 @@ button.scan-book {
 .owned-book strong,
 .owned-book small,
 .scan-book strong,
-.scan-book > span {
+.scan-book-label {
   display: block;
 }
 
 .owned-book small,
-.scan-book > span {
+.scan-book-label {
   color: var(--muted);
   margin-top: 4px;
   font-size: 13px;
@@ -1628,11 +1628,11 @@ button.scan-book {
   border-bottom: 1px solid var(--separator);
 }
 
-.scan-book > span {
+.scan-book-label {
   margin: 0;
 }
 
-.scan-book > span > strong {
+.scan-book-label > strong {
   color: var(--ink);
   font-size: 16px;
 }

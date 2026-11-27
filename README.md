@@ -100,7 +100,7 @@ While the OAuth app is in **Testing**, the test-user list controls who can conne
     | `clientId` | [Google Auth Platform → Clients](https://console.cloud.google.com/auth/clients). Open `Anna’s Annals OAuth Client` and copy the **Client ID** ending in `.apps.googleusercontent.com`. |
     | `apiKey` | [APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials). Under **API Keys**, find `Anna’s Annals API Key` and click `Show key` to copy it. |
     | `appId` | [Google Cloud → Project dashboard](https://console.cloud.google.com/home/dashboard). Under **Project info**, copy the numeric **Project number**. | 
-2. Open Anna’s Annals [`config.js`](./config.js), paste in your values, and save. 
+2. Open Anna’s Annals [`assets/js/config.js`](./assets/js/config.js), paste in your values, and save.
    ```js
    window.LIBRARY_CONFIG = {
      clientId: 'YOUR_WEB_CLIENT_ID',
@@ -127,9 +127,16 @@ While the OAuth app is in **Testing**, the test-user list controls who can conne
    ```
 4. Open [http://localhost:8000](http://localhost:8000), connect with Google, and select a Sheet. Stop the server with `Ctrl+C`.
 
-Save code changes and reload locally; changes reach GitHub Pages only after committing and pushing. Run scanner checks with `node --test tests/*.test.cjs`. 
+Save code changes and reload locally; changes reach GitHub Pages only after committing and pushing. Run `npm ci` to install the development tools, then run the test suite with `node --test tests/*.test.cjs`.
 
 Make sure to use the exact hostname and port above. `127.0.0.1` is a different OAuth origin.
+
+## Repository layout
+
+- The root HTML pages, manifest, and service worker are the GitHub Pages entry points.
+- [`assets/`](./assets/) contains browser scripts, styles, and icons.
+- [`tests/`](./tests/) contains Node tests and CSV fixtures. [`scripts/dev.sh`](./scripts/dev.sh) starts the local server with Tailscale.
+- [`docs/`](./docs/) contains the [backlog](./docs/TODO.md) and [exploration plan](./docs/EXPLORATION_PLAN.md).
 
 ## Format and lint HTML and CSS
 
@@ -140,4 +147,4 @@ After editing the HTML or CSS, run:
 npm run markup
 ```
 
-The command formats the root-level HTML and CSS files in place and then reports any lint errors.
+The command formats the root-level HTML files and CSS under `assets/css/` in place and then reports any lint errors.
