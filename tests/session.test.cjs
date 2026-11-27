@@ -84,14 +84,14 @@ test('only a standalone pull from the top refreshes the catalog', async () => {
   const browser = await openWindow(shared, 200, true);
   assert.equal(browser.handlers['window:touchmove'], undefined);
 
-  let finishMinimum, finishExit;
+  let finishHeader, finishPullExit;
   const app = await openWindow(shared, 200, true, true, {
     standalone: true,
-    refreshDelay: done => { finishMinimum = done; }
+    refreshDelay: done => { finishHeader = done; }
   });
   const indicator = app.el('pull-refresh');
-  const exitFinished = new Promise(resolve => { finishExit = resolve; });
-  indicator.getAnimations = () => indicator.classList.contains('is-exiting') ? [{ finished: exitFinished }] : [];
+  const pullExit = new Promise(resolve => { finishPullExit = resolve; });
+  indicator.getAnimations = () => [{ finished: pullExit }];
   const spokes = app.el('pull-refresh-spokes').children;
   spokes.push(...Array.from({ length: 8 }, () => ({ style: { setProperty(name, value) { this[name] = value; } } })));
   const opacities = () => spokes.map(spoke => Number(spoke.style['--spoke-opacity']));
@@ -146,24 +146,24 @@ test('only a standalone pull from the top refreshes the catalog', async () => {
   assert.equal(pull(120), false);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(app.requests.length, initialRequests + 2);
-  assert.equal(indicator.hidden, false);
-  assert.equal(indicator.classList.contains('is-refreshing'), true);
-  assert.equal(indicator.classList.contains('is-exiting'), false);
-  assert.equal(typeof finishMinimum, 'function');
-
-  finishMinimum();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(indicator.classList.contains('is-exiting'), true);
-  assert.equal(indicator.hidden, false);
-  assert.equal(app.el('status').textContent, 'Updated just now');
-
-  finishExit();
-  await new Promise(resolve => setImmediate(resolve));
   assert.equal(displacement(), 0);
+  assert.equal(indicator.hidden, false);
+  assert.equal(app.el('status').textContent, 'Refreshing Catalog');
+  assert.equal(typeof finishHeader, 'function');
+
+  finishPullExit();
+  await new Promise(resolve => setImmediate(resolve));
   assert.equal(indicator.hidden, true);
   assert.equal(indicator.classList.contains('is-armed'), false);
-  assert.equal(indicator.classList.contains('is-refreshing'), false);
-  assert.equal(indicator.classList.contains('is-exiting'), false);
+  assert.equal(app.el('status').textContent, 'Refreshing Catalog');
+  assert.equal(app.el('status').classList.contains('is-refreshing'), true);
+  assert.equal(pull(120), true);
+  assert.equal(app.requests.length, initialRequests + 2);
+
+  finishHeader();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(app.el('status').textContent, 'Updated just now');
+  assert.equal(app.el('status').classList.contains('is-refreshing'), false);
 });
 
 test('the pull threshold requests a single haptic pulse per gesture', async () => {

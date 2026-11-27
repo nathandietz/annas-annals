@@ -92,12 +92,8 @@ h2 {
   pointer-events: none;
 }
 
-#pull-refresh:not(.is-armed, .is-refreshing) path {
+#pull-refresh:not(.is-armed) path {
   opacity: var(--spoke-opacity, 0);
-}
-
-main:has(#pull-refresh.is-refreshing) #status.is-refreshing::before {
-  display: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -106,7 +102,7 @@ main:has(#pull-refresh.is-refreshing) #status.is-refreshing::before {
       linear(0, 0.15 4%, 0.35 10%, 0.63 17%, 0.83 30%, 0.93 50%, 0.97 70%, 1);
   }
 
-  #pull-refresh.is-exiting {
+  #pull-refresh.is-refreshing {
     animation: pull-spinner-exit 275ms linear both;
   }
 
@@ -118,7 +114,7 @@ main:has(#pull-refresh.is-refreshing) #status.is-refreshing::before {
     animation: pull-spinner-arm 1.2s cubic-bezier(0.27, 0, 0.18, 1) both;
   }
 
-  #pull-refresh:is(.is-armed, .is-refreshing) #pull-refresh-spokes {
+  #pull-refresh.is-armed #pull-refresh-spokes {
     transform-box: view-box;
     transform-origin: center;
     animation: catalog-spin 0.8s steps(8) infinite;
@@ -723,7 +719,7 @@ button.upgrade-button:hover {
 }
 
 @media (width <= 700px) {
-  #editor.existing-book {
+  #editor {
     width: 100%;
     max-width: none;
     height: 100%;
@@ -734,7 +730,7 @@ button.upgrade-button:hover {
     box-shadow: none;
   }
 
-  #editor.existing-book #book-form {
+  #editor #book-form {
     height: 100%;
     max-height: none;
     padding-top: env(safe-area-inset-top, 0);

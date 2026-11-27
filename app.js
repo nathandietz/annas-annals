@@ -90,9 +90,10 @@
   const compactLayout = window.matchMedia?.('(max-width: 700px)');
   let mainView = compactLayout?.matches ? 'scan' : 'library', canEdit = false, checkSequence = 0;
   try { const savedMainView = localStorage.getItem('annas-annals-main-view'); if (['scan', 'library', 'settings'].includes(savedMainView)) mainView = savedMainView; } catch {}
-  let lastCatalogUpdate = 0, showingUpdateAge = false;
+  let lastCatalogUpdate = 0, showingUpdateAge = false, pendingHeaderUpdate;
   const headerStatus = $('status');
   const status = (message, refreshing = false) => {
+    pendingHeaderUpdate = undefined;
     showingUpdateAge = false;
     headerStatus.classList.toggle('is-refreshing', refreshing);
     headerStatus.textContent = message;
@@ -101,6 +102,9 @@
     if (!showingUpdateAge || !lastCatalogUpdate) return;
     const minutes = Math.max(0, Math.floor((Date.now() - lastCatalogUpdate) / 60000));
     headerStatus.textContent = minutes === 0 ? 'Updated just now' : 'Updated ' + minutes + (minutes === 1 ? ' minute ago' : ' minutes ago');
+  }
+  function isCatalogRefreshing() {
+    return !pendingHeaderUpdate && headerStatus.classList.contains('is-refreshing');
   }
   window.setInterval?.(showUpdateAge, 60000);
   const formStatus = message => { $('form-status').textContent = message; };
@@ -168,7 +172,7 @@
     if (!response.ok) { const error = new Error(response.status === 401 ? 'Google authorization expired. Disconnect and connect again.' : (data.error?.message || 'Google Sheets request failed.')); error.status = response.status; throw error; }
     return data;
   }
-  async function refresh({ minimumIndicatorTime = 1000 } = {}) {
+  async function refresh({ minimumIndicatorTime = 1000, finishIndicatorInBackground = false } = {}) {
     status('Refreshing Catalog', true);
     const minimumRefreshTime = minimumIndicatorTime
       ? new Promise(resolve => setTimeout(resolve, minimumIndicatorTime))
@@ -177,7 +181,7 @@
     const [data, spreadsheet] = await Promise.all([
       api('/values/' + encodeURIComponent("'Books'!A:ZZ")),
       api('?fields=properties(title),sheets(properties(title,gridProperties(frozenRowCount)))')
-    ]).finally(() => minimumRefreshTime);
+    ]).finally(() => finishIndicatorInBackground ? undefined : minimumRefreshTime);
     if (sheetId !== refreshSheet || token !== refreshToken) return;
     const rows = data.values || [];
     const foundHeaders = rows[0] || [];
@@ -189,9 +193,22 @@
     setLibraryLinkLabel(title);
     const updatedAt = Date.now();
     try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title, books, updatedAt, sheetHeaders, headerFrozen })); } catch {}
-    render(); lastCatalogUpdate = updatedAt; showingUpdateAge = true;
-    headerStatus.classList.remove('is-refreshing');
-    showUpdateAge();
+    render(); lastCatalogUpdate = updatedAt;
+    function showCatalogUpdated() {
+      showingUpdateAge = true;
+      headerStatus.classList.remove('is-refreshing');
+      showUpdateAge();
+    }
+    if (finishIndicatorInBackground && minimumRefreshTime) {
+      pendingHeaderUpdate = minimumRefreshTime;
+      minimumRefreshTime.then(() => {
+        if (pendingHeaderUpdate !== minimumRefreshTime) return;
+        pendingHeaderUpdate = undefined;
+        showCatalogUpdated();
+      });
+    } else {
+      showCatalogUpdated();
+    }
   }
   if (window.navigator?.standalone || window.matchMedia?.('(display-mode: standalone)')?.matches) {
     enablePullToRefresh();
@@ -218,7 +235,7 @@
 
     window.addEventListener('touchstart', event => {
       resetPull();
-      if (!sheetId || busy || refreshing || headerStatus.classList.contains('is-refreshing') ||
+      if (!sheetId || busy || refreshing || isCatalogRefreshing() ||
           window.scrollY > 0 || event.touches.length !== 1 ||
           event.target.closest?.('dialog, input, textarea, select, [contenteditable], .mode-toggle')) return;
       origin = event.touches[0];
@@ -260,7 +277,7 @@
 
     window.addEventListener('touchend', async event => {
       if (!origin || event.changedTouches[0]?.identifier !== origin.identifier) return;
-      if (distance < refreshThreshold || !sheetId || busy || headerStatus.classList.contains('is-refreshing')) {
+      if (distance < refreshThreshold || !sheetId || busy || isCatalogRefreshing()) {
         resetPull();
         return;
       }
@@ -268,15 +285,13 @@
       resetPull();
       page.style.setProperty('--pull-distance', '0px');
       indicator.classList.add('is-refreshing');
+      const spinnerExit = indicator.getAnimations?.()[0]?.finished;
       try {
-        await refresh();
+        await refresh({ finishIndicatorInBackground: true });
       } catch (error) {
         if (sheetId) status('Catalog refresh failed: ' + message(error));
       } finally {
-        indicator.classList.add('is-exiting');
-        const spinnerExit = indicator.getAnimations?.()[0]?.finished;
         await spinnerExit?.catch(() => {});
-        indicator.classList.remove('is-exiting');
         indicator.classList.remove('is-refreshing');
         refreshing = false;
         resetPull();
@@ -1259,7 +1274,6 @@
     resetDelete();
     editMode = editable;
     const editor = $('editor');
-    editor.classList.toggle('existing-book', Boolean(editingBook));
     editor.classList.toggle('view-mode', !editable);
     $('editor-title').classList.toggle('visually-hidden', !editable);
     $('editor-title').textContent = editingBook ? (editable ? 'Edit book' : 'Book details') : 'Add a book';
