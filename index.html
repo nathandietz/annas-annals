@@ -18,7 +18,7 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_upward,barcode_scanner,book_2,edit,expand_less,expand_more,search,settings,unfold_more&display=block"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="style.css?v=book-details-2" />
+    <link rel="stylesheet" href="style.css?v=book-covers-4" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
     <script
@@ -31,7 +31,7 @@
     <script src="duplicates.js?v=017c5b1b32ae" defer></script>
     <script src="csv.js?v=017c5b1b32ae" defer></script>
     <script src="config.js?v=017c5b1b32ae" defer></script>
-    <script src="app.js?v=book-details-2" defer></script>
+    <script src="app.js?v=book-covers-4" defer></script>
   </head>
   <body>
     <main id="app-page">
@@ -296,9 +296,19 @@
         </section>
         <section class="settings-group" aria-labelledby="covers-title">
           <h3 id="covers-title">Book covers</h3>
+          <label class="cover-setting">
+            <span>
+              <strong>Show fallback thumbnails</strong>
+              <span class="hint"
+                >Show a blue thumbnail when cover art is unavailable or
+                downloads are off.</span
+              >
+            </span>
+            <input id="show-fallback-covers" type="checkbox" role="switch" />
+          </label>
           <label class="cover-setting"
             ><span
-              ><strong>Show book covers</strong
+              ><strong>Download book covers</strong
               ><span class="hint"
                 >Load and cache covers from Open Library on this device.</span
               ></span
@@ -427,16 +437,22 @@
           <p id="form-status" role="status" aria-live="polite"></p>
           <div class="editor-body" id="editor-body">
             <div id="book-intro" class="book-intro">
-              <div id="book-cover-panel" class="details-cover">
-                <div id="book-cover-placeholder">
-                  <span aria-hidden="true">▤</span><span>Book cover</span>
-                </div>
+              <div
+                id="book-cover-panel"
+                class="book-cover details-cover"
+                aria-hidden="true"
+              >
                 <img
                   id="book-cover-image"
+                  class="book-cover-art"
                   src="icons/icon-180.png"
-                  alt="Book cover"
+                  alt=""
                   hidden
                 />
+                <div
+                  id="book-cover-placeholder"
+                  class="book-cover-fallback"
+                ></div>
               </div>
               <div id="book-details-heading" hidden>
                 <h3 id="book-details-title" tabindex="-1">Book title</h3>
@@ -482,12 +498,6 @@
                 <h3>Edition details</h3>
                 <dl id="book-details-edition"></dl>
               </section>
-              <details id="book-options" class="book-detail-section" hidden>
-                <summary>Book options</summary>
-                <button id="delete" class="secondary" type="button">
-                  Delete book
-                </button>
-              </details>
             </div>
             <div id="book-editor-fields">
               <details id="book-edition-fields" class="book-detail-section">
@@ -566,6 +576,12 @@
                     Notes <textarea name="notes" rows="3"></textarea>
                   </label>
                 </div>
+              </details>
+              <details id="book-options" class="book-detail-section" hidden>
+                <summary>Book options</summary>
+                <button id="delete" class="secondary" type="button">
+                  Delete book
+                </button>
               </details>
             </div>
           </div>

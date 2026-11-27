@@ -208,13 +208,18 @@ test('the mobile Library tab bar stays full-size while scrolling in either direc
   }
 });
 
-test('book covers default to off and an explicit preference is respected', async () => {
+test('cover preferences default to fallback thumbnails and persist independently', async () => {
   const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
   const first = await openWindow(shared);
   assert.equal(first.el('show-covers').checked, false);
-  shared.setItem('annas-annals-show-covers', 'true');
+  assert.equal(first.el('show-fallback-covers').checked, true);
+  first.el('show-covers').checked = true;
+  first.handlers['show-covers:change']();
+  first.el('show-fallback-covers').checked = false;
+  first.handlers['show-fallback-covers:change']();
   const second = await openWindow(shared);
   assert.equal(second.el('show-covers').checked, true);
+  assert.equal(second.el('show-fallback-covers').checked, false);
 });
 
 test('settings is a view and switching back restores the library', async () => {

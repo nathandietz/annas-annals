@@ -140,27 +140,74 @@ test('cover setting controls book images in cards, list, and details', async () 
   f.handlers['view-list:click']();
   const table = f.element('books').children[0];
   const titleCell = table.children[1].children[0].children[0];
-  assert.match(titleCell.children[0].src, /9780306406157-S\.jpg/);
+  assert.match(titleCell.children[0].children[0].src, /9780306406157-S\.jpg/);
   f.element('show-covers').checked = false;
   f.handlers['show-covers:change']();
   assert.equal(f.element('book-cover-image').hidden, true);
   assert.equal(f.element('book-cover-panel').hidden, true);
-  assert.equal(f.element('books').children[0].children[1].children[0].children[0].children[0].className, 'book-title-button');
+  const listCover = f.element('books').children[0].children[1].children[0].children[0].children[0];
+  assert.equal(listCover.children[0].className, 'book-cover-fallback');
+  assert.equal(listCover.children[0].children.length, 0);
   f.handlers['view-card:click']();
-  assert.equal(f.element('books').children[0].children[0].children[0].className, 'book-details');
+  const cardCover = f.element('books').children[0].children[0].children[0];
+  assert.equal(cardCover.children[0].className, 'book-cover-fallback');
+  assert.equal(cardCover.children[0].children.length, 0);
 });
 
-test('details retain a local title cover when downloaded covers are off', async () => {
+test('a cover thumbnail switches between downloaded art and its text-free fallback', async () => {
+  const f = await fixture();
+  const cover = f.element('books').children[0].children[0].children[0];
+  const [image, fallback] = cover.children;
+  assert.equal(fallback.hidden, false);
+  assert.equal(fallback.textContent, '');
+  assert.equal(fallback.children.length, 0);
+  image.onload();
+  assert.equal(image.hidden, false);
+  assert.equal(fallback.hidden, true);
+  image.onerror();
+  assert.equal(image.hidden, true);
+  assert.equal(fallback.hidden, false);
+});
+
+test('details retain a local fallback cover when downloaded covers are off', async () => {
   const f = await fixture();
   f.element('show-covers').checked = false;
   f.handlers['show-covers:change']();
   f.element('books').children[0].onclick();
   assert.equal(f.element('book-cover-panel').hidden, false);
   assert.equal(f.element('book-cover-image').hidden, true);
-  assert.equal(f.element('book-cover-title').textContent, 'Original');
+  assert.equal(f.element('book-cover-placeholder').hidden, false);
   assert.equal(f.element('book-options').hidden, true);
   f.handlers['edit-from-details:click']();
   assert.equal(f.element('book-options').hidden, false);
+});
+
+test('fallback and downloaded covers can be turned off independently', async () => {
+  const f = await fixture();
+  const cardCover = () => f.element('books').children[0].children[0].children[0];
+  const set = (id, checked) => {
+    f.element(id).checked = checked;
+    f.handlers[id + ':change']();
+  };
+  set('show-fallback-covers', false);
+  const [image, fallback] = cardCover().children;
+  assert.equal(fallback.hidden, true);
+  image.onload();
+  assert.equal(cardCover().hidden, false);
+  image.onerror();
+  assert.equal(cardCover().hidden, true);
+
+  f.element('books').children[0].onclick();
+  f.element('book-cover-image').onerror();
+  assert.equal(f.element('book-cover-panel').hidden, true);
+
+  set('show-covers', false);
+  assert.equal(cardCover().hidden, true);
+  assert.equal(f.element('book-cover-panel').hidden, true);
+
+  set('show-fallback-covers', true);
+  assert.equal(cardCover().hidden, false);
+  assert.equal(f.element('book-cover-panel').hidden, false);
 });
 
 

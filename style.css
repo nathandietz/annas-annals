@@ -254,17 +254,53 @@ section {
   min-width: 0;
 }
 
-.cover-placeholder {
-  width: 80px;
-  height: 112px;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--separator);
-  border-radius: 8px;
+.book-cover {
+  --cover-width: 43px;
+
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: var(--cover-width);
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: 1px;
   background: var(--surface);
-  color: var(--separator);
-  font-size: 25px;
+  box-shadow: 0 2px 6px #1c1c1e24;
+  vertical-align: middle;
+}
+
+.book-cover-art,
+.book-cover-fallback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.book-cover-art {
+  object-fit: contain;
+}
+
+.book-cover-fallback {
+  background:
+    linear-gradient(to right, #000914e6 0 9%, transparent 9%),
+    repeating-radial-gradient(
+      ellipse at 115% 115%,
+      transparent 0 15%,
+      #ffffff24 16% 17%,
+      transparent 18% 23%
+    ),
+    linear-gradient(145deg, #17314e, var(--accent));
+}
+
+.card-cover {
+  --cover-width: 76px;
+}
+
+.list-cover {
+  --cover-width: 34px;
+
+  margin-right: 8px;
 }
 
 .book-details {
@@ -532,6 +568,10 @@ button.upgrade-button:hover {
   grid-template-columns: 1fr 1fr;
 }
 
+#editor.view-mode {
+  background: color-mix(in srgb, white 70%, var(--surface));
+}
+
 #editor.view-mode :is(#close-editor, #edit-from-details) {
   border-color: transparent;
   background: transparent;
@@ -563,66 +603,35 @@ button.upgrade-button:hover {
 }
 
 .details-cover {
-  display: grid;
-  place-items: center;
-  width: 108px;
-  aspect-ratio: 2 / 3;
-  border: 1px solid var(--separator);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 11px;
-}
-
-#book-cover-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.details-cover img {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  object-fit: contain;
-  border-radius: inherit;
+  --cover-width: clamp(70px, 22vw, 108px);
 }
 
 .book-intro {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
 
-.book-intro.no-cover,
-#editor.edit-mode .book-intro {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-#editor.edit-mode .details-cover {
-  display: none;
+.book-intro:has(> .details-cover:not([hidden])) {
+  grid-template-columns: auto minmax(0, 1fr);
 }
 
 #book-details-heading {
   align-self: center;
 }
 
-#editor.view-mode .details-cover {
-  width: clamp(70px, 22vw, 108px);
-  border-radius: 4px 8px 8px 4px;
-  box-shadow: 0 4px 10px #1c1c1e1a;
-}
-
 #book-details-title {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
   font-size: clamp(26px, 8vw, 38px);
   font-weight: 600;
   letter-spacing: -0.025em;
   line-height: 1.06;
   overflow-wrap: anywhere;
+}
+
+#book-details-title:focus {
+  outline: none;
 }
 
 #book-details-author {
@@ -682,14 +691,6 @@ button.upgrade-button:hover {
   padding: 11px 0;
   font-weight: 600;
   cursor: pointer;
-}
-
-#book-options {
-  margin-top: 8px;
-  padding-top: 0;
-  border-top: 0;
-  color: var(--muted);
-  font-size: 12px;
 }
 
 #book-editor-fields .book-detail-section {
@@ -757,10 +758,6 @@ button.upgrade-button:hover {
 
   #book-primary-fields {
     grid-template-columns: 1fr;
-  }
-
-  .details-cover {
-    width: 90px;
   }
 }
 
@@ -891,22 +888,6 @@ button.upgrade-button:hover {
 
 .cover-setting input:checked::before {
   transform: translateX(18px);
-}
-
-.card-cover {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  border-radius: inherit;
-}
-
-.list-cover {
-  width: 30px;
-  height: 42px;
-  object-fit: contain;
-  vertical-align: middle;
-  margin-right: 8px;
-  border-radius: 3px;
 }
 
 .catalog-table th::before {
@@ -1589,12 +1570,12 @@ button.scan-book {
 .owned-book strong,
 .owned-book small,
 .scan-book strong,
-.scan-book span {
+.scan-book > span {
   display: block;
 }
 
 .owned-book small,
-.scan-book span {
+.scan-book > span {
   color: var(--muted);
   margin-top: 4px;
   font-size: 13px;
@@ -1641,51 +1622,9 @@ button.scan-book {
   margin: 0;
 }
 
-.details-cover span:first-child {
-  font-size: 28px;
-  color: var(--separator);
-}
-
 .scan-book > span > strong {
   color: var(--ink);
   font-size: 16px;
-}
-
-.book-spine,
-.owned-cover {
-  width: 43px;
-  height: 60px;
-  flex: 0 0 43px;
-  border-radius: 2px 4px 4px 2px;
-}
-
-.book-spine {
-  display: grid;
-  place-items: center;
-  background: #344e70;
-  color: #fff;
-  box-shadow:
-    inset 4px 0 #0002,
-    0 2px 4px #19151a26;
-  font:
-    500 19px Georgia,
-    serif;
-}
-
-.book-spine[data-tone="1"] {
-  background: #855c36;
-}
-
-.book-spine[data-tone="2"] {
-  background: #456052;
-}
-
-.book-spine[data-tone="3"] {
-  background: #435568;
-}
-
-.owned-cover {
-  object-fit: contain;
 }
 
 /* Library controls */
@@ -2046,10 +1985,8 @@ button.scan-book {
     pointer-events: none;
   }
 
-  .books.view-card .cover-placeholder {
-    width: 43px;
-    height: 60px;
-    border-radius: 4px;
+  .card-cover {
+    --cover-width: 43px;
   }
 
   .books.view-card .book h3 {
