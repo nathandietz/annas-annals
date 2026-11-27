@@ -18,7 +18,7 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_upward,barcode_scanner,book_2,edit,expand_less,expand_more,search,settings,unfold_more&display=block"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="style.css?v=standalone-refresh-11" />
+    <link rel="stylesheet" href="style.css?v=book-details-2" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
     <script
@@ -31,7 +31,7 @@
     <script src="duplicates.js?v=017c5b1b32ae" defer></script>
     <script src="csv.js?v=017c5b1b32ae" defer></script>
     <script src="config.js?v=017c5b1b32ae" defer></script>
-    <script src="app.js?v=standalone-refresh-10" defer></script>
+    <script src="app.js?v=book-details-2" defer></script>
   </head>
   <body>
     <main id="app-page">
@@ -286,6 +286,14 @@
       </section>
       <section id="settings-dialog" aria-labelledby="settings-title" hidden>
         <h2 id="settings-title" class="page-title">Settings</h2>
+        <section class="settings-group" aria-labelledby="app-title">
+          <h3 id="app-title">App</h3>
+          <p class="hint">Check for updates and reload the app.</p>
+          <button id="update-app" class="secondary" type="button">
+            Update app
+          </button>
+          <p id="update-app-status" class="hint" role="status"></p>
+        </section>
         <section class="settings-group" aria-labelledby="covers-title">
           <h3 id="covers-title">Book covers</h3>
           <label class="cover-setting"
@@ -343,14 +351,6 @@
               Disconnect
             </button>
           </div>
-        </section>
-        <section class="settings-group" aria-labelledby="app-title">
-          <h3 id="app-title">App</h3>
-          <p class="hint">Check for updates and reload the app.</p>
-          <button id="update-app" class="secondary" type="button">
-            Update app
-          </button>
-          <p id="update-app-status" class="hint" role="status"></p>
         </section>
       </section>
       <dialog id="import-dialog" aria-labelledby="import-title">
@@ -414,21 +414,18 @@
       <dialog id="editor" aria-labelledby="editor-title">
         <form id="book-form">
           <div class="dialog-header">
+            <button type="button" id="close-editor" class="secondary">
+              Close
+            </button>
+            <button id="cancel-edit" class="secondary" type="button" hidden>
+              Cancel
+            </button>
             <h2 id="editor-title">Add a book</h2>
-            <div class="actions">
-              <button id="edit-from-details" type="button" hidden>
-                Edit book</button
-              ><button id="save" type="submit">Save book</button
-              ><button id="cancel-edit" class="secondary" type="button" hidden>
-                Cancel</button
-              ><button id="delete" class="secondary" type="button" hidden>
-                Delete book</button
-              ><button type="button" id="close-editor" class="secondary">
-                Close
-              </button>
-            </div>
+            <button id="edit-from-details" type="button" hidden>Edit</button>
+            <button id="save" type="submit">Save</button>
           </div>
-          <div class="editor-body">
+          <p id="form-status" role="status" aria-live="polite"></p>
+          <div class="editor-body" id="editor-body">
             <div id="book-intro" class="book-intro">
               <div id="book-cover-panel" class="details-cover">
                 <div id="book-cover-placeholder">
@@ -441,81 +438,136 @@
                   hidden
                 />
               </div>
-              <div class="intro-fields">
-                <label>Title <input type="text" name="title" required /></label
-                ><label>Author <input type="text" name="author" /></label
-                ><label
-                  >Series name <input type="text" name="series_name"
-                /></label>
+              <div id="book-details-heading" hidden>
+                <h3 id="book-details-title" tabindex="-1">Book title</h3>
+                <p id="book-details-author"></p>
+                <p id="book-details-summary"></p>
+              </div>
+              <div id="book-primary-fields" class="book-fields">
+                <label>Title <input type="text" name="title" required /></label>
+                <label>Author <input type="text" name="author" /></label>
+                <label>Category <input type="text" name="category" /></label>
+                <label>
+                  Shelf location
+                  <input
+                    type="text"
+                    name="shelf_location"
+                    placeholder="e.g. Living room, top shelf"
+                  />
+                </label>
               </div>
             </div>
-            <div class="book-fields">
-              <label
-                >Volume number <input type="text" name="volume_number" /></label
-              ><label>Publisher <input type="text" name="publisher" /></label
-              ><label
-                >Publication year
-                <input type="text" name="publication_year" inputmode="numeric"
-              /></label>
-              <label>Category <input type="text" name="category" /></label
-              ><label>Language <input type="text" name="language" /></label>
-              <label
-                >Pages
-                <input type="text" name="pages" inputmode="numeric" /></label
-              ><label
-                >Shelf location
-                <input
-                  type="text"
-                  name="shelf_location"
-                  placeholder="e.g. Living room, top shelf"
-              /></label>
-              <label class="wide-field"
-                >ISBN <span class="hint">optional</span
-                ><input
-                  type="text"
-                  name="isbn"
-                  inputmode="numeric"
-                  autocomplete="off"
-              /></label>
-              <div id="lookup-actions" class="actions wide-field">
-                <button type="button" id="scan" class="secondary">
-                  Scan barcode</button
-                ><button type="button" id="lookup" class="secondary">
-                  Find book details
-                </button>
-              </div>
-              <div
-                id="lookup-results"
-                class="lookup-results wide-field"
+            <div id="book-details-content" hidden>
+              <section
+                id="book-copy-section"
+                class="book-detail-section"
                 hidden
-                aria-live="polite"
               >
-                <p id="lookup-status" class="hint"></p>
-                <div id="lookup-suggestions"></div>
-              </div>
-              <div id="scan-area" class="wide-field" hidden>
-                <div id="editor-preview" class="scanner-preview">
-                  <div id="universal-qr-reader"></div>
-                  <span class="scanner-guide" aria-hidden="true"></span>
-                </div>
-                <p id="scan-status" class="hint"></p>
-                <label
-                  >Or scan a photo<input
-                    id="photo"
-                    type="file"
-                    accept="image/*" /></label
-                ><button type="button" id="stop-scan" class="secondary">
-                  Close scanner
+                <h3>Your copy</h3>
+                <dl id="book-details-copy"></dl>
+              </section>
+              <section
+                id="book-description-section"
+                class="book-detail-section"
+                hidden
+              >
+                <h3>Description</h3>
+                <p id="book-details-description"></p>
+              </section>
+              <section
+                id="book-edition-section"
+                class="book-detail-section"
+                hidden
+              >
+                <h3>Edition details</h3>
+                <dl id="book-details-edition"></dl>
+              </section>
+              <details id="book-options" class="book-detail-section" hidden>
+                <summary>Book options</summary>
+                <button id="delete" class="secondary" type="button">
+                  Delete book
                 </button>
-              </div>
-              <label class="wide-field"
-                >Description
-                <textarea name="description" rows="3"></textarea></label
-              ><label class="wide-field"
-                >Notes <textarea name="notes" rows="3"></textarea>
-              </label>
+              </details>
             </div>
-            <p id="form-status" role="status" aria-live="polite"></p>
+            <div id="book-editor-fields">
+              <details id="book-edition-fields" class="book-detail-section">
+                <summary>Edition details</summary>
+                <div class="book-fields">
+                  <label
+                    >Publisher <input type="text" name="publisher"
+                  /></label>
+                  <label>Language <input type="text" name="language" /></label>
+                  <label>
+                    Publication year
+                    <input
+                      type="text"
+                      name="publication_year"
+                      inputmode="numeric"
+                    />
+                  </label>
+                  <label
+                    >Pages <input type="text" name="pages" inputmode="numeric"
+                  /></label>
+                  <label
+                    >Series name <input type="text" name="series_name"
+                  /></label>
+                  <label
+                    >Volume number <input type="text" name="volume_number"
+                  /></label>
+                  <label class="wide-field"
+                    >ISBN <span class="hint">optional</span
+                    ><input
+                      type="text"
+                      name="isbn"
+                      inputmode="numeric"
+                      autocomplete="off"
+                  /></label>
+                  <div id="lookup-actions" class="actions wide-field">
+                    <button type="button" id="scan" class="secondary">
+                      Scan barcode</button
+                    ><button type="button" id="lookup" class="secondary">
+                      Find book details
+                    </button>
+                  </div>
+                  <div
+                    id="lookup-results"
+                    class="lookup-results wide-field"
+                    hidden
+                    aria-live="polite"
+                  >
+                    <p id="lookup-status" class="hint"></p>
+                    <div id="lookup-suggestions"></div>
+                  </div>
+                  <div id="scan-area" class="wide-field" hidden>
+                    <div id="editor-preview" class="scanner-preview">
+                      <div id="universal-qr-reader"></div>
+                      <span class="scanner-guide" aria-hidden="true"></span>
+                    </div>
+                    <p id="scan-status" class="hint"></p>
+                    <label
+                      >Or scan a photo<input
+                        id="photo"
+                        type="file"
+                        accept="image/*" /></label
+                    ><button type="button" id="stop-scan" class="secondary">
+                      Close scanner
+                    </button>
+                  </div>
+                </div>
+              </details>
+              <details id="book-notes-fields" class="book-detail-section">
+                <summary>Description and notes</summary>
+                <div class="book-fields">
+                  <label class="wide-field">
+                    Description
+                    <textarea name="description" rows="3"></textarea>
+                  </label>
+                  <label class="wide-field">
+                    Notes <textarea name="notes" rows="3"></textarea>
+                  </label>
+                </div>
+              </details>
+            </div>
           </div>
         </form>
       </dialog>

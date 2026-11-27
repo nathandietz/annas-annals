@@ -89,6 +89,29 @@ test('saving a book includes its shelf location', async () => {
   assert.equal(JSON.parse(write.options.body).data.find(item => item.range.endsWith('J2')).values[0][0], 'Living room, top shelf');
 });
 
+test('saving an edit returns to the same book with its saved details', async () => {
+  const f = await fixture();
+  f.form.elements.title.value = 'Updated title';
+  f.form.elements.shelf_location.value = 'Top shelf';
+  await f.handlers['book-form:submit']({ preventDefault() {}, currentTarget: f.form });
+  assert.equal(f.element('editor').open, true);
+  assert.equal(f.element('book-editor-fields').hidden, true);
+  assert.equal(f.element('book-details-title').textContent, 'Updated title');
+  assert.equal(f.element('book-details-copy').children[0].children[1].textContent, 'Top shelf');
+  assert.equal(f.element('form-status').textContent, 'Changes saved.');
+});
+
+test('cancel returns to the saved details and restores the original draft values', async () => {
+  const f = await fixture();
+  f.form.elements.title.value = 'Discarded title';
+  await f.handlers['cancel-edit:click']();
+  assert.equal(f.element('editor').open, true);
+  assert.equal(f.element('book-editor-fields').hidden, true);
+  assert.equal(f.element('book-details-title').textContent, 'Original');
+  f.handlers['edit-from-details:click']();
+  assert.equal(f.form.elements.title.value, 'Original');
+});
+
 test('cards show identification and shelf information while details retain the other fields', async () => {
   const f = await fixture({
     initialRow: ['id-1','9780306406157','Original','Author','English','Notes','2026-01-01','Publisher','1991','Top shelf','Fiction','Description','Series','2','240','2026-01-01']
@@ -99,6 +122,14 @@ test('cards show identification and shelf information while details retain the o
   assert.equal(f.form.elements.publisher.value, 'Publisher');
   assert.equal(f.form.elements.category.value, 'Fiction');
   assert.equal(f.form.elements.pages.value, '240');
+});
+
+test('book details use a Library label and readable language without changing the saved language code', async () => {
+  const f = await fixture({ initialRow: ['id-1', '9780306406157', 'Original', 'Author', 'en', '', '2026-01-01'] });
+  f.element('books').children[0].onclick();
+  assert.equal(f.element('close-editor').textContent, '‹ Library');
+  assert.deepEqual(f.element('book-details-edition').children.map(row => row.children[1].textContent), ['English', '9780306406157']);
+  assert.equal(f.form.elements.language.value, 'en');
 });
 
 test('cover setting controls book images in cards, list, and details', async () => {
@@ -117,6 +148,19 @@ test('cover setting controls book images in cards, list, and details', async () 
   assert.equal(f.element('books').children[0].children[1].children[0].children[0].children[0].className, 'book-title-button');
   f.handlers['view-card:click']();
   assert.equal(f.element('books').children[0].children[0].children[0].className, 'book-details');
+});
+
+test('details retain a local title cover when downloaded covers are off', async () => {
+  const f = await fixture();
+  f.element('show-covers').checked = false;
+  f.handlers['show-covers:change']();
+  f.element('books').children[0].onclick();
+  assert.equal(f.element('book-cover-panel').hidden, false);
+  assert.equal(f.element('book-cover-image').hidden, true);
+  assert.equal(f.element('book-cover-title').textContent, 'Original');
+  assert.equal(f.element('book-options').hidden, true);
+  f.handlers['edit-from-details:click']();
+  assert.equal(f.element('book-options').hidden, false);
 });
 
 

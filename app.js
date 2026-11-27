@@ -1079,28 +1079,89 @@
     $('delete').textContent = 'Delete book'; $('delete').classList.remove('upgrade-button'); $('delete').classList.add('secondary');
   }
   const editableFields = ['isbn', 'title', 'author', 'publisher', 'publication_year', 'language', 'shelf_location', 'category', 'description', 'series_name', 'volume_number', 'pages', 'notes'];
+  function renderBookDetails(book) {
+    const value = key => String(book[key] ?? '').trim();
+    $('book-details-title').textContent = value('title');
+    const author = $('book-details-author');
+    author.textContent = value('author');
+    author.hidden = !author.textContent;
+    const summary = $('book-details-summary');
+    const pages = value('pages');
+    summary.textContent = [value('category'), value('publication_year'), pages && pages + (pages === '1' ? ' page' : ' pages')].filter(Boolean).join(' · ');
+    summary.hidden = !summary.textContent;
+    const description = value('description');
+    $('book-details-description').textContent = description;
+    $('book-description-section').hidden = !description;
+    const sections = [
+      ['copy', [['Shelf location', 'shelf_location'], ['Notes', 'notes']]],
+      ['edition', [['Publisher', 'publisher'], ['Language', 'language'], ['Series', 'series_name'], ['Volume', 'volume_number'], ['ISBN', 'isbn']]]
+    ];
+    for (const [section, fields] of sections) {
+      const list = $('book-details-' + section);
+      list.replaceChildren();
+      let hasValues = false;
+      for (const [label, key] of fields) {
+        let text = value(key);
+        if (!text) continue;
+        if (key === 'language' && /^[a-z]{2,3}$/i.test(text) && Intl.DisplayNames) {
+          text = new Intl.DisplayNames('en', { type: 'language', fallback: 'none' }).of(text) || text;
+        }
+        const row = document.createElement('div'), term = document.createElement('dt'), detail = document.createElement('dd');
+        row.className = 'book-detail-row';
+        term.textContent = label; detail.textContent = text;
+        row.append(term, detail); list.append(row);
+        hasValues = true;
+      }
+      $('book-' + section + '-section').hidden = !hasValues;
+    }
+  }
   function setEditorMode(editable) {
+    editorGeneration++;
     resetDelete();
     editMode = editable;
-    const form = $('book-form');
-    for (const key of editableFields) form.elements[key].readOnly = !editable;
-    $('editor').classList.toggle('view-mode', !editable);
+    const editor = $('editor');
+    editor.classList.toggle('existing-book', Boolean(editingBook));
+    editor.classList.toggle('edit-mode', editable && Boolean(editingBook));
+    editor.classList.toggle('view-mode', !editable);
+    $('editor-title').classList.toggle('visually-hidden', !editable);
     $('editor-title').textContent = editingBook ? (editable ? 'Edit book' : 'Book details') : 'Add a book';
-    $('lookup-actions').hidden = !editable;
+    $('book-details-heading').hidden = editable;
+    $('book-details-content').hidden = editable;
+    $('book-primary-fields').hidden = !editable;
+    $('book-editor-fields').hidden = !editable;
+    $('book-edition-fields').open = !editingBook;
+    $('book-notes-fields').open = false;
     $('lookup-results').hidden = true;
+    $('lookup-suggestions').replaceChildren();
+    $('book-options').open = false;
+    $('book-options').hidden = editable || !canEdit || !editingBook?.id;
+    $('close-editor').hidden = editable && Boolean(editingBook);
+    $('close-editor').textContent = editable ? 'Close' : mainView === 'library' ? '‹ Library' : '‹ Check';
     $('save').hidden = !editable;
     $('cancel-edit').hidden = !editable || !editingBook;
-    $('delete').hidden = !editable || !editingBook?.id;
     $('edit-from-details').hidden = !canEdit || editable || !editingBook?.id;
+    if (!editable) renderBookDetails(editingBook);
+    $('editor-body').scrollTop = 0;
   }
   function showDetails(book) { openEditor(book, false); }
-  $('edit-from-details').addEventListener('click', () => setEditorMode(true));
-  $('cancel-edit').addEventListener('click', async () => {
-    if (busy || !editingBook) return;
-    try { await stopScanner(); } catch {}
-    for (const key of editableFields) $('book-form').elements[key].value = editingBook[key] || '';
-    $('lookup-suggestions').replaceChildren(); formStatus(''); setEditorMode(false);
+  $('edit-from-details').addEventListener('click', () => {
+    if (busy || !canEdit || !editingBook?.id) return;
+    formStatus('');
+    setEditorMode(true);
+    $('cancel-edit').focus?.();
   });
+  async function cancelBookEdit() {
+    if (busy || !editingBook) return;
+    const { elements } = $('book-form');
+    const dirty = editableFields.some(key => elements[key].value !== (editingBook[key] || ''));
+    if (dirty && !window.confirm('Discard unsaved changes?')) return;
+    stopScanner().catch(() => {});
+    for (const key of editableFields) elements[key].value = editingBook[key] || '';
+    updateBookCover();
+    formStatus(''); setEditorMode(false);
+    $('edit-from-details').focus?.();
+  }
+  $('cancel-edit').addEventListener('click', cancelBookEdit);
   function updateBookCover() {
     const isbn = normalizeIsbn($('book-form').elements.isbn.value);
     const image = $('book-cover-image'), placeholder = $('book-cover-placeholder');
@@ -1120,13 +1181,15 @@
   $('book-cover-image').addEventListener('error', () => { $('book-cover-image').hidden = true; $('book-cover-placeholder').hidden = false; });
   $('book-form').elements?.isbn?.addEventListener?.('input', updateBookCover);
   function openEditor(book = null, editable = true) {
-    editorGeneration++;
+    if (busy) return;
     editingBook = book ? { ...book } : null;
     const form = $('book-form'); form.reset();
     for (const key of editableFields) form.elements[key].value = book?.[key] || '';
     updateBookCover();
-    $('lookup-suggestions').replaceChildren(); formStatus('');
-    setEditorMode(editable); $('editor').showModal();
+    formStatus('');
+    setEditorMode(editable);
+    if (!$('editor').open) $('editor').showModal();
+    if (!editable) $('book-details-title').focus?.();
   }
   $('add').addEventListener('click', () => { if (canEdit) openEditor(); });
   async function findUnchangedBook(original) {
@@ -1144,8 +1207,17 @@
     $('editor').close();
     try { await refresh(); } catch (error) { status(label + ' Refresh failed: ' + message(error)); }
   }
+  function setBookSavePending(pending) {
+    busy = pending;
+    $('save').disabled = pending;
+    $('save').textContent = pending ? 'Saving…' : 'Save';
+    $('cancel-edit').disabled = pending;
+    $('close-editor').disabled = pending;
+    $('edit-from-details').disabled = pending;
+    $('editor-body').inert = pending;
+  }
   $('delete').addEventListener('click', async () => {
-    if (busy || !editingBook) return;
+    if (busy || !canEdit || !editingBook?.id) return;
     if (!deleteArmed) {
       deleteArmed = true; $('delete').textContent = 'Confirm delete';
       $('delete').classList.remove('secondary'); $('delete').classList.add('upgrade-button');
@@ -1163,11 +1235,23 @@
     finally { busy = false; $('save').disabled = false; $('delete').disabled = false; }
   });
   let editorScanSequence = 0;
-  async function stopScanner() { editorScanSequence++; await scanner.stop(); $('scan-area').hidden = true; }
-  $('close-editor').addEventListener('click', async () => { resetDelete(); await stopScanner(); $('editor').close(); });
-  $('editor').addEventListener('cancel', () => { editorScanSequence++; resetDelete(); scanner.stop().catch(() => {}); $('scan-area').hidden = true; });
+  async function stopScanner() { editorScanSequence++; $('scan-area').hidden = true; await scanner.stop(); }
+  $('close-editor').addEventListener('click', () => { if (!busy) $('editor').close(); });
+  $('editor').addEventListener('cancel', event => {
+    if (busy || (editMode && editingBook)) event.preventDefault();
+    if (editMode && editingBook) cancelBookEdit();
+  });
+  $('editor').addEventListener('close', () => {
+    editorGeneration++;
+    resetDelete();
+    stopScanner().catch(() => {});
+  });
+  $('book-edition-fields').addEventListener('toggle', () => {
+    if (!$('book-edition-fields').open && !$('scan-area').hidden) stopScanner().catch(() => {});
+  });
   $('scan').addEventListener('click', async () => {
     const scanId = ++editorScanSequence;
+    const generation = editorGeneration;
     $('scan-area').hidden = false; $('scan-status').textContent = scanGuidance; $('editor-preview').classList.remove('recognized'); $('editor-preview').classList.add('loading');
     try {
       await scanner.start(async text => {
@@ -1177,13 +1261,27 @@
         if (scanId !== editorScanSequence || $('scan-area').hidden) return;
         $('book-form').elements.isbn.value = text;
         updateBookCover();
-        await stopScanner(); formStatus('Barcode captured. Look up the ISBN or enter the details.');
+        await stopScanner();
+        if (!busy && generation === editorGeneration) formStatus('Barcode captured. Look up the ISBN or enter the details.');
       }, text => { if (text !== 'Starting camera…') $('scan-status').textContent = text; });
       if (scanId === editorScanSequence) $('editor-preview').classList.remove('loading');
     } catch (error) { if (scanId === editorScanSequence && !$('scan-area').hidden) { $('editor-preview').classList.remove('loading'); $('scan-status').textContent = message(error); } }
   });
   $('stop-scan').addEventListener('click', () => stopScanner().catch(error => formStatus(message(error))));
-  $('photo').addEventListener('change', async event => { const file = event.target.files[0]; if (!file) return; try { const result = await scanner.scanFile(file); if (result) { $('book-form').elements.isbn.value = result; updateBookCover(); await stopScanner(); formStatus('Barcode captured. Look up the ISBN or enter the details.'); } } catch { $('scan-status').textContent = 'No barcode found. Try a clearer photo or enter the ISBN manually.'; } });
+  $('photo').addEventListener('change', async event => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const generation = editorGeneration;
+    try {
+      const result = await scanner.scanFile(file);
+      if (generation !== editorGeneration || busy || !result) return;
+      $('book-form').elements.isbn.value = result;
+      updateBookCover(); await stopScanner();
+      if (!busy && generation === editorGeneration) formStatus('Barcode captured. Look up the ISBN or enter the details.');
+    } catch {
+      if (generation === editorGeneration) $('scan-status').textContent = 'No barcode found. Try a clearer photo or enter the ISBN manually.';
+    }
+  });
   $('lookup').addEventListener('click', async () => {
     const form = $('book-form');
     const isbn = normalizeIsbn(form.elements.isbn.value);
@@ -1193,7 +1291,7 @@
     form.elements.isbn.value = isbn;
     resultStatus.textContent = 'Looking up book details…'; $('lookup').disabled = true;
     const currentBook = editingBook, generation = editorGeneration, autoFilled = {}, userChanged = new Set();
-    const isCurrent = () => editingBook === currentBook && editorGeneration === generation && normalizeIsbn(form.elements.isbn.value) === isbn && $('editor').open;
+    const isCurrent = () => !busy && editingBook === currentBook && editorGeneration === generation && normalizeIsbn(form.elements.isbn.value) === isbn && $('editor').open;
     function showLookupResult({metadata, fieldSources}, pending) {
       if (!isCurrent() || !metadata) return;
       suggestions.replaceChildren();
@@ -1236,10 +1334,15 @@
     if (missingHeaders().length) { formStatus('Update the library before saving book details. Close this window and choose Update library.'); return; }
     const form = event.currentTarget, enteredIsbn = form.elements.isbn.value.trim();
     const isbn = normalizeIsbn(enteredIsbn);
-    if (enteredIsbn && !isbn) { formStatus('Enter a valid ISBN-10 or ISBN-13, or leave it blank.'); return; }
+    if (enteredIsbn && !isbn) {
+      $('book-edition-fields').open = true;
+      form.elements.isbn.focus?.();
+      formStatus('Enter a valid ISBN-10 or ISBN-13, or leave it blank.'); return;
+    }
     if (isbn) form.elements.isbn.value = isbn;
     if (isbn && books.some(book => book.id !== editingBook?.id && normalizeIsbn(book.isbn) === isbn)) { formStatus('This ISBN is already in the catalog.'); return; }
-    busy = true; $('save').disabled = true; $('delete').disabled = true; formStatus('Saving…');
+    setBookSavePending(true); formStatus('Saving…');
+    stopScanner().catch(() => {});
     try {
       const row = [editingBook?.id || crypto.randomUUID(), isbn, form.elements.title.value.trim(), form.elements.author.value.trim(), form.elements.language.value.trim(), form.elements.notes.value.trim(), editingBook?.created_at || new Date().toISOString(), form.elements.publisher.value.trim(), form.elements.publication_year.value.trim(), form.elements.shelf_location.value.trim(), form.elements.category.value.trim(), form.elements.description.value.trim(), form.elements.series_name.value.trim(), form.elements.volume_number.value.trim(), form.elements.pages.value.trim(), new Date().toISOString()];
       if (!row[2]) throw new Error('Enter a title.');
@@ -1247,14 +1350,24 @@
       if (editingBook) {
         const rowNumber = await findUnchangedBook(editingBook);
         await api('/values:batchUpdate', { method: 'POST', body: JSON.stringify({ valueInputOption: 'RAW', data: headers.map(key => ({ range: "'Books'!" + column(sheetHeaders.indexOf(key)) + rowNumber, values: [[valuesByHeader[key]]] })) }) });
+        editingBook = valuesByHeader;
+        for (const key of editableFields) form.elements[key].value = editingBook[key];
+        updateBookCover(); setEditorMode(false);
+        formStatus('Changes saved.');
+        $('editor-body').inert = false;
+        $('book-details-title').focus?.();
+        books = books.map(book => book.id === editingBook.id ? editingBook : book);
+        render();
+        try { await refresh({ minimumIndicatorTime: 0 }); }
+        catch (error) { status('Book saved. Catalog refresh failed: ' + message(error)); }
       } else {
         await api('/values/' + encodeURIComponent("'Books'!A:ZZ") + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', { method: 'POST', body: JSON.stringify({ values: [sheetHeaders.map(key => valuesByHeader[key] || '')] }) });
         returnToCheck();
         $('search').value = ''; $('library-sort').value = ''; sortField = ''; duplicatesMode = false;
         books.unshift(valuesByHeader); render();
+        await finishChange('Book saved.');
       }
-      await finishChange('Book saved.');
     } catch (error) { formStatus('Save failed or could not be confirmed. Refresh the catalog before retrying: ' + message(error)); }
-    finally { busy = false; $('save').disabled = false; $('delete').disabled = false; }
+    finally { setBookSavePending(false); }
   });
 })();
