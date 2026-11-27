@@ -1077,14 +1077,11 @@ button.upgrade-button:hover {
 }
 
 #check-camera {
-  margin-top: 12px;
+  position: absolute;
+  inset: 0;
 }
 
 #check-camera.camera-standby {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
   opacity: 0;
   transform: translateX(-200vw);
   pointer-events: none;
@@ -1092,12 +1089,20 @@ button.upgrade-button:hover {
 
 /* Camera preview */
 
+.scanner-preview,
+.check-preview-slot {
+  height: clamp(180px, 52vw, 260px);
+}
+
 .scanner-preview {
   position: relative;
   overflow: hidden;
   border-radius: 12px;
   background: var(--ink);
-  height: clamp(180px, 52vw, 260px);
+}
+
+#check-preview {
+  height: 100%;
 }
 
 .scanner-preview > div {
@@ -1146,6 +1151,10 @@ button.upgrade-button:hover {
     linear-gradient(#000 0 0) top right / 22px 22px no-repeat,
     linear-gradient(#000 0 0) bottom left / 22px 22px no-repeat,
     linear-gradient(#000 0 0) bottom right / 22px 22px no-repeat;
+}
+
+.scanner-mark .scanner-guide {
+  color: inherit;
 }
 
 .scanner-preview.recognized .scanner-guide {
@@ -1474,25 +1483,47 @@ button.quiet-button {
   flex: 1;
 }
 
+#check-stage {
+  display: grid;
+  margin-top: 12px;
+}
+
+.check-search-results,
+.check-preview-slot {
+  grid-area: 1 / 1;
+  min-width: 0;
+  align-self: start;
+}
+
+.check-preview-slot {
+  position: relative;
+  pointer-events: none;
+}
+
 .scanner-mark {
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
-  height: clamp(72px, 19dvh, 154px);
-  margin: 8px 0 14px;
+  border-radius: 12px;
+  background: var(--field);
   color: var(--accent);
 }
 
 .scanner-mark svg {
-  max-height: 100%;
+  width: 80%;
+  height: 80%;
 }
 
-#check-home:has(#scan-books:not([hidden])) .scanner-mark,
-#scan-view:has(
-    #check-camera:not([hidden], .camera-standby),
-    #check-isbn-form:not([hidden])
-  )
-  .scanner-mark {
+#check-stage:has(#scan-books:not([hidden])) .scanner-mark,
+#check-stage:has(#check-camera:not([hidden], .camera-standby)) .scanner-mark,
+#scan-view:has(#check-isbn-form:not([hidden])) .scanner-mark {
   display: none;
+}
+
+#check-stage:has(#check-camera:not([hidden], .camera-standby))
+  .check-search-results {
+  visibility: hidden;
 }
 
 #check-search {
@@ -1533,6 +1564,17 @@ button.quiet-button {
 #check-status {
   color: var(--muted);
   line-height: 1.45;
+}
+
+#check-status {
+  block-size: 4.35em;
+  margin: 12px 0 0;
+  overflow: auto;
+  visibility: hidden;
+}
+
+#check-stage:has(#check-camera:not([hidden], .camera-standby)) + #check-status {
+  visibility: visible;
 }
 
 #check-photo-status {

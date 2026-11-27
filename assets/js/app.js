@@ -545,6 +545,10 @@
     if (inputId === 'search') { render(); return; }
     const sequence = ++checkSequence;
     clearTimeout(scanSearchTimer);
+    if (cameraOpen) {
+      setCameraOpen(false);
+      checkScanner.stop().catch(() => {});
+    }
     showCheckResult(false);
     renderScanBooks();
     const query = value.trim();
@@ -674,7 +678,7 @@
     $('check-camera').hidden = !open && !standby;
     $('check-camera').classList.toggle('camera-standby', standby);
     $('check-camera').inert = standby;
-    $('scan-start-label').textContent = open ? 'Close scanner' : 'Scan barcode';
+    $('scan-start-label').textContent = open ? 'Close scanner' : 'Scan Book';
     $('scan-start').setAttribute('aria-expanded', String(open));
   }
   async function closeCheckScanner() {
@@ -706,7 +710,6 @@
     }
   }
   $('scan-start').addEventListener('click', () => cameraOpen ? closeCheckScanner() : startCheckScanner());
-  $('check-stop').addEventListener('click', closeCheckScanner);
   document.addEventListener?.('visibilitychange', () => {
     if (!document.hidden || $('check-camera').hidden) return;
     if (cameraOpen) checkSequence++;

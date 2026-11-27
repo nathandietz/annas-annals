@@ -18,7 +18,10 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_upward,barcode_scanner,book_2,check,close,edit,expand_less,expand_more,search,settings,unfold_more&display=block"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="assets/css/style.css?v=book-form-focus-1" />
+    <link
+      rel="stylesheet"
+      href="assets/css/style.css?v=check-scanner-layout-3"
+    />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
     <script
@@ -32,7 +35,7 @@
     <script src="assets/js/csv.js?v=017c5b1b32ae" defer></script>
     <script src="assets/js/config.js?v=017c5b1b32ae" defer></script>
     <script src="assets/js/book-lookup.js?v=1" defer></script>
-    <script src="assets/js/app.js?v=book-form-focus-1" defer></script>
+    <script src="assets/js/app.js?v=check-scanner-layout-1" defer></script>
   </head>
   <body>
     <template id="catalog-search-template">
@@ -311,29 +314,43 @@
         <div id="check-home">
           <h2 class="page-title">Do I own This?</h2>
           <div id="check-search" class="catalog-search"></div>
-          <p id="scan-count" class="hint" role="status" hidden></p>
-          <div id="scan-books" class="scan-books" hidden></div>
-          <div class="scanner-mark" aria-hidden="true">
-            <svg
-              width="152"
-              height="112"
-              viewBox="0 0 152 112"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-            >
-              <path
-                d="M33 18H17a6 6 0 0 0-6 6v14m108-20h16a6 6 0 0 1 6 6v14M33 94H17a6 6 0 0 1-6-6V74m108 20h16a6 6 0 0 0 6-6V74"
-              />
-              <path
-                d="M42 33v46m10-46v46m24-46v46m16-46v46m19-46v46"
-                stroke-width="2"
-              />
-              <path d="M64 33v46m36-46v46" stroke-width="4" />
-              <path d="M23 58h106" stroke="#5aa1ed" />
-            </svg>
+          <div id="check-stage">
+            <div class="check-search-results">
+              <p id="scan-count" class="hint" role="status" hidden></p>
+              <div id="scan-books" class="scan-books" hidden></div>
+            </div>
+            <div class="check-preview-slot">
+              <div class="scanner-mark" aria-hidden="true">
+                <svg
+                  width="152"
+                  height="88"
+                  viewBox="0 12 152 88"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="3"
+                  stroke-linecap="round"
+                >
+                  <path
+                    d="M42 33v46m10-46v46m12-46v46m12-46v46m16-46v46m8-46v46m11-46v46"
+                    vector-effect="non-scaling-stroke"
+                  />
+                  <path
+                    d="M23 58h106"
+                    stroke="#5aa1ed"
+                    vector-effect="non-scaling-stroke"
+                  />
+                </svg>
+                <span class="scanner-guide" aria-hidden="true"></span>
+              </div>
+              <div id="check-camera" hidden>
+                <div id="check-preview" class="scanner-preview">
+                  <div id="check-qr-reader"></div>
+                  <span class="scanner-guide" aria-hidden="true"></span>
+                </div>
+              </div>
+            </div>
           </div>
+          <p id="check-status" role="status"></p>
         </div>
         <button id="check-back" class="quiet-button" type="button" hidden>
           ‹ Check
@@ -366,18 +383,8 @@
           >
             <span class="material-symbol" aria-hidden="true"
               >barcode_scanner</span
-            ><span id="scan-start-label">Scan barcode</span>
+            ><span id="scan-start-label">Scan Book</span>
           </button>
-          <div id="check-camera" hidden>
-            <div id="check-preview" class="scanner-preview">
-              <div id="check-qr-reader"></div>
-              <span class="scanner-guide" aria-hidden="true"></span>
-            </div>
-            <p id="check-status" role="status"></p>
-            <button id="check-stop" class="quiet-button" type="button">
-              Close scanner
-            </button>
-          </div>
           <div class="scan-options">
             <button
               id="check-isbn-open"

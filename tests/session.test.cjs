@@ -337,10 +337,24 @@ test('scan button opens and closes its connected panel', async () => {
   await view.handlers['scan-start:click']();
   assert.equal(view.el('check-camera').hidden, false);
   assert.equal(view.el('scan-start').attributes['aria-expanded'], 'true');
+  assert.equal(view.el('scan-start-label').textContent, 'Close scanner');
   assert.match(view.el('check-status').textContent, /Keep the entire barcode in view/);
   await view.handlers['scan-start:click']();
   assert.equal(view.el('check-camera').hidden, true);
   assert.equal(view.el('scan-start').attributes['aria-expanded'], 'false');
+  assert.equal(view.el('scan-start-label').textContent, 'Scan Book');
+});
+
+test('typing in Check closes the camera and reveals search results', async () => {
+  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
+  const view = await openWindow(shared, 200, true);
+  await view.handlers['scan-start:click']();
+  view.el('scan-search').value = 'Water';
+  view.handlers['scan-search:input']();
+  assert.equal(view.el('check-camera').hidden, true);
+  assert.equal(view.el('scan-start-label').textContent, 'Scan Book');
+  assert.equal(view.el('scan-books').hidden, false);
+  assert.equal(view.scanners[1].stops, 1);
 });
 
 test('a scanned barcode highlights the guide before the scanner closes', async () => {
