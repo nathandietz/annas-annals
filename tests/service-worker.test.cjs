@@ -8,7 +8,7 @@ test('cover images are reused offline and clearing the cache removes them', asyn
   const cache = { match: async req => entries.get(req.url), put: async (req, res) => entries.set(req.url, res), keys: async () => [...entries.keys()].map(url => ({url})), delete: async req => entries.delete(req.url) };
   const caches = { open: async () => cache, delete: async () => { entries.clear(); return true; } };
   const self = { addEventListener: (type, fn) => { events[type] = fn; }, skipWaiting() {}, clients: { claim() {} } };
-  vm.runInNewContext(fs.readFileSync('service-worker.js', 'utf8'), { self, caches, URL, fetch: async () => { requests++; if (!online) throw new Error('offline'); return { ok:true, type:'basic', clone() { return this; } }; }, Promise, console });
+  vm.runInNewContext(fs.readFileSync('service-worker.js', 'utf8'), { self, caches, URL, fetch: async (_request, options) => { requests++; if (!online) throw new Error('offline'); assert.equal(options?.mode, 'cors'); return { ok:true, type:'cors', clone() { return this; } }; }, Promise, console });
   const request = { url:'https://covers.openlibrary.org/b/isbn/9780140328721-S.jpg?default=false', method:'GET', destination:'image' };
   async function get() { let response; const waits = []; events.fetch({request, respondWith(p) { response = p; }, waitUntil(p) { waits.push(p); }}); const result = await response; await Promise.all(waits); return result; }
   assert.ok(await get()); online = false; assert.ok(await get()); assert.equal(requests, 1);

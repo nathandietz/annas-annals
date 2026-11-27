@@ -1,6 +1,27 @@
 'use strict';
 (() => {
   const $ = id => document.getElementById(id);
+  const searchBars = [
+    ['library-search', 'search', 'add', 'library-search-clear'],
+    ['check-search', 'scan-search', 'check-add', 'check-search-clear']
+  ];
+  for (const [container, inputId, buttonId, clearId] of searchBars) {
+    const controls = $('catalog-search-template').content.cloneNode(true);
+    controls.querySelector('input').id = inputId;
+    controls.querySelector('.catalog-add').id = buttonId;
+    controls.querySelector('.search-clear').id = clearId;
+    $(container).append(controls);
+  }
+  const searchInputs = searchBars.map(([, inputId]) => $(inputId));
+  const addBookButtons = searchBars.map(([, , buttonId]) => $(buttonId));
+  const clearSearchButtons = searchBars.map(([, , , clearId]) => $(clearId));
+  let lastLibrarySearch = '';
+  function setSearchText(value) {
+    for (const input of searchInputs) {
+      if (input.value !== value) input.value = value;
+    }
+    for (const button of clearSearchButtons) button.hidden = !value;
+  }
   const config = window.LIBRARY_CONFIG;
   const appName = 'Anna’s Annals';
   window.addEventListener('load', () => {
@@ -49,6 +70,18 @@
   } catch {}
   $('show-covers').checked = showCovers;
   $('show-fallback-covers').checked = showFallbackCovers;
+  $('cover-attribution').hidden = !showCovers;
+  const googleBookRequests = new Map();
+  const pendingCovers = new Map();
+  const coverObserver = typeof IntersectionObserver === 'undefined' ? null : new IntersectionObserver(entries => {
+    for (const {target, isIntersecting} of entries) {
+      if (!isIntersecting) continue;
+      const load = pendingCovers.get(target);
+      coverObserver.unobserve(target);
+      pendingCovers.delete(target);
+      if (target.isConnected) load?.();
+    }
+  }, { rootMargin: '200px' });
   try { const savedView = localStorage.getItem('annas-annals-view'); if (['card', 'list'].includes(savedView)) viewMode = savedView; } catch {}
   try { rememberedSheet = localStorage.getItem(storageKey) || ''; } catch {}
   const scanner = createLibraryScanner();
@@ -101,7 +134,7 @@
     $('new-library-connected').hidden = false;
     $('transfer-actions').hidden = false;
     $('view-switcher').hidden = false;
-    $('search').disabled = false;
+    for (const input of searchInputs) input.disabled = false;
     setMainView(mainView);
   }
   updateConnect();
@@ -113,18 +146,18 @@
     sheetId = '';
     books = [];
     duplicatesMode = false;
-    $('scan-search').value = '';
+    setSearchText('');
     $('check-isbn').value = '';
     resetOwnershipCheck();
-    for (const id of ['mode-toggle', 'scan-view', 'all-books', 'add', 'view-switcher', 'library', 'disconnect', 'new-library-connected', 'transfer-actions', 'settings-dialog']) {
+    for (const id of ['mode-toggle', 'scan-view', 'all-books', 'view-switcher', 'library', 'disconnect', 'new-library-connected', 'transfer-actions', 'settings-dialog']) {
       $(id).hidden = true;
     }
+    for (const add of addBookButtons) add.hidden = true;
     $('count').textContent = '';
     $('library-link').textContent = appName;
     for (const attribute of ['href', 'target', 'rel', 'title']) $('library-link').removeAttribute(attribute);
     $('books').replaceChildren();
-    $('search').value = '';
-    $('search').disabled = true;
+    for (const input of searchInputs) input.disabled = true;
     $('connect').hidden = false;
   }
   async function api(path, options = {}) {
@@ -235,19 +268,27 @@
       resetPull();
       page.style.setProperty('--pull-distance', '0px');
       indicator.classList.add('is-refreshing');
-      const spinnerExit = indicator.getAnimations?.()[0]?.finished;
       try {
-        await refresh({ minimumIndicatorTime: 0 });
+        await refresh();
       } catch (error) {
         if (sheetId) status('Catalog refresh failed: ' + message(error));
       } finally {
+        indicator.classList.add('is-exiting');
+        const spinnerExit = indicator.getAnimations?.()[0]?.finished;
         await spinnerExit?.catch(() => {});
+        indicator.classList.remove('is-exiting');
         indicator.classList.remove('is-refreshing');
         refreshing = false;
         resetPull();
       }
     }, { passive: true });
     window.addEventListener('touchcancel', resetPull, { passive: true });
+  }
+  function catalogSearch(query) {
+    const isbnQuery = query.replace(/[\s-]/g, '');
+    return book => [book.title, book.author, book.isbn, book.shelf_location, book.category, book.series_name, book.description]
+      .some(value => value.toLocaleLowerCase().includes(query))
+      || Boolean(isbnQuery && book.isbn.toLocaleLowerCase().replace(/[\s-]/g, '').includes(isbnQuery));
   }
   function render() {
     $('duplicates-toggle').setAttribute('aria-pressed', String(duplicatesMode));
@@ -257,8 +298,10 @@
       if (!duplicateReasons.has(book)) duplicateReasons.set(book, []);
       duplicateReasons.get(book).push(group.reason);
     }
-    const query = $('search').value.trim().toLocaleLowerCase();
-    const filtered = books.filter(book => (!duplicatesMode || duplicateReasons.has(book)) && [book.title, book.author, book.isbn, book.shelf_location, book.category, book.series_name, book.description].some(value => value.toLocaleLowerCase().includes(query)));
+    lastLibrarySearch = $('search').value;
+    const query = lastLibrarySearch.trim().toLocaleLowerCase();
+    const matchesSearch = catalogSearch(query);
+    const filtered = books.filter(book => (!duplicatesMode || duplicateReasons.has(book)) && matchesSearch(book));
     const compact = compactLayout?.matches;
     const layout = compact ? 'card' : viewMode;
     const field = compact ? $('library-sort').value : layout === 'list' ? sortField : '';
@@ -267,7 +310,7 @@
       if (!left || !right) return left ? -1 : right ? 1 : 0;
       return (compact ? 1 : sortDirection) * left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' });
     });
-    const container = $('books'); container.replaceChildren(); container.className = 'books view-' + layout;
+    const container = $('books'); clearCoverLookups(container); container.replaceChildren(); container.className = 'books view-' + layout;
     for (const mode of ['card', 'list']) $('view-' + mode).setAttribute('aria-pressed', String(viewMode === mode));
     let listBody;
     if (layout === 'list') {
@@ -332,12 +375,16 @@
     renderScanBooks();
   }
 
-  function coverSource(isbn, size) {
-    const normalized = normalizeIsbn(isbn || '');
-    return showCovers && normalized ? 'https://covers.openlibrary.org/b/isbn/' + normalized + '-' + size + '.jpg?default=false' : '';
+  function clearCoverLookups(container) {
+    if (!coverObserver) return;
+    for (const cover of pendingCovers.keys()) {
+      if (cover.isConnected && !container.contains(cover)) continue;
+      coverObserver.unobserve(cover);
+      pendingCovers.delete(cover);
+    }
   }
 
-  function setCoverArt(cover, image, fallback, source, useFallback) {
+  function setCoverArt(cover, image, fallback, source, useFallback, onMissing) {
     const sameSource = Boolean(source && image.src === source);
     if (!sameSource) image.hidden = !source;
     const updateVisibility = hasArt => {
@@ -345,10 +392,13 @@
       cover.hidden = image.hidden && fallback.hidden;
     };
     image.onload = () => {
-      if (source && image.src === source) updateVisibility(true);
+      if (source && image.src === source && (!image.currentSrc || image.currentSrc === source)) {
+        updateVisibility(true);
+      }
     };
     image.onerror = () => {
       if (!source || image.src !== source) return;
+      if (onMissing) { onMissing(); return; }
       image.hidden = true;
       updateVisibility(false);
     };
@@ -357,18 +407,44 @@
     else if (!sameSource) image.src = source;
   }
 
+  function loadBookCover(cover, image, fallback, isbn, size, useFallback, isCurrent) {
+    setCoverArt(cover, image, fallback, '', useFallback);
+    if (!isbn) return;
+    cover.hidden = false;
+    const openLibrary = () => {
+      if (!isCurrent()) return;
+      const source = 'https://covers.openlibrary.org/b/isbn/' + isbn + '-' + size + '.jpg?default=false';
+      setCoverArt(cover, image, fallback, source, useFallback);
+    };
+    requestGoogleBook(isbn).then(book => {
+      if (!isCurrent()) return;
+      const links = book?.imageLinks;
+      const candidates = size === 'M' ? [links?.small, links?.thumbnail, links?.smallThumbnail] : [links?.thumbnail, links?.smallThumbnail, links?.small];
+      const source = candidates.find(url => typeof url === 'string' && /^https?:\/\/(?:books\.google\.com|books\.googleusercontent\.com)\//i.test(url));
+      if (!source) { openLibrary(); return; }
+      setCoverArt(cover, image, fallback, source.replace(/^http:/i, 'https:'), useFallback, openLibrary);
+    }, openLibrary);
+  }
+
   function makeBookCover(book, sizeClass = '') {
     const cover = document.createElement('div');
     cover.className = sizeClass ? 'book-cover ' + sizeClass : 'book-cover';
     cover.setAttribute('aria-hidden', 'true');
     const fallback = document.createElement('div');
     fallback.className = 'book-cover-fallback';
-    const source = coverSource(book.isbn, 'S');
-    if (source) {
+    const isbn = showCovers && normalizeIsbn(book.isbn || '');
+    if (isbn) {
       const image = document.createElement('img');
       image.className = 'book-cover-art'; image.alt = ''; image.loading = 'lazy';
-      setCoverArt(cover, image, fallback, source, showFallbackCovers);
       cover.append(image);
+      const useFallback = showFallbackCovers;
+      const load = () => loadBookCover(cover, image, fallback, isbn, 'S', useFallback, () => showCovers && cover.isConnected !== false);
+      fallback.hidden = !useFallback;
+      image.hidden = true;
+      if (coverObserver) {
+        pendingCovers.set(cover, load);
+        coverObserver.observe(cover);
+      } else load();
     } else {
       cover.hidden = !showFallbackCovers;
     }
@@ -378,6 +454,7 @@
   function updateCoverPreferences() {
     showCovers = $('show-covers').checked;
     showFallbackCovers = $('show-fallback-covers').checked;
+    $('cover-attribution').hidden = !showCovers;
     try {
       localStorage.setItem(coverStorageKey, String(showCovers));
       localStorage.setItem(fallbackCoverStorageKey, String(showFallbackCovers));
@@ -424,7 +501,6 @@
 
   async function checkPermission() {
     const currentSheet = sheetId, currentToken = token;
-    const add = $('add');
     let cachedAccess;
     try {
       const saved = JSON.parse(sessionStorage.getItem(editAccessKey) || 'null');
@@ -432,9 +508,11 @@
     } catch {}
     // Cache the toolbar layout only. Editing still requires a fresh Drive response.
     canEdit = false;
-    add.disabled = true;
-    add.hidden = cachedAccess === false;
-    add.classList.toggle('awaiting-edit-access', cachedAccess === undefined);
+    for (const add of addBookButtons) {
+      add.disabled = true;
+      add.hidden = cachedAccess === false;
+      add.classList.toggle('awaiting-edit-access', cachedAccess === undefined);
+    }
     updateCheckActions();
     $('import-open').hidden = true;
     $('upgrade-library').hidden = true;
@@ -455,9 +533,11 @@
       if (sheetId === currentSheet && token === currentToken) status('Could not check editing access. You can still browse and scan.');
     } finally {
       if (sheetId === currentSheet && token === currentToken) {
-        add.classList.remove('awaiting-edit-access');
-        add.hidden = !canEdit;
-        add.disabled = !canEdit;
+        for (const add of addBookButtons) {
+          add.classList.remove('awaiting-edit-access');
+          add.hidden = !canEdit;
+          add.disabled = !canEdit;
+        }
       }
     }
   }
@@ -468,15 +548,19 @@
     try {
       if (!window.caches) throw new Error('Cache unavailable');
       const names = await window.caches.keys();
-      const count = names.includes('annas-annals-covers-v1') ? (await (await window.caches.open('annas-annals-covers-v1')).keys()).length : 0;
-      let detail = '';
-      try {
-        const estimate = await window.navigator?.storage?.estimate?.();
-        const cacheBytes = estimate?.usageDetails?.caches;
-        const bytes = typeof cacheBytes === 'number' ? cacheBytes : estimate?.usage;
-        if (typeof bytes === 'number') detail = ' · ' + (bytes / 1048576).toFixed(1) + ' MB estimated ' + (typeof cacheBytes === 'number' ? 'site cache storage' : 'site storage');
-      } catch {}
-      if (current === cacheInfoSequence) info.textContent = count + (count === 1 ? ' cached image' : ' cached images') + detail + '. Exact cover size may not be available.';
+      const responses = names.includes('annas-annals-covers-v1') ? await (await window.caches.open('annas-annals-covers-v1')).matchAll() : [];
+      let bytes = 0, unavailable = 0;
+      for (const response of responses) {
+        if (current !== cacheInfoSequence) return;
+        if (response.type === 'opaque') { unavailable++; continue; }
+        try { bytes += (await response.blob()).size; }
+        catch { unavailable++; }
+      }
+      const count = responses.length;
+      const size = bytes < 1000 ? bytes + ' B' : bytes < 1000000
+        ? (bytes / 1000).toFixed(1) + ' KB' : (bytes / 1000000).toFixed(1) + ' MB';
+      const detail = unavailable ? (unavailable === count ? 'Size unavailable' : 'At least ' + size) : size;
+      if (current === cacheInfoSequence) info.textContent = count + (count === 1 ? ' cached image' : ' cached images') + ' · ' + detail;
     } catch { if (current === cacheInfoSequence) info.textContent = 'Cover cache information is unavailable in this browser.'; }
   }
   function setMainView(view) {
@@ -492,21 +576,21 @@
       resetOwnershipCheck();
       checkScanner.stop?.().catch(() => {});
     }
+    if (view === 'library' && lastLibrarySearch !== $('search').value) render();
     if (view !== previousView) window.scrollTo?.(0, 0);
   }
   $('mode-scan').addEventListener('click', () => setMainView('scan'));
   $('mode-library').addEventListener('click', () => setMainView('library'));
   function renderScanBooks() {
-    const container = $('scan-books'); container.replaceChildren();
+    const container = $('scan-books'); clearCoverLookups(container); container.replaceChildren();
     const query = $('scan-search').value.trim().toLocaleLowerCase();
-    const isbnQuery = query.replace(/[\s-]/g, '');
     container.hidden = !query;
     $('scan-count').hidden = !query;
     if (!query) {
       $('scan-count').textContent = '';
       return;
     }
-    const filtered = books.filter(book => [book.title, book.author].some(value => (value || '').toLocaleLowerCase().includes(query)) || (isbnQuery && (book.isbn || '').toLocaleLowerCase().replace(/[\s-]/g, '').includes(isbnQuery)));
+    const filtered = books.filter(catalogSearch(query));
     $('scan-count').textContent = filtered.length
       ? filtered.length + (filtered.length === 1 ? ' book found' : ' books found')
       : 'No books match your search. Try a different title or author.';
@@ -541,6 +625,7 @@
     setCameraOpen(false);
     showCheckResult(false);
     showIsbnForm(false);
+    clearCoverLookups($('check-result'));
     $('check-result').replaceChildren();
     resultActions = undefined;
     $('check-announcement').textContent = '';
@@ -548,7 +633,7 @@
     renderScanBooks();
   }
   function returnToCheck() {
-    $('scan-search').value = '';
+    setSearchText('');
     $('check-isbn').value = '';
     resetOwnershipCheck();
     window.scrollTo?.(0, 0);
@@ -579,18 +664,29 @@
     const sequence = await closeCheckScanner();
     if (sequence === checkSequence && mainView === 'scan') checkIsbn(isbn);
   });
-  $('scan-search').addEventListener('input', () => {
-    checkSequence++;
+  function updateSearch(inputId, value) {
+    setSearchText(value);
+    if (inputId === 'search') { render(); return; }
+    const sequence = ++checkSequence;
     clearTimeout(scanSearchTimer);
     showCheckResult(false);
     renderScanBooks();
-    const query = $('scan-search').value.trim();
+    const query = value.trim();
     if (normalizeIsbn(query)) scanSearchTimer = setTimeout(async () => {
       await checkScanner.stop();
+      if (sequence !== checkSequence || mainView !== 'scan') return;
       setCameraOpen(false);
-      if ($('scan-search').value.trim() === query && mainView === 'scan') checkIsbn(query);
+      checkIsbn(query);
     }, 400);
-  });
+  }
+  for (const [, inputId, , clearId] of searchBars) {
+    const input = $(inputId);
+    input.addEventListener('input', () => updateSearch(inputId, input.value));
+    $(clearId).addEventListener('click', () => {
+      updateSearch(inputId, '');
+      input.focus?.();
+    });
+  }
   function bookMetadata(data) {
     return {
       title: data.title || '',
@@ -622,12 +718,20 @@
       category: google.mainCategory || google.categories?.[0] || ''
     };
   }
+  function requestGoogleBook(isbn) {
+    if (!config.apiKey) return Promise.resolve(null);
+    if (googleBookRequests.has(isbn)) return googleBookRequests.get(isbn);
+    const request = fetchLookup('https://www.googleapis.com/books/v1/volumes?q=' + encodeURIComponent('isbn:' + isbn) + '&key=' + encodeURIComponent(config.apiKey))
+      .then(data => (data.items || []).find(item => (item.volumeInfo?.industryIdentifiers || []).some(id => normalizeIsbn(id.identifier) === isbn))?.volumeInfo || null)
+      .finally(() => googleBookRequests.delete(isbn));
+    googleBookRequests.set(isbn, request);
+    return request;
+  }
   async function lookupBookMetadata(isbn, onGoogle) {
     const openLibrary = fetchLookup('https://openlibrary.org/api/books?bibkeys=' + encodeURIComponent('ISBN:' + isbn) + '&format=json&jscmd=data')
       .then(data => data['ISBN:' + isbn] || null);
-    const googleBooks = config.apiKey ? fetchLookup('https://www.googleapis.com/books/v1/volumes?q=' + encodeURIComponent('isbn:' + isbn) + '&key=' + encodeURIComponent(config.apiKey))
-      .then(data => (data.items || []).find(item => (item.volumeInfo?.industryIdentifiers || []).some(id => normalizeIsbn(id.identifier) === isbn))?.volumeInfo || null)
-      .then(google => { if (google && onGoogle) { const metadata = googleBookMetadata(google), fieldSources = {}; for (const [key, value] of Object.entries(metadata)) if (value) fieldSources[key] = 'Google Books'; onGoogle({metadata, fieldSources}); } return google; }) : Promise.resolve(null);
+    const googleBooks = requestGoogleBook(isbn)
+      .then(google => { if (google && onGoogle) { const metadata = googleBookMetadata(google), fieldSources = {}; for (const [key, value] of Object.entries(metadata)) if (value) fieldSources[key] = 'Google Books'; onGoogle({metadata, fieldSources}); } return google; });
     const [openResult, googleResult] = await Promise.allSettled([openLibrary, googleBooks]);
     if (openResult.status === 'rejected' && (googleResult.status === 'rejected' || !googleResult.value)) throw new Error('Book lookup unavailable. You can enter the details manually.');
     const openData = openResult.status === 'fulfilled' ? openResult.value : null;
@@ -709,6 +813,7 @@
     const detail = document.createElement('p');
     detail.className = 'page-subtitle';
     resultActions = undefined;
+    clearCoverLookups(result);
     result.replaceChildren();
     result.append(heading, detail);
     showIsbnForm(false);
@@ -885,7 +990,7 @@
       .setCallback(async result => {
         if (result.action !== google.picker.Action.PICKED) return;
         sheetId = result.docs[0].id;
-        try { await refresh(); rememberSheet(sheetId); showLibrary(); }
+        try { await refresh({ minimumIndicatorTime: 0 }); rememberSheet(sheetId); showLibrary(); }
         catch (error) { sheetId = ''; status(message(error)); }
       }).build().setVisible(true);
   }
@@ -910,7 +1015,7 @@
     const previousSheet = sheetId;
     sheetId = data.spreadsheetId;
     rememberSheet(sheetId);
-    try { await refresh(); showLibrary(); status('New library created.'); }
+    try { await refresh({ minimumIndicatorTime: 0 }); showLibrary(); status('New library created.'); }
     catch (error) {
       sheetId = previousSheet;
       if (previousSheet) rememberSheet(previousSheet);
@@ -932,7 +1037,7 @@
       }
       if (rememberedSheet && mode === 'connect') {
         sheetId = rememberedSheet;
-        try { await refresh(); showLibrary(); }
+        try { await refresh({ minimumIndicatorTime: 0 }); showLibrary(); }
         catch (error) { sheetId = ''; status('Could not open the remembered Sheet: ' + message(error) + ' You can choose a different Sheet.'); }
         return;
       }
@@ -961,8 +1066,12 @@
       }
     } catch {}
     try {
-      await refresh();
-      if (!cached && sheetId) showLibrary();
+      if (cached) {
+        await refresh();
+      } else {
+        await refresh({ minimumIndicatorTime: 0 });
+        if (sheetId) showLibrary();
+      }
     } catch (error) {
       if (cached && error.status !== 401 && error.status !== 403) {
         status('Showing saved catalog; refresh failed: ' + message(error));
@@ -1101,7 +1210,6 @@
   for (const mode of ['card', 'list']) $('view-' + mode).addEventListener('click', () => {
     viewMode = mode; try { localStorage.setItem('annas-annals-view', mode); } catch {} render();
   });
-  $('search').addEventListener('input', render);
   $('library-sort').addEventListener('change', render);
   compactLayout?.addEventListener?.('change', render);
   let editMode = false, deleteArmed = false, deleteTimer;
@@ -1192,10 +1300,13 @@
     $('edit-from-details').focus?.();
   }
   $('cancel-edit').addEventListener('click', cancelBookEdit);
+  let coverPreviewRequest = 0;
   function updateBookCover() {
     const showPreview = !editMode || !editingBook;
-    const source = showPreview ? coverSource($('book-form').elements.isbn.value, 'M') : '';
-    setCoverArt($('book-cover-panel'), $('book-cover-image'), $('book-cover-placeholder'), source, showPreview && showFallbackCovers);
+    const isbn = showPreview && showCovers && normalizeIsbn($('book-form').elements.isbn.value);
+    const request = ++coverPreviewRequest;
+    loadBookCover($('book-cover-panel'), $('book-cover-image'), $('book-cover-placeholder'), isbn, 'M',
+      showPreview && showFallbackCovers, () => request === coverPreviewRequest && $('editor').open);
   }
   $('book-form').elements?.isbn?.addEventListener?.('input', updateBookCover);
   function openEditor(book = null, editable = true) {
@@ -1208,7 +1319,16 @@
     if (!$('editor').open) $('editor').showModal();
     if (!editable) $('book-details-title').focus?.();
   }
-  $('add').addEventListener('click', () => { if (canEdit) openEditor(); });
+  async function addBook() {
+    if (!canEdit || busy) return;
+    if (mainView === 'scan') {
+      clearTimeout(scanSearchTimer);
+      const sequence = await closeCheckScanner();
+      if (sequence !== checkSequence || mainView !== 'scan' || !canEdit) return;
+    }
+    openEditor();
+  }
+  for (const add of addBookButtons) add.addEventListener('click', addBook);
   async function findUnchangedBook(original) {
     const data = await api('/values/' + encodeURIComponent("'Books'!A:ZZ"));
     const rows = data.values || [];
@@ -1381,7 +1501,7 @@
       } else {
         await api('/values/' + encodeURIComponent("'Books'!A:ZZ") + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', { method: 'POST', body: JSON.stringify({ values: [sheetHeaders.map(key => valuesByHeader[key] || '')] }) });
         returnToCheck();
-        $('search').value = ''; $('library-sort').value = ''; sortField = ''; duplicatesMode = false;
+        $('library-sort').value = ''; sortField = ''; duplicatesMode = false;
         books.unshift(valuesByHeader); render();
         await finishChange('Book saved.');
       }

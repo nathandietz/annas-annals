@@ -18,7 +18,7 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_upward,barcode_scanner,book_2,edit,expand_less,expand_more,search,settings,unfold_more&display=block"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="style.css?v=book-covers-4" />
+    <link rel="stylesheet" href="style.css?v=catalog-search-4" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
     <script
@@ -31,9 +31,36 @@
     <script src="duplicates.js?v=017c5b1b32ae" defer></script>
     <script src="csv.js?v=017c5b1b32ae" defer></script>
     <script src="config.js?v=017c5b1b32ae" defer></script>
-    <script src="app.js?v=book-covers-4" defer></script>
+    <script src="app.js?v=catalog-search-2" defer></script>
   </head>
   <body>
+    <template id="catalog-search-template">
+      <search class="search-wrap">
+        <span class="material-symbol" aria-hidden="true">search</span>
+        <input
+          type="search"
+          placeholder="Search your Library"
+          aria-label="Search your Library"
+          autocomplete="off"
+          disabled
+        />
+        <button
+          class="search-clear"
+          type="button"
+          aria-label="Clear search"
+          hidden
+        ></button>
+      </search>
+      <button
+        class="quiet-button catalog-add"
+        type="button"
+        aria-label="Add book"
+        title="Add book"
+        hidden
+      >
+        <span class="add-symbol" aria-hidden="true"></span>
+      </button>
+    </template>
     <main id="app-page">
       <div id="pull-refresh" aria-hidden="true" hidden>
         <svg
@@ -112,6 +139,9 @@
       <section id="scan-view" aria-label="Check a book" hidden>
         <div id="check-home">
           <h2 class="page-title">Do I own This?</h2>
+          <div id="check-search" class="catalog-search"></div>
+          <p id="scan-count" class="hint" role="status" hidden></p>
+          <div id="scan-books" class="scan-books" hidden></div>
           <div class="scanner-mark" aria-hidden="true">
             <svg
               width="152"
@@ -133,18 +163,6 @@
               <path d="M23 58h106" stroke="#5aa1ed" />
             </svg>
           </div>
-          <search id="check-search" class="search-wrap">
-            <span class="material-symbol" aria-hidden="true">search</span>
-            <input
-              id="scan-search"
-              type="search"
-              placeholder="Search by title or author"
-              aria-label="Search by title, author, or ISBN"
-              autocomplete="off"
-            />
-          </search>
-          <p id="scan-count" class="hint" role="status" hidden></p>
-          <div id="scan-books" class="scan-books" hidden></div>
         </div>
         <button id="check-back" class="quiet-button" type="button" hidden>
           ‹ Check
@@ -230,27 +248,7 @@
         <h2 id="library-title" class="page-title">Library</h2>
         <div class="toolbar">
           <div class="library-tools">
-            <search class="search-wrap">
-              <span class="material-symbol" aria-hidden="true">search</span
-              ><input
-                id="search"
-                type="search"
-                placeholder="Search your library"
-                aria-label="Search your library"
-                disabled
-              />
-            </search>
-            <button
-              id="add"
-              class="quiet-button"
-              type="button"
-              aria-label="Add book"
-              title="Add book"
-              hidden
-            >
-              <span class="add-symbol" aria-hidden="true">+</span
-              ><span class="add-label">Add book</span>
-            </button>
+            <div id="library-search" class="catalog-search"></div>
             <div
               id="view-switcher"
               class="view-switcher"
@@ -310,7 +308,7 @@
             ><span
               ><strong>Download book covers</strong
               ><span class="hint"
-                >Load and cache covers from Open Library on this device.</span
+                >Try Google Books first, then Open Library.</span
               ></span
             ><input id="show-covers" type="checkbox" role="switch"
           /></label>
@@ -603,6 +601,11 @@
             your library.
           </p>
         </section>
+        <p id="cover-attribution" class="hint" hidden>
+          Cover artwork from
+          <a href="https://books.google.com/">Google Books</a> and
+          <a href="https://openlibrary.org/">Open Library</a>.
+        </p>
         <nav class="policy-links" aria-label="App policies">
           <a href="privacy.html">Privacy Policy</a>
           <a href="terms.html">Terms of Service</a>

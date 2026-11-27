@@ -18,6 +18,7 @@ async function fixture({ initialRow, legacy = false, extraData = false, nine = f
   if (reordered) { [headers[0], headers[2]] = [headers[2], headers[0]]; [row[0], row[2]] = [row[2], row[0]]; }
   function element(id) { return elements[id] ||= { hidden: false, value: '', textContent: '', disabled: false, classList: { toggle() {}, add() {}, remove() {} }, children: [], addEventListener(type, fn) { handlers[id + ':' + type] = fn; this['on' + type] = fn; }, replaceChildren() { this.children = []; }, append(...children) { this.children.push(...children); }, setAttribute() {}, removeAttribute() {}, showModal() { this.open = true; }, close() { this.open = false; }, reset() {} }; }
   const form = element('book-form'); form.elements = Object.fromEntries(['isbn','title','author','language','notes','publisher','publication_year','shelf_location','category','description','series_name','volume_number','pages'].map(k => [k, { value: '' }]));
+  element('catalog-search-template').content = { cloneNode: () => ({ querySelector: () => ({}) }) };
   const localStorage = { getItem: key => key === 'annas-annals-show-covers' ? 'true' : key === 'annas-annals-sheet-id' ? 'sheet-id' : key === 'annas-annals-google-session' ? JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }) : null, setItem() {}, removeItem() {} };
   const sessionStorage = { getItem: () => JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }), setItem() {}, removeItem() {} };
   const context = vm.createContext({ document: { getElementById: element, createElement: tag => element('created-' + tag + '-' + Math.random()) }, window: { LIBRARY_CONFIG: {apiKey:'test-key'}, confirm: () => true, addEventListener() {} }, localStorage, sessionStorage, createLibraryScanner: () => ({ stop: async () => {} }), normalizeIsbn, matchBook, findDuplicateGroups, setTimeout: (fn, delay) => { if (delay === 400) scanTimer = fn; if (delay === 1000) queueMicrotask(fn); return 1; }, clearTimeout: () => {}, crypto: { randomUUID: () => 'new-id' }, fetch: async (url, options) => { requests.push({ url, options }); if (googleFails && url.includes('googleapis.com/books/')) throw new Error('unavailable'); if (deferLookup && url.includes('openlibrary.org')) return lookupWait; if (url.includes(':append') && options?.body) addedRows.push(JSON.parse(options.body).values[0]); return { ok: true, json: async () => url.includes('googleapis.com/books/') ? {items:googleData ? [{volumeInfo:googleData}] : []} : url.includes('openlibrary.org/api/books') ? { 'ISBN:9780140328721': bookData } : url.includes('openlibrary.org/books/') ? editionData : url.includes('openlibrary.org/works/') ? workData : url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: true } } : url.includes('fields=properties') ? { properties: { title: 'Library' }, sheets: [{ properties: { title: 'Books', gridProperties: { frozenRowCount: 1 } } }] } : url.includes('fields=sheets') ? { sheets: [{ properties: { title: 'Books', sheetId: 0 } }] } : { values: [headers, row, ...addedRows] } }; }, console });
@@ -138,6 +139,7 @@ test('cover setting controls book images in cards, list, and details', async () 
   const cover = card.children[0].children[0];
   assert.match(cover.children[0].src, /covers\.openlibrary\.org\/b\/isbn\/9780306406157-S\.jpg/);
   f.handlers['view-list:click']();
+  await new Promise(resolve => setImmediate(resolve));
   const table = f.element('books').children[0];
   const titleCell = table.children[1].children[0].children[0];
   assert.match(titleCell.children[0].children[0].src, /9780306406157-S\.jpg/);
@@ -169,6 +171,26 @@ test('a cover thumbnail switches between downloaded art and its text-free fallba
   assert.equal(fallback.hidden, false);
 });
 
+test('Google Books cover art has priority and a broken image falls back to Open Library', async () => {
+  const f = await fixture({ googleData: {
+    industryIdentifiers: [{ identifier: '9780306406157' }],
+    imageLinks: { thumbnail: 'http://books.google.com/books/content?id=edition' }
+  } });
+  const [image, fallback] = f.element('books').children[0].children[0].children[0].children;
+  assert.equal(image.src, 'https://books.google.com/books/content?id=edition');
+  image.onerror();
+  assert.match(image.src, /covers\.openlibrary\.org\/b\/isbn\/9780306406157-S\.jpg/);
+  image.onerror();
+  assert.equal(fallback.hidden, false);
+
+  f.element('books').children[0].onclick();
+  await new Promise(resolve => setImmediate(resolve));
+  const detailImage = f.element('book-cover-image');
+  assert.equal(detailImage.src, 'https://books.google.com/books/content?id=edition');
+  detailImage.onload();
+  assert.equal(f.element('book-cover-placeholder').hidden, true);
+});
+
 test('details retain a local fallback cover when downloaded covers are off', async () => {
   const f = await fixture();
   f.element('show-covers').checked = false;
@@ -190,6 +212,7 @@ test('fallback and downloaded covers can be turned off independently', async () 
     f.handlers[id + ':change']();
   };
   set('show-fallback-covers', false);
+  await new Promise(resolve => setImmediate(resolve));
   const [image, fallback] = cardCover().children;
   assert.equal(fallback.hidden, true);
   image.onload();
@@ -198,6 +221,7 @@ test('fallback and downloaded covers can be turned off independently', async () 
   assert.equal(cardCover().hidden, true);
 
   f.element('books').children[0].onclick();
+  await new Promise(resolve => setImmediate(resolve));
   f.element('book-cover-image').onerror();
   assert.equal(f.element('book-cover-panel').hidden, true);
 
@@ -264,6 +288,54 @@ test('adding a book clears the scan result and shows the new book first', async 
   assert.equal(title.children[0].textContent, 'New arrival');
 });
 
+test('Check and Library search the same catalog fields and Check can open Add book', async () => {
+  const f = await fixture({
+    initialRow: ['id-1', '9780306406157', 'Original', 'Author', '', '', '2026-01-01', '', '', 'Top shelf']
+  });
+  f.element('search').value = 'Top shelf';
+  f.handlers['search:input']();
+  assert.equal(f.element('books').children.length, 1);
+  f.handlers['mode-scan:click']();
+  f.element('scan-search').value = 'Top shelf';
+  f.handlers['scan-search:input']();
+  assert.equal(f.element('scan-books').children.length, 1);
+
+  await f.handlers['check-add:click']();
+  assert.equal(f.element('editor').open, true);
+  assert.equal(f.element('editor-title').textContent, 'Add a book');
+  assert.equal(f.form.elements.title.value, '');
+});
+
+test('Check and Library carry search text between tabs and can clear it from either tab', async () => {
+  const f = await fixture();
+  f.element('search').value = 'Original';
+  f.handlers['search:input']();
+  f.handlers['mode-scan:click']();
+  assert.equal(f.element('scan-search').value, 'Original');
+  assert.equal(f.element('scan-books').children.length, 1);
+  assert.equal(f.element('check-search-clear').hidden, false);
+
+  f.element('scan-search').value = 'Missing book';
+  f.handlers['scan-search:input']();
+  f.handlers['mode-library:click']();
+  assert.equal(f.element('search').value, 'Missing book');
+  assert.equal(f.element('books').children.length, 0);
+  f.handlers['library-search-clear:click']();
+  assert.equal(f.element('search').value, '');
+  assert.equal(f.element('scan-search').value, '');
+  assert.equal(f.element('books').children.length, 1);
+  assert.equal(f.element('library-search-clear').hidden, true);
+
+  f.handlers['mode-scan:click']();
+  f.element('scan-search').value = 'Original';
+  f.handlers['scan-search:input']();
+  f.handlers['check-search-clear:click']();
+  assert.equal(f.element('search').value, '');
+  assert.equal(f.element('scan-search').value, '');
+  assert.equal(f.element('scan-books').hidden, true);
+  assert.equal(f.element('check-search-clear').hidden, true);
+});
+
 test('a possible match shows the owned edition and adds the scanned edition', async () => {
   const f = await fixture({
     initialRow: ['id-1', '9780306406157', 'Original', 'Author', '', '', '2026-01-01', 'Owned Publisher', '1991', 'Living room · Shelf 2'],
@@ -314,6 +386,7 @@ test('adding a scanned book fills available edition details from the existing lo
   assert.ok(add); add.onclick();
   for (const [key, value] of Object.entries({isbn:'9780140328721', title:'Matilda', author:'Roald Dahl', publisher:'Puffin', publication_year:'1988', language:'eng', pages:'240', category:'Fiction'})) assert.equal(f.form.elements[key].value, value);
   assert.equal(f.form.elements.shelf_location.value, '');
+  await new Promise(resolve => setImmediate(resolve));
   assert.match(f.element('book-cover-image').src, /covers\.openlibrary\.org\/b\/isbn\/9780140328721-M\.jpg/);
   assert.equal(f.requests.filter(r => r.url.includes('openlibrary.org/api/books')).length, 1);
 });

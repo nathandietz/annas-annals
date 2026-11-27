@@ -16,7 +16,9 @@ self.addEventListener('fetch', event => {
     catch { return fetch(request); }
     const existing = await cache.match(request);
     if (existing) return existing;
-    const response = await fetch(request);
+    // Prefer responses whose image bytes the cover cache can measure.
+    const response = await fetch(request, { mode: 'cors', credentials: 'omit' })
+      .catch(() => fetch(request));
     if ((response.ok || response.type === 'opaque') && current === generation) {
       try {
         await cache.put(request, response.clone());

@@ -4,13 +4,18 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const headers = ['id','isbn','title','author','language','notes','created_at','publisher','publication_year','shelf_location','category','description','series_name','volume_number','pages','updated_at'];
 function storage(initial = {}) { const data = new Map(Object.entries(initial)); return { getItem: k => data.get(k) ?? null, setItem: (k,v) => data.set(k,String(v)), removeItem: k => data.delete(k) }; }
-async function openWindow(shared, responseStatus = 200, mobile = false, editable = true, { tabStorage = storage(), permissionReady, now = Date.now, refreshDelay = queueMicrotask, standalone = false } = {}) {
+async function openWindow(shared, responseStatus = 200, mobile = false, editable = true, { tabStorage = storage(), permissionReady, now = Date.now, refreshDelay = queueMicrotask, standalone = false, google, gapi } = {}) {
   const elements = {}, handlers = {}, requests = [], scanners = [], timers = [];
   const el = id => elements[id] ||= { hidden: false, value: '', textContent: '', children: [], classList: { values: new Set(), toggle(name, force) { if (force) this.values.add(name); else this.values.delete(name); }, remove(name) { this.values.delete(name); }, add(name) { this.values.add(name); }, contains(name) { return this.values.has(name); } }, addEventListener(type, fn) { handlers[id + ':' + type] = fn; }, style: { setProperty(name, value) { this[name] = value; } }, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute() {}, append(...children) { this.children.push(...children); }, replaceChildren() { this.children = []; } };
+  el('catalog-search-template').content = { cloneNode: () => ({ querySelector: () => ({}) }) };
   let deletedCache;
   let navigatedTo, tickUpdateAge;
-  const window = { LIBRARY_CONFIG: {}, innerHeight: 874, location: { href:'https://example.com/annals/?view=library', replace: value => { navigatedTo = value; } }, caches: { keys: async () => deletedCache ? [] : ['annas-annals-covers-v1'], open: async () => ({ keys: async () => [{}, {}] }), delete: async name => { deletedCache = name; } }, navigator: { storage: { estimate: async () => ({usage: 1048576}) } }, matchMedia: query => ({ matches: query === '(display-mode: standalone)' ? standalone : mobile }), setInterval: (fn, delay) => { if (delay === 60000) tickUpdateAge = fn; }, addEventListener: (type, fn) => { handlers['window:' + type] = fn; } };
+  const window = { LIBRARY_CONFIG: {}, innerHeight: 874, location: { href:'https://example.com/annals/?view=library', replace: value => { navigatedTo = value; } }, caches: { keys: async () => deletedCache ? [] : ['annas-annals-covers-v1'], open: async () => ({ matchAll: async () => [new Response(new Uint8Array(3000)), new Response(new Uint8Array(1500))] }), delete: async name => { deletedCache = name; } }, navigator: { storage: { estimate: async () => ({usage: 1048576}) } }, matchMedia: query => ({ matches: query === '(display-mode: standalone)' ? standalone : mobile }), setInterval: (fn, delay) => { if (delay === 60000) tickUpdateAge = fn; }, addEventListener: (type, fn) => { handlers['window:' + type] = fn; } };
   const context = vm.createContext({ URL, Date: class extends Date { static now() { return now(); } }, document: { getElementById: el, createElement: () => ({ textContent: '', setAttribute() {}, addEventListener() {}, append() {} }) }, window, localStorage: shared, sessionStorage: tabStorage, findDuplicateGroups: () => [], normalizeIsbn: require('../isbn.js').normalizeIsbn, matchBook: () => ({kind:'exact', books:[]}), createLibraryScanner: () => { const scanner = { stops: 0, start: async (callback, onStatus) => { scanner.decoded = callback; onStatus('Starting camera…'); }, hold: duration => { scanner.holdDuration = duration; }, stop: async () => { scanner.stops++; } }; scanners.push(scanner); return scanner; }, setTimeout: (fn, delay) => delay === 1000 ? refreshDelay(fn) : timers.push(fn) - 1, clearTimeout: id => { if (id !== undefined) timers[id] = () => {}; }, fetch: async (url, options) => { requests.push({url, options}); if (url.includes('capabilities(canEdit)') && permissionReady) await permissionReady; return { ok: responseStatus === 200, status: responseStatus, json: async () => url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: editable } } : url.includes('fields=properties') ? { properties: {title: 'My library'}, sheets: [{properties: {title:'Books', gridProperties:{frozenRowCount:1}}}] } : { values: [headers] } }; }, console });
+  if (google) {
+    Object.assign(window, { google, gapi, LIBRARY_CONFIG: { clientId: 'client', apiKey: 'key', appId: 'app' } });
+    Object.assign(context, { google, gapi });
+  }
   vm.runInContext(fs.readFileSync('app.js', 'utf8'), context);
   await new Promise(resolve => setImmediate(resolve));
   return { el, handlers, requests, scanners, timers, window, tickUpdateAge, navigatedTo: () => navigatedTo, cacheDeleted: () => deletedCache };
@@ -21,10 +26,48 @@ test('a new window restores a valid session without reconnecting', async () => {
   const first = await openWindow(shared), second = await openWindow(shared);
   for (const view of [first, second]) { assert.equal(view.el('library').hidden, false); assert.equal(view.el('connect').hidden, true); assert.equal(view.requests.length, 3); assert.equal(view.el('add').hidden, false); }
 });
-test('a fast catalog refresh keeps its progress indicator visible for one second', async () => {
+test('a first connection and reconnect open the selected Sheet without an indicator delay', async () => {
+  let authorize, pickSheet;
+  const google = {
+    accounts: { oauth2: { initTokenClient: ({ callback }) => ({ requestAccessToken() { authorize = callback; } }) } },
+    picker: {
+      ViewId: { SPREADSHEETS: 'spreadsheets' }, Action: { PICKED: 'picked' },
+      DocsView: class { setOwnedByMe() { return this; } },
+      PickerBuilder: class {
+        addView() { return this; }
+        setOAuthToken() { return this; }
+        setDeveloperKey() { return this; }
+        setAppId() { return this; }
+        setCallback(callback) { pickSheet = callback; return this; }
+        build() { return { setVisible() {} }; }
+      }
+    }
+  };
+  const gapi = { load: (_name, { callback }) => callback() };
+  for (const remembered of [false, true]) {
+    const shared = storage(remembered ? { [sheetKey]: 'sheet' } : {});
+    const view = await openWindow(shared, 200, false, true, { google, gapi, refreshDelay() {} });
+    view.handlers['signin:click']();
+    const connection = authorize({ access_token: 'token', expires_in: 120 });
+    if (!remembered) pickSheet({ action: 'picked', docs: [{ id: 'sheet' }] });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(view.el('connect').hidden, true, remembered ? 'reconnect' : 'first connection');
+    assert.equal(view.el('status').textContent, 'Updated just now');
+    await connection;
+  }
+});
+test('restoring a session without a cached catalog opens the Sheet without an indicator delay', async () => {
   const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
+  const view = await openWindow(shared, 200, false, true, { refreshDelay() {} });
+  assert.equal(view.el('connect').hidden, true);
+  assert.equal(view.el('status').textContent, 'Updated just now');
+});
+test('a fast refresh of a cached catalog keeps its progress indicator visible for one second', async () => {
+  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
+  const tabStorage = storage();
+  await openWindow(shared, 200, false, true, { tabStorage });
   let finishDelay;
-  const view = await openWindow(shared, 200, false, true, { refreshDelay: fn => { finishDelay = fn; } });
+  const view = await openWindow(shared, 200, false, true, { tabStorage, refreshDelay: fn => { finishDelay = fn; } });
   const status = view.el('status');
 
   assert.equal(status.textContent, 'Refreshing Catalog');
@@ -41,11 +84,14 @@ test('only a standalone pull from the top refreshes the catalog', async () => {
   const browser = await openWindow(shared, 200, true);
   assert.equal(browser.handlers['window:touchmove'], undefined);
 
-  let spinnerDelays = 0;
+  let finishMinimum, finishExit;
   const app = await openWindow(shared, 200, true, true, {
     standalone: true,
-    refreshDelay: done => { if (++spinnerDelays === 1) queueMicrotask(done); }
+    refreshDelay: done => { finishMinimum = done; }
   });
+  const indicator = app.el('pull-refresh');
+  const exitFinished = new Promise(resolve => { finishExit = resolve; });
+  indicator.getAnimations = () => indicator.classList.contains('is-exiting') ? [{ finished: exitFinished }] : [];
   const spokes = app.el('pull-refresh-spokes').children;
   spokes.push(...Array.from({ length: 8 }, () => ({ style: { setProperty(name, value) { this[name] = value; } } })));
   const opacities = () => spokes.map(spoke => Number(spoke.style['--spoke-opacity']));
@@ -99,12 +145,25 @@ test('only a standalone pull from the top refreshes the catalog', async () => {
   assert.equal(app.el('status').textContent, 'Refreshing Catalog');
   assert.equal(pull(120), false);
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(spinnerDelays, 1);
   assert.equal(app.requests.length, initialRequests + 2);
-  assert.equal(displacement(), 0);
-  assert.equal(app.el('pull-refresh').hidden, true);
-  assert.equal(app.el('pull-refresh').classList.contains('is-armed'), false);
+  assert.equal(indicator.hidden, false);
+  assert.equal(indicator.classList.contains('is-refreshing'), true);
+  assert.equal(indicator.classList.contains('is-exiting'), false);
+  assert.equal(typeof finishMinimum, 'function');
+
+  finishMinimum();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(indicator.classList.contains('is-exiting'), true);
+  assert.equal(indicator.hidden, false);
   assert.equal(app.el('status').textContent, 'Updated just now');
+
+  finishExit();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(displacement(), 0);
+  assert.equal(indicator.hidden, true);
+  assert.equal(indicator.classList.contains('is-armed'), false);
+  assert.equal(indicator.classList.contains('is-refreshing'), false);
+  assert.equal(indicator.classList.contains('is-exiting'), false);
 });
 
 test('the pull threshold requests a single haptic pulse per gesture', async () => {
@@ -191,6 +250,7 @@ test('mobile opens scan view and viewers cannot add books', async () => {
   assert.equal(view.el('scan-view').hidden, false);
   assert.equal(view.el('library').hidden, true);
   assert.equal(view.el('add').hidden, true);
+  assert.equal(view.el('check-add').hidden, true);
   view.handlers['mode-library:click']();
   assert.equal(view.el('library').hidden, false);
   assert.equal(view.el('scan-view').hidden, true);
@@ -246,13 +306,25 @@ test('the selected main view is restored when the page is reopened', async () =>
   assert.equal(third.el('settings-dialog').hidden, false);
 });
 
-test('settings shows cached image count and estimated site storage', async () => {
+test('settings reports the cover cache count independently of total site storage', async () => {
   const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
   const view = await openWindow(shared);
   view.handlers['settings-open:click']();
   await new Promise(resolve => setImmediate(resolve));
-  assert.match(view.el('cover-cache-info').textContent, /2 cached images/);
-  assert.match(view.el('cover-cache-info').textContent, /1(?:\.0)? MB.*site storage/i);
+  assert.equal(view.el('cover-cache-info').textContent, '2 cached images · 4.5 KB');
+});
+
+test('settings distinguishes unreadable cached covers from an empty cache', async () => {
+  const view = await openWindow(storage());
+  view.window.caches.open = async () => ({ matchAll: async () => [{type:'opaque'}] });
+  view.handlers['settings-open:click']();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(view.el('cover-cache-info').textContent, '1 cached image · Size unavailable');
+
+  view.window.caches.open = async () => ({ matchAll: async () => [new Response('image'), {type:'opaque'}] });
+  view.handlers['settings-open:click']();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(view.el('cover-cache-info').textContent, '2 cached images · At least 5 B');
 });
 
 test('clear cover cache deletes stored covers and reports completion', async () => {
@@ -261,6 +333,7 @@ test('clear cover cache deletes stored covers and reports completion', async () 
   await view.handlers['clear-cover-cache:click']();
   assert.equal(view.cacheDeleted(), 'annas-annals-covers-v1');
   assert.match(view.el('cover-cache-status').textContent, /cleared/i);
+  assert.equal(view.el('cover-cache-info').textContent, '0 cached images · 0 B');
 });
 
 test('update app checks the worker and reloads the same URL without a stale document', async () => {
