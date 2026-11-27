@@ -15,10 +15,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_upward,barcode_scanner,book_2,edit,expand_less,expand_more,search,settings,unfold_more&display=block"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_upward,barcode_scanner,book_2,check,close,edit,expand_less,expand_more,search,settings,unfold_more&display=block"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="assets/css/style.css?v=book-details-slide-1" />
+    <link rel="stylesheet" href="assets/css/style.css?v=book-form-focus-1" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
     <script
@@ -32,7 +32,7 @@
     <script src="assets/js/csv.js?v=017c5b1b32ae" defer></script>
     <script src="assets/js/config.js?v=017c5b1b32ae" defer></script>
     <script src="assets/js/book-lookup.js?v=1" defer></script>
-    <script src="assets/js/app.js?v=book-details-slide-1" defer></script>
+    <script src="assets/js/app.js?v=book-form-focus-1" defer></script>
   </head>
   <body>
     <template id="catalog-search-template">
@@ -574,15 +574,28 @@
       <dialog id="editor" aria-labelledby="editor-title">
         <form id="book-form">
           <div class="dialog-header">
-            <button type="button" id="close-editor" class="secondary">
-              Close
+            <button type="button" id="close-editor" class="secondary" hidden>
+              ‹ Library
             </button>
-            <button id="cancel-edit" class="secondary" type="button" hidden>
-              Cancel
+            <button
+              id="cancel-edit"
+              class="secondary"
+              type="button"
+              aria-label="Cancel"
+              hidden
+            >
+              <span id="cancel-icon" class="material-symbol" aria-hidden="true"
+                >close</span
+              >
             </button>
-            <h2 id="editor-title">Add a book</h2>
+            <h2 id="editor-title" tabindex="-1">Add a book</h2>
             <button id="edit-from-details" type="button" hidden>Edit</button>
-            <button id="save" type="submit">Save</button>
+            <button id="save" type="submit" disabled>
+              <span id="save-label" class="visually-hidden">Save</span>
+              <span id="save-icon" class="material-symbol" aria-hidden="true"
+                >check</span
+              >
+            </button>
           </div>
           <p id="form-status" role="status" aria-live="polite"></p>
           <div class="editor-body" id="editor-body">

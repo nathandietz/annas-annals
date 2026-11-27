@@ -552,6 +552,26 @@ button.upgrade-button:hover {
   justify-self: end;
 }
 
+#cancel-edit,
+#save {
+  display: inline-grid;
+  width: 44px;
+  padding: 0;
+  place-items: center;
+  border-radius: 50%;
+}
+
+#cancel-icon,
+#save-icon {
+  font-size: 22px;
+}
+
+#save:disabled {
+  color: var(--muted);
+  background: var(--field);
+  border-color: var(--separator);
+}
+
 #editor.view-mode .dialog-header {
   grid-template-columns: 1fr 1fr;
 }
@@ -618,6 +638,7 @@ button.upgrade-button:hover {
   overflow-wrap: anywhere;
 }
 
+#editor-title:focus,
 #book-details-title:focus {
   outline: none;
 }
@@ -1805,7 +1826,8 @@ button.scan-book {
     z-index: 12;
     inset: auto var(--mobile-content-right) var(--bottom-nav-gap)
       var(--mobile-content-left);
-    margin-inline: 0;
+    max-width: 276px;
+    margin-inline: auto;
     justify-content: center;
     gap: 2px;
     padding: 4px;

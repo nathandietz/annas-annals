@@ -568,6 +568,7 @@
     const form = $('book-form');
     if (generation !== editorGeneration || !$('editor').open || normalizeIsbn(form.elements.isbn.value) !== isbn) return;
     for (const [key, value] of Object.entries(values)) if (value && form.elements[key] && !form.elements[key].value.trim()) form.elements[key].value = value;
+    updateBookSaveButton();
   }
   function showOwnedEditions(result, matchingBooks) {
     if (!matchingBooks.length) return;
@@ -641,6 +642,7 @@
         const form = $('book-form');
         form.elements.isbn.value = isbn;
         if (metadata) for (const [key, value] of Object.entries(metadata)) if (value) form.elements[key].value = value;
+        updateBookSaveButton();
         if (bookData) {
           const generation = editorGeneration;
           bookLookup.lookupOpenLibraryDetails(bookData, values => fillEmptyBookFields(values, generation, isbn));
@@ -991,12 +993,22 @@
   });
   $('library-sort').addEventListener('change', render);
   compactLayout?.addEventListener?.('change', render);
-  let editMode = false, deleteArmed = false, deleteTimer;
+  let editMode = false, detailsScrollTop = 0, deleteArmed = false, deleteTimer;
   function resetDelete() {
     deleteArmed = false; clearTimeout(deleteTimer);
     $('delete').textContent = 'Delete book'; $('delete').classList.remove('upgrade-button'); $('delete').classList.add('secondary');
   }
   const editableFields = ['isbn', 'title', 'author', 'publisher', 'publication_year', 'language', 'shelf_location', 'category', 'description', 'series_name', 'volume_number', 'pages', 'notes'];
+  function hasBookEdits() {
+    const { elements } = $('book-form');
+    return editableFields.some(key => elements[key].value !== (editingBook?.[key] || ''));
+  }
+  function updateBookSaveButton() {
+    const canSave = editingBook ? hasBookEdits() : Boolean($('book-form').elements.title.value.trim());
+    $('save').disabled = busy || (editMode && !canSave);
+  }
+  $('book-form').addEventListener('input', updateBookSaveButton);
+
   function renderBookDetails(book) {
     const value = key => String(book[key] ?? '').trim();
     $('book-details-title').textContent = value('title');
@@ -1039,9 +1051,11 @@
     resetDelete();
     editMode = editable;
     const editor = $('editor');
+    const title = $('editor-title');
     editor.classList.toggle('view-mode', !editable);
-    $('editor-title').classList.toggle('visually-hidden', !editable);
-    $('editor-title').textContent = editingBook ? (editable ? 'Edit book' : 'Book details') : 'Add a book';
+    title.classList.toggle('visually-hidden', !editable);
+    title.textContent = editingBook ? (editable ? 'Edit book' : 'Book details') : 'Add a book';
+    title.autofocus = editable;
     $('book-details-heading').hidden = editable;
     $('book-details-content').hidden = editable;
     $('book-primary-fields').hidden = !editable;
@@ -1052,38 +1066,44 @@
     $('lookup-suggestions').replaceChildren();
     $('book-options').open = false;
     $('book-options').hidden = !editable || !canEdit || !editingBook?.id;
-    $('close-editor').hidden = editable && Boolean(editingBook);
-    $('close-editor').textContent = editable ? 'Close' : mainView === 'library' ? '‹ Library' : '‹ Check';
+    $('close-editor').hidden = editable;
+    $('close-editor').textContent = mainView === 'library' ? '‹ Library' : '‹ Check';
     $('save').hidden = !editable;
-    $('cancel-edit').hidden = !editable || !editingBook;
+    $('cancel-edit').hidden = !editable;
     $('edit-from-details').hidden = !canEdit || editable || !editingBook?.id;
     if (!editable) renderBookDetails(editingBook);
     updateBookCover();
-    $('editor-body').scrollTop = 0;
+    updateBookSaveButton();
+    $('editor-body').scrollTop = editable ? 0 : detailsScrollTop;
+    if (editable && editor.open) title.focus?.({ preventScroll: true });
   }
   function showDetails(book) { openEditor(book, false); }
   $('edit-from-details').addEventListener('click', () => {
     if (busy || !canEdit || !editingBook?.id) return;
+    detailsScrollTop = $('editor-body').scrollTop;
     formStatus('');
     setEditorMode(true);
-    $('cancel-edit').focus?.();
   });
-  async function cancelBookEdit() {
-    if (busy || !editingBook) return;
-    const { elements } = $('book-form');
-    const dirty = editableFields.some(key => elements[key].value !== (editingBook[key] || ''));
-    if (dirty && !window.confirm('Discard unsaved changes?')) return;
+  function cancelBookDraft() {
+    if (busy || !editMode) return;
+    if (hasBookEdits() && !window.confirm('Discard unsaved changes?')) return;
+    if (!editingBook) {
+      closeEditor();
+      return;
+    }
     stopScanner().catch(() => {});
+    const { elements } = $('book-form');
     for (const key of editableFields) elements[key].value = editingBook[key] || '';
     formStatus(''); setEditorMode(false);
-    $('edit-from-details').focus?.();
+    $('edit-from-details').focus?.({ preventScroll: true });
   }
-  $('cancel-edit').addEventListener('click', cancelBookEdit);
+  $('cancel-edit').addEventListener('click', cancelBookDraft);
   function updateBookCover() {
     $('book-cover-panel').hidden = !showFallbackCovers || (editMode && Boolean(editingBook));
   }
   function openEditor(book = null, editable = true) {
     if (busy) return;
+    detailsScrollTop = 0;
     editingBook = book ? { ...book } : null;
     const form = $('book-form'); form.reset();
     for (const key of editableFields) form.elements[key].value = book?.[key] || '';
@@ -1122,8 +1142,8 @@
   }
   function setBookSavePending(pending) {
     busy = pending;
-    $('save').disabled = pending;
-    $('save').textContent = pending ? 'Saving…' : 'Save';
+    updateBookSaveButton();
+    $('save-label').textContent = pending ? 'Saving…' : 'Save';
     $('cancel-edit').disabled = pending;
     $('close-editor').disabled = pending;
     $('edit-from-details').disabled = pending;
@@ -1155,10 +1175,6 @@
   }
   $('close-editor').addEventListener('click', () => {
     if (busy) return;
-    if (editMode) {
-      closeEditor();
-      return;
-    }
     const from = bookDetailsAnimation
       ? getComputedStyle(editorDialog).transform
       : editorDialog.style.transform || 'translateX(0)';
@@ -1241,8 +1257,8 @@
     if (event.pointerId === backSwipe?.id) settleBackSwipe(false);
   });
   editorDialog.addEventListener('cancel', event => {
-    if (busy || (editMode && editingBook)) event.preventDefault();
-    if (editMode && editingBook) cancelBookEdit();
+    if (busy || editMode) event.preventDefault();
+    if (editMode) cancelBookDraft();
   });
   editorDialog.addEventListener('close', () => {
     resetBookDetailsMotion();
@@ -1264,6 +1280,7 @@
         await new Promise(resolve => setTimeout(resolve, 500));
         if (scanId !== editorScanSequence || $('scan-area').hidden) return;
         $('book-form').elements.isbn.value = text;
+        updateBookSaveButton();
         await stopScanner();
         if (!busy && generation === editorGeneration) formStatus('Barcode captured. Look up the ISBN or enter the details.');
       }, text => { if (text !== 'Starting camera…') $('scan-status').textContent = text; });
@@ -1279,6 +1296,7 @@
       const result = await scanner.scanFile(file);
       if (generation !== editorGeneration || busy || !result) return;
       $('book-form').elements.isbn.value = result;
+      updateBookSaveButton();
       await stopScanner();
       if (!busy && generation === editorGeneration) formStatus('Barcode captured. Look up the ISBN or enter the details.');
     } catch {
@@ -1292,6 +1310,7 @@
     results.hidden = false; suggestions.replaceChildren();
     if (!isbn) { resultStatus.textContent = 'Enter a valid ISBN-10 or ISBN-13.'; return; }
     form.elements.isbn.value = isbn;
+    updateBookSaveButton();
     resultStatus.textContent = 'Looking up book details…'; $('lookup').disabled = true;
     const currentBook = editingBook, generation = editorGeneration, autoFilled = {}, userChanged = new Set();
     const isCurrent = () => !busy && editingBook === currentBook && editorGeneration === generation && normalizeIsbn(form.elements.isbn.value) === isbn && $('editor').open;
@@ -1317,9 +1336,10 @@
         item.querySelector('.lookup-source').textContent = 'Source: ' + fieldSources[key];
         const button = item.querySelector('button');
         button.textContent = 'Use this ' + label.toLowerCase();
-        button.addEventListener('click', () => { form.elements[key].value = value; item.remove(); });
+        button.addEventListener('click', () => { form.elements[key].value = value; updateBookSaveButton(); item.remove(); });
         suggestions.append(item);
       }
+      updateBookSaveButton();
       resultStatus.textContent = filled ? 'Filled ' + filled + (filled === 1 ? ' empty field.' : ' empty fields.') + ' Review the details and save.' : 'No empty fields were filled. Review the details and save.';
       if (alternatives) resultStatus.textContent += ' The lookup also suggested alternatives below.';
       const usedSources = ['Google Books', 'Open Library'].filter(source => Object.values(fieldSources).includes(source));
@@ -1334,7 +1354,7 @@
     } catch (error) { if (isCurrent()) resultStatus.textContent = message(error); } finally { $('lookup').disabled = false; }
   });
   $('book-form').addEventListener('submit', async event => {
-    event.preventDefault(); if (busy || !editMode) return;
+    event.preventDefault(); if (busy || !editMode || (editingBook && !hasBookEdits())) return;
     if (missingHeaders().length) { formStatus('Update the library before saving book details. Close this window and choose Update library.'); return; }
     const form = event.currentTarget, enteredIsbn = form.elements.isbn.value.trim();
     const isbn = normalizeIsbn(enteredIsbn);
@@ -1359,7 +1379,7 @@
         setEditorMode(false);
         formStatus('Changes saved.');
         $('editor-body').inert = false;
-        $('book-details-title').focus?.();
+        $('book-details-title').focus?.({ preventScroll: true });
         books = books.map(book => book.id === editingBook.id ? editingBook : book);
         render();
         try { await refresh({ minimumIndicatorTime: 0 }); }

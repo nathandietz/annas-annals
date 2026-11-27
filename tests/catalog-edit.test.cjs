@@ -8,7 +8,7 @@ const { findDuplicateGroups } = require('../assets/js/duplicates.js');
 const { normalizeIsbn } = require('../assets/js/isbn.js');
 const { matchBook } = require('../assets/js/book-match.js');
 
-async function fixture({ initialRow, legacy = false, extraData = false, nine = false, reordered = false, deferLookup = false, bookData = null, editionData = null, workData = null, googleData = null, googleFails = false, mobile = false } = {}) {
+async function fixture({ initialRow, legacy = false, extraData = false, nine = false, reordered = false, deferLookup = false, bookData = null, editionData = null, workData = null, googleData = null, googleFails = false, mobile = false, confirmDiscard = () => true } = {}) {
   let scanTimer, resolveLookup;
   const lookupWait = new Promise(resolve => { resolveLookup = resolve; });
   const handlers = {}, elements = {}, requests = [];
@@ -24,7 +24,7 @@ async function fixture({ initialRow, legacy = false, extraData = false, nine = f
   installTemplates(element);
   const localStorage = { getItem: key => key === 'annas-annals-show-covers' ? 'true' : key === 'annas-annals-sheet-id' ? 'sheet-id' : key === 'annas-annals-google-session' ? JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }) : null, setItem() {}, removeItem() {} };
   const sessionStorage = { getItem: () => JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }), setItem() {}, removeItem() {} };
-  const context = vm.createContext({ document: { getElementById: element, createElement: tag => element('created-' + tag + '-' + Math.random()) }, window: { LIBRARY_CONFIG: {apiKey:'test-key'}, confirm: () => true, matchMedia: query => ({ matches: mobile && query === '(max-width: 700px)' }), addEventListener() {} }, localStorage, sessionStorage, createLibraryScanner: () => ({ stop: async () => {} }), normalizeIsbn, matchBook, findDuplicateGroups, setTimeout: (fn, delay) => { if (delay === 400) scanTimer = fn; if (delay === 1000) queueMicrotask(fn); return 1; }, clearTimeout: () => {}, crypto: { randomUUID: () => 'new-id' }, fetch: async (url, options) => { requests.push({ url, options }); if (googleFails && url.includes('googleapis.com/books/')) throw new Error('unavailable'); if (deferLookup && url.includes('openlibrary.org')) return lookupWait; if (url.includes(':append') && options?.body) addedRows.push(JSON.parse(options.body).values[0]); return { ok: true, json: async () => url.includes('googleapis.com/books/') ? {items:googleData ? [{volumeInfo:googleData}] : []} : url.includes('openlibrary.org/api/books') ? { 'ISBN:9780140328721': bookData } : url.includes('openlibrary.org/books/') ? editionData : url.includes('openlibrary.org/works/') ? workData : url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: true } } : url.includes('fields=properties') ? { properties: { title: 'Library' }, sheets: [{ properties: { title: 'Books', gridProperties: { frozenRowCount: 1 } } }] } : url.includes('fields=sheets') ? { sheets: [{ properties: { title: 'Books', sheetId: 0 } }] } : { values: [headers, row, ...addedRows] } }; }, console });
+  const context = vm.createContext({ document: { getElementById: element, createElement: tag => element('created-' + tag + '-' + Math.random()) }, window: { LIBRARY_CONFIG: {apiKey:'test-key'}, confirm: confirmDiscard, matchMedia: query => ({ matches: mobile && query === '(max-width: 700px)' }), addEventListener() {} }, localStorage, sessionStorage, createLibraryScanner: () => ({ stop: async () => {} }), normalizeIsbn, matchBook, findDuplicateGroups, setTimeout: (fn, delay) => { if (delay === 400) scanTimer = fn; if (delay === 1000) queueMicrotask(fn); return 1; }, clearTimeout: () => {}, crypto: { randomUUID: () => 'new-id' }, fetch: async (url, options) => { requests.push({ url, options }); if (googleFails && url.includes('googleapis.com/books/')) throw new Error('unavailable'); if (deferLookup && url.includes('openlibrary.org')) return lookupWait; if (url.includes(':append') && options?.body) addedRows.push(JSON.parse(options.body).values[0]); return { ok: true, json: async () => url.includes('googleapis.com/books/') ? {items:googleData ? [{volumeInfo:googleData}] : []} : url.includes('openlibrary.org/api/books') ? { 'ISBN:9780140328721': bookData } : url.includes('openlibrary.org/books/') ? editionData : url.includes('openlibrary.org/works/') ? workData : url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: true } } : url.includes('fields=properties') ? { properties: { title: 'Library' }, sheets: [{ properties: { title: 'Books', gridProperties: { frozenRowCount: 1 } } }] } : url.includes('fields=sheets') ? { sheets: [{ properties: { title: 'Books', sheetId: 0 } }] } : { values: [headers, row, ...addedRows] } }; }, console });
   for (const script of ['book-lookup.js', 'app.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/js', script), 'utf8'), context);
   }
@@ -46,6 +46,7 @@ test('editing checks the fresh row before writing', async () => {
 
 test('editing and deletion stop when the sheet row has changed', async () => {
   const f = await fixture(); f.changeRow(['id-1', '9780306406157', 'Changed elsewhere', 'Author', '', '', '2026-01-01']);
+  f.form.elements.title.value = 'Draft title';
   await f.handlers['book-form:submit']({ preventDefault() {}, currentTarget: f.form });
   assert.match(f.element('form-status').textContent, /changed in the Sheet/);
   await f.handlers['delete:click']();
@@ -116,6 +117,96 @@ test('cancel returns to the saved details and restores the original draft values
   assert.equal(f.element('book-details-title').textContent, 'Original');
   f.handlers['edit-from-details:click']();
   assert.equal(f.form.elements.title.value, 'Original');
+});
+
+test('editing in place restores the details scroll position and enables Save for changes', async () => {
+  const f = await fixture({ mobile: true });
+  f.element('books').children[0].onclick();
+  const body = f.element('editor-body');
+  const save = f.element('save');
+  body.scrollTop = 240;
+  f.handlers['edit-from-details:click']();
+  assert.equal(body.scrollTop, 0);
+  assert.equal(f.element('save-icon').hidden, false);
+  assert.equal(save.disabled, true);
+
+  f.form.elements.title.value = 'New title';
+  f.handlers['book-form:input']();
+  assert.equal(save.disabled, false);
+  f.form.elements.title.value = 'Original';
+  f.handlers['book-form:input']();
+  assert.equal(save.disabled, true);
+  await f.handlers['book-form:submit']({ preventDefault() {}, currentTarget: f.form });
+  assert.equal(f.requests.some(r => r.url.includes('values:batchUpdate')), false);
+
+  await f.handlers['cancel-edit:click']();
+  assert.equal(body.scrollTop, 240);
+  assert.equal(f.element('book-editor-fields').hidden, true);
+  f.handlers['edit-from-details:click']();
+  f.form.elements.shelf_location.value = 'Top shelf';
+  await f.handlers['book-form:submit']({ preventDefault() {}, currentTarget: f.form });
+  assert.equal(body.scrollTop, 240);
+  assert.equal(f.element('book-details-copy').children[0].children[1].textContent, 'Top shelf');
+});
+
+test('Add Book uses the shared Cancel and Save controls and requires a title', async () => {
+  const f = await fixture();
+  const title = f.element('editor-title');
+  let headingFocused = false;
+  title.focus = () => { headingFocused = true; };
+  f.element('books').children[0].onclick();
+  assert.equal(title.autofocus, false);
+  f.handlers['edit-from-details:click']();
+  assert.equal(title.autofocus, true);
+  assert.equal(headingFocused, true);
+
+  await f.handlers['add:click']();
+  assert.equal(title.autofocus, true);
+  const save = f.element('save');
+  assert.equal(f.element('cancel-edit').hidden, false);
+  assert.equal(f.element('close-editor').hidden, true);
+  assert.equal(save.disabled, true);
+
+  f.form.elements.author.value = 'An author';
+  f.form.elements.title.value = '   ';
+  f.handlers['book-form:input']();
+  assert.equal(save.disabled, true);
+  f.form.elements.title.value = 'A title';
+  f.handlers['book-form:input']();
+  assert.equal(save.disabled, false);
+  f.form.elements.title.value = '';
+  f.handlers['book-form:input']();
+  assert.equal(save.disabled, true);
+
+  await f.handlers['cancel-edit:click']();
+  assert.equal(f.element('editor').open, false);
+});
+
+test('Add Book closes a blank draft and asks before discarding entered fields', async () => {
+  const prompts = [];
+  let discard = false;
+  const f = await fixture({ confirmDiscard: message => { prompts.push(message); return discard; } });
+  await f.handlers['add:click']();
+  f.handlers['cancel-edit:click']();
+  assert.equal(f.element('editor').open, false);
+  assert.equal(prompts.length, 0);
+
+  await f.handlers['add:click']();
+  f.form.elements.author.value = 'An author';
+  f.handlers['cancel-edit:click']();
+  assert.deepEqual(prompts, ['Discard unsaved changes?']);
+  assert.equal(f.element('editor').open, true);
+  assert.equal(f.form.elements.author.value, 'An author');
+
+  f.handlers['editor:cancel']({ preventDefault() {} });
+  assert.equal(f.element('editor').open, true);
+  assert.equal(prompts.length, 2);
+  discard = true;
+  f.handlers['cancel-edit:click']();
+  assert.equal(prompts.length, 3);
+  assert.equal(f.element('editor').open, false);
+  await f.handlers['add:click']();
+  assert.equal(f.form.elements.author.value, '');
 });
 
 test('a mobile edge swipe goes back from book details and leaves edit drafts open', async () => {
@@ -454,6 +545,7 @@ test('adding a scanned book fills available edition details from the existing lo
   for (const [key, value] of Object.entries({isbn:'9780140328721', title:'Matilda', author:'Roald Dahl', publisher:'Puffin', publication_year:'1988', language:'eng', pages:'240', category:'Fiction'})) assert.equal(f.form.elements[key].value, value);
   assert.equal(f.form.elements.shelf_location.value, '');
   await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.element('save').disabled, false);
   assert.equal(f.element('book-cover-panel').hidden, false);
   assert.equal(f.requests.filter(r => r.url.includes('googleapis.com/books/')).length, 1);
   assert.equal(f.requests.filter(r => r.url.includes('openlibrary.org/api/books')).length, 1);
