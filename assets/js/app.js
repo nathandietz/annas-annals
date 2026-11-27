@@ -1035,7 +1035,7 @@
   }
   function setEditorMode(editable) {
     editorGeneration++;
-    resetBackSwipe();
+    resetBookDetailsMotion();
     resetDelete();
     editMode = editable;
     const editor = $('editor');
@@ -1089,8 +1089,11 @@
     for (const key of editableFields) form.elements[key].value = book?.[key] || '';
     formStatus('');
     setEditorMode(editable);
-    if (!$('editor').open) $('editor').showModal();
-    if (!editable) $('book-details-title').focus?.();
+    if (!editorDialog.open) {
+      editorDialog.showModal();
+      if (!editable) slideBookDetails('translateX(100%)', 'translateX(0)');
+    }
+    if (!editable) $('book-details-title').focus?.({ preventScroll: true });
   }
   async function addBook() {
     if (!canEdit || busy) return;
@@ -1150,42 +1153,58 @@
   function closeEditor() {
     if (!busy) editorDialog.close();
   }
-  $('close-editor').addEventListener('click', closeEditor);
-
-  let backSwipe, backSwipeAnimation;
-  function resetBackSwipe() {
-    const animation = backSwipeAnimation;
-    backSwipe = undefined;
-    backSwipeAnimation = undefined;
-    animation?.cancel();
-    editorDialog.style.transform = '';
-    editorDialog.classList.remove('is-back-swiping');
-  }
-
-  function settleBackSwipe(dismiss) {
-    const distance = backSwipe?.distance;
-    backSwipe = undefined;
-    if (!distance || !editorDialog.animate || window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) {
-      resetBackSwipe();
-      if (dismiss) closeEditor();
+  $('close-editor').addEventListener('click', () => {
+    if (busy) return;
+    if (editMode) {
+      closeEditor();
       return;
     }
-    const animation = editorDialog.animate([
-      { transform: editorDialog.style.transform },
-      { transform: dismiss ? 'translateX(100%)' : 'translateX(0)' }
-    ], { duration: 240, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'forwards' });
-    backSwipeAnimation = animation;
+    const from = bookDetailsAnimation
+      ? getComputedStyle(editorDialog).transform
+      : editorDialog.style.transform || 'translateX(0)';
+    slideBookDetails(from, 'translateX(100%)', closeEditor);
+  });
+
+  let backSwipe, bookDetailsAnimation;
+  function resetBookDetailsMotion() {
+    const animation = bookDetailsAnimation;
+    backSwipe = undefined;
+    bookDetailsAnimation = undefined;
+    animation?.cancel();
+    editorDialog.style.transform = '';
+    editorDialog.classList.remove('is-sliding');
+  }
+
+  function slideBookDetails(from, to, onFinish) {
+    resetBookDetailsMotion();
+    if (!compactLayout?.matches || !editorDialog.animate || window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) {
+      onFinish?.();
+      return;
+    }
+    editorDialog.classList.add('is-sliding');
+    const animation = editorDialog.animate([{ transform: from }, { transform: to }],
+      { duration: 360, easing: 'cubic-bezier(0.32, 0.08, 0.24, 1)', fill: 'both' });
+    bookDetailsAnimation = animation;
     animation.finished.then(() => {
-      if (backSwipeAnimation !== animation) return;
-      if (dismiss && editorDialog.open) closeEditor();
-      resetBackSwipe();
+      if (bookDetailsAnimation !== animation) return;
+      if (editorDialog.open) onFinish?.();
+      resetBookDetailsMotion();
     }, () => {
-      if (backSwipeAnimation === animation) resetBackSwipe();
+      if (bookDetailsAnimation === animation) resetBookDetailsMotion();
     });
   }
 
+  function settleBackSwipe(dismiss) {
+    if (!backSwipe?.distance) {
+      resetBookDetailsMotion();
+      return;
+    }
+    if (dismiss) slideBookDetails(editorDialog.style.transform, 'translateX(100%)', closeEditor);
+    else slideBookDetails(editorDialog.style.transform, 'translateX(0)');
+  }
+
   editorDialog.addEventListener('pointerdown', event => {
-    if (backSwipeAnimation) return;
+    if (bookDetailsAnimation) return;
     if (backSwipe) {
       settleBackSwipe(false);
       return;
@@ -1205,7 +1224,7 @@
         backSwipe = undefined;
         return;
       }
-      editorDialog.classList.add('is-back-swiping');
+      editorDialog.classList.add('is-sliding');
     }
     backSwipe.distance = Math.max(0, across);
     editorDialog.style.transform = 'translateX(' + backSwipe.distance + 'px)';
@@ -1226,7 +1245,7 @@
     if (editMode && editingBook) cancelBookEdit();
   });
   editorDialog.addEventListener('close', () => {
-    resetBackSwipe();
+    resetBookDetailsMotion();
     editorGeneration++;
     resetDelete();
     stopScanner().catch(() => {});

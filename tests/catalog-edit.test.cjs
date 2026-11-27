@@ -145,6 +145,46 @@ test('a mobile edge swipe goes back from book details and leaves edit drafts ope
   assert.equal(editor.open, false);
 });
 
+test('book details slide in and use the same slide out for the back button and swipe', async () => {
+  const f = await fixture({ mobile: true });
+  const editor = f.element('editor');
+  editor.close();
+  let animation, finish;
+  editor.animate = (frames, options) => {
+    animation = { transforms: Array.from(frames, frame => frame.transform), duration: options.duration, easing: options.easing };
+    return { finished: new Promise(resolve => { finish = resolve; }), cancel() {} };
+  };
+
+  f.element('books').children[0].onclick();
+  assert.equal(editor.open, true);
+  assert.deepEqual(animation.transforms, ['translateX(100%)', 'translateX(0)']);
+  assert.ok(animation.duration > 240);
+  finish();
+  await new Promise(resolve => setImmediate(resolve));
+
+  f.handlers['close-editor:click']();
+  const buttonAnimation = animation;
+  assert.deepEqual(buttonAnimation.transforms, ['translateX(0)', 'translateX(100%)']);
+  assert.equal(editor.open, true);
+  finish();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(editor.open, false);
+
+  f.element('books').children[0].onclick();
+  finish();
+  await new Promise(resolve => setImmediate(resolve));
+  const touch = clientX => ({ pointerType: 'touch', isPrimary: true, pointerId: 1, clientX, clientY: 140, target: editor });
+  f.handlers['editor:pointerdown'](touch(20));
+  f.handlers['editor:pointermove'](touch(140));
+  f.handlers['editor:pointerup'](touch(140));
+  assert.deepEqual(animation.transforms, ['translateX(120px)', 'translateX(100%)']);
+  assert.equal(animation.duration, buttonAnimation.duration);
+  assert.equal(animation.easing, buttonAnimation.easing);
+  finish();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(editor.open, false);
+});
+
 test('book details follow an edge swipe and settle back or dismiss on release', async () => {
   const f = await fixture({ mobile: true });
   f.element('books').children[0].onclick();

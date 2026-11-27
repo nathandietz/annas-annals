@@ -749,7 +749,7 @@ button.upgrade-button:hover {
     touch-action: pan-y pinch-zoom;
   }
 
-  #editor.view-mode.is-back-swiping::backdrop {
+  #editor.view-mode.is-sliding::backdrop {
     background: transparent;
     backdrop-filter: none;
   }
