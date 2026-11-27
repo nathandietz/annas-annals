@@ -61,27 +61,11 @@
   const editAccessKey = 'annas-annals-edit-access';
   let token = '', sheetId = '', books = [], pickerReady = false, busy = false, creatingLibrary = false, libraryWidth = 16;
   let rememberedSheet = '', editingBook = null, viewMode = 'card', duplicatesMode = false, sortField = '', sortDirection = 1;
-  const coverStorageKey = 'annas-annals-show-covers';
   const fallbackCoverStorageKey = 'annas-annals-show-fallback-covers';
-  let showCovers = false, showFallbackCovers = true;
-  try {
-    showCovers = localStorage.getItem(coverStorageKey) === 'true';
-    showFallbackCovers = localStorage.getItem(fallbackCoverStorageKey) !== 'false';
-  } catch {}
-  $('show-covers').checked = showCovers;
+  let showFallbackCovers = true;
+  try { showFallbackCovers = localStorage.getItem(fallbackCoverStorageKey) !== 'false'; } catch {}
   $('show-fallback-covers').checked = showFallbackCovers;
-  $('cover-attribution').hidden = !showCovers;
   const googleBookRequests = new Map();
-  const pendingCovers = new Map();
-  const coverObserver = typeof IntersectionObserver === 'undefined' ? null : new IntersectionObserver(entries => {
-    for (const {target, isIntersecting} of entries) {
-      if (!isIntersecting) continue;
-      const load = pendingCovers.get(target);
-      coverObserver.unobserve(target);
-      pendingCovers.delete(target);
-      if (target.isConnected) load?.();
-    }
-  }, { rootMargin: '200px' });
   try { const savedView = localStorage.getItem('annas-annals-view'); if (['card', 'list'].includes(savedView)) viewMode = savedView; } catch {}
   try { rememberedSheet = localStorage.getItem(storageKey) || ''; } catch {}
   const scanner = createLibraryScanner();
@@ -325,7 +309,7 @@
       if (!left || !right) return left ? -1 : right ? 1 : 0;
       return (compact ? 1 : sortDirection) * left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' });
     });
-    const container = $('books'); clearCoverLookups(container); container.replaceChildren(); container.className = 'books view-' + layout;
+    const container = $('books'); container.replaceChildren(); container.className = 'books view-' + layout;
     for (const mode of ['card', 'list']) $('view-' + mode).setAttribute('aria-pressed', String(viewMode === mode));
     let listBody;
     if (layout === 'list') {
@@ -353,7 +337,7 @@
         const row = document.createElement('tr'); row.className = 'book-row'; row.addEventListener('click', () => showDetails(book));
         for (const [index, value] of [book.title, book.author, book.publisher, book.category, book.shelf_location].entries()) {
           const cell = document.createElement('td');
-          if (index === 0) { cell.append(makeBookCover(book, 'list-cover')); const title = document.createElement('button'); title.type = 'button'; title.className = 'book-title-button'; title.textContent = value; title.addEventListener('click', event => { event.stopPropagation(); showDetails(book); }); cell.append(title); }
+          if (index === 0) { cell.append(makeBookCover('list-cover')); const title = document.createElement('button'); title.type = 'button'; title.className = 'book-title-button'; title.textContent = value; title.addEventListener('click', event => { event.stopPropagation(); showDetails(book); }); cell.append(title); }
           else cell.textContent = value || '—';
           if (index === 0 && duplicatesMode) { const reason = document.createElement('div'); reason.className = 'duplicate-reason'; reason.textContent = duplicateReasons.get(book).join(' · '); cell.append(reason); }
           row.append(cell);
@@ -366,7 +350,7 @@
       }
       const card = document.createElement('article'); card.className = 'book'; card.addEventListener('click', () => showDetails(book));
       const content = document.createElement('div'); content.className = 'book-content';
-      content.append(makeBookCover(book, 'card-cover'));
+      content.append(makeBookCover('card-cover'));
       const details = document.createElement('div'); details.className = 'book-details';
       for (const [tag, value] of [['h3', book.title], ['p', book.author], ['p', [book.series_name, book.volume_number ? 'Vol. ' + book.volume_number : ''].filter(Boolean).join(' · ')], ['p', book.shelf_location]]) {
         if (value) { const el = document.createElement(tag); if (tag === 'h3') { const title = document.createElement('button'); title.type = 'button'; title.className = 'book-title-button'; title.textContent = value; title.addEventListener('click', event => { event.stopPropagation(); showDetails(book); }); el.append(title); } else el.textContent = value; details.append(el); }
@@ -390,95 +374,22 @@
     renderScanBooks();
   }
 
-  function clearCoverLookups(container) {
-    if (!coverObserver) return;
-    for (const cover of pendingCovers.keys()) {
-      if (cover.isConnected && !container.contains(cover)) continue;
-      coverObserver.unobserve(cover);
-      pendingCovers.delete(cover);
-    }
-  }
-
-  function setCoverArt(cover, image, fallback, source, useFallback, onMissing) {
-    const sameSource = Boolean(source && image.src === source);
-    if (!sameSource) image.hidden = !source;
-    const updateVisibility = hasArt => {
-      fallback.hidden = !useFallback || hasArt;
-      cover.hidden = image.hidden && fallback.hidden;
-    };
-    image.onload = () => {
-      if (source && image.src === source && (!image.currentSrc || image.currentSrc === source)) {
-        updateVisibility(true);
-      }
-    };
-    image.onerror = () => {
-      if (!source || image.src !== source) return;
-      if (onMissing) { onMissing(); return; }
-      image.hidden = true;
-      updateVisibility(false);
-    };
-    updateVisibility(Boolean(sameSource && !image.hidden && image.complete && image.naturalWidth));
-    if (!source) image.removeAttribute('src');
-    else if (!sameSource) image.src = source;
-  }
-
-  function loadBookCover(cover, image, fallback, isbn, size, useFallback, isCurrent) {
-    setCoverArt(cover, image, fallback, '', useFallback);
-    if (!isbn) return;
-    cover.hidden = false;
-    const openLibrary = () => {
-      if (!isCurrent()) return;
-      const source = 'https://covers.openlibrary.org/b/isbn/' + isbn + '-' + size + '.jpg?default=false';
-      setCoverArt(cover, image, fallback, source, useFallback);
-    };
-    requestGoogleBook(isbn).then(book => {
-      if (!isCurrent()) return;
-      const links = book?.imageLinks;
-      const candidates = size === 'M' ? [links?.small, links?.thumbnail, links?.smallThumbnail] : [links?.thumbnail, links?.smallThumbnail, links?.small];
-      const source = candidates.find(url => typeof url === 'string' && /^https?:\/\/(?:books\.google\.com|books\.googleusercontent\.com)\//i.test(url));
-      if (!source) { openLibrary(); return; }
-      setCoverArt(cover, image, fallback, source.replace(/^http:/i, 'https:'), useFallback, openLibrary);
-    }, openLibrary);
-  }
-
-  function makeBookCover(book, sizeClass = '') {
+  function makeBookCover(sizeClass = '') {
     const cover = document.createElement('div');
     cover.className = sizeClass ? 'book-cover ' + sizeClass : 'book-cover';
     cover.setAttribute('aria-hidden', 'true');
+    cover.hidden = !showFallbackCovers;
     const fallback = document.createElement('div');
     fallback.className = 'book-cover-fallback';
-    const isbn = showCovers && normalizeIsbn(book.isbn || '');
-    if (isbn) {
-      const image = document.createElement('img');
-      image.className = 'book-cover-art'; image.alt = ''; image.loading = 'lazy';
-      cover.append(image);
-      const useFallback = showFallbackCovers;
-      const load = () => loadBookCover(cover, image, fallback, isbn, 'S', useFallback, () => showCovers && cover.isConnected !== false);
-      fallback.hidden = !useFallback;
-      image.hidden = true;
-      if (coverObserver) {
-        pendingCovers.set(cover, load);
-        coverObserver.observe(cover);
-      } else load();
-    } else {
-      cover.hidden = !showFallbackCovers;
-    }
     cover.append(fallback);
     return cover;
   }
-  function updateCoverPreferences() {
-    showCovers = $('show-covers').checked;
+  $('show-fallback-covers').addEventListener('change', () => {
     showFallbackCovers = $('show-fallback-covers').checked;
-    $('cover-attribution').hidden = !showCovers;
-    try {
-      localStorage.setItem(coverStorageKey, String(showCovers));
-      localStorage.setItem(fallbackCoverStorageKey, String(showFallbackCovers));
-    } catch {}
+    try { localStorage.setItem(fallbackCoverStorageKey, String(showFallbackCovers)); } catch {}
     if ($('editor').open) updateBookCover();
     render();
-  }
-  $('show-covers').addEventListener('change', updateCoverPreferences);
-  $('show-fallback-covers').addEventListener('change', updateCoverPreferences);
+  });
   $('update-app').addEventListener('click', async () => {
     const button = $('update-app'), status = $('update-app-status');
     button.disabled = true; status.textContent = 'Checking for updates…';
@@ -494,26 +405,6 @@
       button.disabled = false;
     }
   });
-  $('clear-cover-cache').addEventListener('click', async () => {
-    const button = $('clear-cover-cache'), status = $('cover-cache-status');
-    button.disabled = true; status.textContent = 'Clearing cached covers…';
-    try {
-      const worker = window.navigator?.serviceWorker?.controller;
-      if (worker && window.MessageChannel) {
-        await new Promise((resolve, reject) => {
-          const channel = new window.MessageChannel();
-          const timeout = setTimeout(() => { channel.port1.close(); reject(new Error('Cache clearing timed out.')); }, 5000);
-          channel.port1.onmessage = event => { clearTimeout(timeout); channel.port1.close(); event.data?.ok ? resolve() : reject(new Error('Could not clear the cache.')); };
-          worker.postMessage({type:'CLEAR_COVER_CACHE'}, [channel.port2]);
-        });
-      } else if (window.caches) await window.caches.delete('annas-annals-covers-v1');
-      else throw new Error('Cover cache is unavailable in this browser.');
-      status.textContent = 'Cached covers cleared. Covers may be loaded again when displayed.';
-      await updateCoverCacheInfo();
-    } catch { status.textContent = 'Could not clear cached covers. Please try again.'; }
-    finally { button.disabled = false; }
-  });
-
   async function checkPermission() {
     const currentSheet = sheetId, currentToken = token;
     let cachedAccess;
@@ -556,33 +447,10 @@
       }
     }
   }
-  let cacheInfoSequence = 0;
-  async function updateCoverCacheInfo() {
-    const current = ++cacheInfoSequence, info = $('cover-cache-info');
-    info.textContent = 'Checking cached covers…';
-    try {
-      if (!window.caches) throw new Error('Cache unavailable');
-      const names = await window.caches.keys();
-      const responses = names.includes('annas-annals-covers-v1') ? await (await window.caches.open('annas-annals-covers-v1')).matchAll() : [];
-      let bytes = 0, unavailable = 0;
-      for (const response of responses) {
-        if (current !== cacheInfoSequence) return;
-        if (response.type === 'opaque') { unavailable++; continue; }
-        try { bytes += (await response.blob()).size; }
-        catch { unavailable++; }
-      }
-      const count = responses.length;
-      const size = bytes < 1000 ? bytes + ' B' : bytes < 1000000
-        ? (bytes / 1000).toFixed(1) + ' KB' : (bytes / 1000000).toFixed(1) + ' MB';
-      const detail = unavailable ? (unavailable === count ? 'Size unavailable' : 'At least ' + size) : size;
-      if (current === cacheInfoSequence) info.textContent = count + (count === 1 ? ' cached image' : ' cached images') + ' · ' + detail;
-    } catch { if (current === cacheInfoSequence) info.textContent = 'Cover cache information is unavailable in this browser.'; }
-  }
   function setMainView(view) {
     const previousView = mainView;
     mainView = view;
     try { localStorage.setItem('annas-annals-main-view', view); } catch {}
-    if (view === 'settings') updateCoverCacheInfo();
     $('scan-view').hidden = view !== 'scan';
     $('library').hidden = view !== 'library';
     $('settings-dialog').hidden = view !== 'settings';
@@ -597,7 +465,7 @@
   $('mode-scan').addEventListener('click', () => setMainView('scan'));
   $('mode-library').addEventListener('click', () => setMainView('library'));
   function renderScanBooks() {
-    const container = $('scan-books'); clearCoverLookups(container); container.replaceChildren();
+    const container = $('scan-books'); container.replaceChildren();
     const query = $('scan-search').value.trim().toLocaleLowerCase();
     container.hidden = !query;
     $('scan-count').hidden = !query;
@@ -615,7 +483,7 @@
       const title = document.createElement('strong'); title.textContent = book.title;
       const author = document.createElement('span'); author.textContent = book.author || 'Unknown author';
       details.append(title, author);
-      button.append(makeBookCover(book), details);
+      button.append(makeBookCover(), details);
       button.addEventListener('click', () => showDetails(book));
       container.append(button);
     }
@@ -640,7 +508,6 @@
     setCameraOpen(false);
     showCheckResult(false);
     showIsbnForm(false);
-    clearCoverLookups($('check-result'));
     $('check-result').replaceChildren();
     resultActions = undefined;
     $('check-announcement').textContent = '';
@@ -795,7 +662,7 @@
       link.type = 'button';
       link.className = 'owned-book quiet-button';
       link.addEventListener('click', () => showDetails(book));
-      link.append(makeBookCover(book));
+      link.append(makeBookCover());
       const details = document.createElement('span');
       const title = document.createElement('strong');
       title.textContent = book.title;
@@ -828,7 +695,6 @@
     const detail = document.createElement('p');
     detail.className = 'page-subtitle';
     resultActions = undefined;
-    clearCoverLookups(result);
     result.replaceChildren();
     result.append(heading, detail);
     showIsbnForm(false);
@@ -878,7 +744,6 @@
         openEditor();
         const form = $('book-form');
         form.elements.isbn.value = isbn;
-        updateBookCover();
         if (metadata) for (const [key, value] of Object.entries(metadata)) if (value) form.elements[key].value = value;
         if (bookData) enrichScannedBook(bookData, editorGeneration, isbn);
       });
@@ -1314,15 +1179,9 @@
     $('edit-from-details').focus?.();
   }
   $('cancel-edit').addEventListener('click', cancelBookEdit);
-  let coverPreviewRequest = 0;
   function updateBookCover() {
-    const showPreview = !editMode || !editingBook;
-    const isbn = showPreview && showCovers && normalizeIsbn($('book-form').elements.isbn.value);
-    const request = ++coverPreviewRequest;
-    loadBookCover($('book-cover-panel'), $('book-cover-image'), $('book-cover-placeholder'), isbn, 'M',
-      showPreview && showFallbackCovers, () => request === coverPreviewRequest && $('editor').open);
+    $('book-cover-panel').hidden = !showFallbackCovers || (editMode && Boolean(editingBook));
   }
-  $('book-form').elements?.isbn?.addEventListener?.('input', updateBookCover);
   function openEditor(book = null, editable = true) {
     if (busy) return;
     editingBook = book ? { ...book } : null;
@@ -1411,7 +1270,6 @@
         await new Promise(resolve => setTimeout(resolve, 500));
         if (scanId !== editorScanSequence || $('scan-area').hidden) return;
         $('book-form').elements.isbn.value = text;
-        updateBookCover();
         await stopScanner();
         if (!busy && generation === editorGeneration) formStatus('Barcode captured. Look up the ISBN or enter the details.');
       }, text => { if (text !== 'Starting camera…') $('scan-status').textContent = text; });
@@ -1427,7 +1285,7 @@
       const result = await scanner.scanFile(file);
       if (generation !== editorGeneration || busy || !result) return;
       $('book-form').elements.isbn.value = result;
-      updateBookCover(); await stopScanner();
+      await stopScanner();
       if (!busy && generation === editorGeneration) formStatus('Barcode captured. Look up the ISBN or enter the details.');
     } catch {
       if (generation === editorGeneration) $('scan-status').textContent = 'No barcode found. Try a clearer photo or enter the ISBN manually.';
@@ -1440,7 +1298,6 @@
     results.hidden = false; suggestions.replaceChildren();
     if (!isbn) { resultStatus.textContent = 'Enter a valid ISBN-10 or ISBN-13.'; return; }
     form.elements.isbn.value = isbn;
-    updateBookCover();
     resultStatus.textContent = 'Looking up book details…'; $('lookup').disabled = true;
     const currentBook = editingBook, generation = editorGeneration, autoFilled = {}, userChanged = new Set();
     const isCurrent = () => !busy && editingBook === currentBook && editorGeneration === generation && normalizeIsbn(form.elements.isbn.value) === isbn && $('editor').open;

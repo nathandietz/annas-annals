@@ -133,107 +133,48 @@ test('book details use a Library label and readable language without changing th
   assert.equal(f.form.elements.language.value, 'en');
 });
 
-test('cover setting controls book images in cards, list, and details', async () => {
-  const f = await fixture();
-  const card = f.element('books').children[0];
-  const cover = card.children[0].children[0];
-  assert.match(cover.children[0].src, /covers\.openlibrary\.org\/b\/isbn\/9780306406157-S\.jpg/);
-  f.handlers['view-list:click']();
-  await new Promise(resolve => setImmediate(resolve));
-  const table = f.element('books').children[0];
-  const titleCell = table.children[1].children[0].children[0];
-  assert.match(titleCell.children[0].children[0].src, /9780306406157-S\.jpg/);
-  f.element('show-covers').checked = false;
-  f.handlers['show-covers:change']();
-  assert.equal(f.element('book-cover-image').hidden, true);
-  assert.equal(f.element('book-cover-panel').hidden, true);
-  const listCover = f.element('books').children[0].children[1].children[0].children[0].children[0];
-  assert.equal(listCover.children[0].className, 'book-cover-fallback');
-  assert.equal(listCover.children[0].children.length, 0);
-  f.handlers['view-card:click']();
-  const cardCover = f.element('books').children[0].children[0].children[0];
-  assert.equal(cardCover.children[0].className, 'book-cover-fallback');
-  assert.equal(cardCover.children[0].children.length, 0);
-});
-
-test('a cover thumbnail switches between downloaded art and its text-free fallback', async () => {
-  const f = await fixture();
-  const cover = f.element('books').children[0].children[0].children[0];
-  const [image, fallback] = cover.children;
-  assert.equal(fallback.hidden, false);
-  assert.equal(fallback.textContent, '');
-  assert.equal(fallback.children.length, 0);
-  image.onload();
-  assert.equal(image.hidden, false);
-  assert.equal(fallback.hidden, true);
-  image.onerror();
-  assert.equal(image.hidden, true);
-  assert.equal(fallback.hidden, false);
-});
-
-test('Google Books cover art has priority and a broken image falls back to Open Library', async () => {
+test('a saved download preference does not trigger cover requests in the catalog or editor', async () => {
   const f = await fixture({ googleData: {
     industryIdentifiers: [{ identifier: '9780306406157' }],
     imageLinks: { thumbnail: 'http://books.google.com/books/content?id=edition' }
   } });
-  const [image, fallback] = f.element('books').children[0].children[0].children[0].children;
-  assert.equal(image.src, 'https://books.google.com/books/content?id=edition');
-  image.onerror();
-  assert.match(image.src, /covers\.openlibrary\.org\/b\/isbn\/9780306406157-S\.jpg/);
-  image.onerror();
-  assert.equal(fallback.hidden, false);
-
-  f.element('books').children[0].onclick();
-  await new Promise(resolve => setImmediate(resolve));
-  const detailImage = f.element('book-cover-image');
-  assert.equal(detailImage.src, 'https://books.google.com/books/content?id=edition');
-  detailImage.onload();
-  assert.equal(f.element('book-cover-placeholder').hidden, true);
-});
-
-test('details retain a local fallback cover when downloaded covers are off', async () => {
-  const f = await fixture();
-  f.element('show-covers').checked = false;
-  f.handlers['show-covers:change']();
-  f.element('books').children[0].onclick();
-  assert.equal(f.element('book-cover-panel').hidden, false);
-  assert.equal(f.element('book-cover-image').hidden, true);
-  assert.equal(f.element('book-cover-placeholder').hidden, false);
-  assert.equal(f.element('book-options').hidden, true);
+  const book = f.element('books').children[0];
+  book.onclick();
   f.handlers['edit-from-details:click']();
-  assert.equal(f.element('book-options').hidden, false);
+  await f.handlers['add:click']();
+  f.handlers['view-list:click']();
+  f.handlers['mode-scan:click']();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.requests.filter(({ url }) => url.includes('googleapis.com/books/') || url.includes('covers.openlibrary.org')).length, 0);
 });
 
-test('fallback and downloaded covers can be turned off independently', async () => {
+test('the fallback preference controls the local thumbnails in cards, list, and details', async () => {
   const f = await fixture();
   const cardCover = () => f.element('books').children[0].children[0].children[0];
-  const set = (id, checked) => {
-    f.element(id).checked = checked;
-    f.handlers[id + ':change']();
-  };
-  set('show-fallback-covers', false);
-  await new Promise(resolve => setImmediate(resolve));
-  const [image, fallback] = cardCover().children;
-  assert.equal(fallback.hidden, true);
-  image.onload();
-  assert.equal(cardCover().hidden, false);
-  image.onerror();
-  assert.equal(cardCover().hidden, true);
+  assert.equal(cardCover().children.length, 1);
+  const [fallback] = cardCover().children;
+  assert.equal(fallback.className, 'book-cover-fallback');
+  assert.equal(fallback.textContent, '');
+  assert.equal(fallback.children.length, 0);
 
   f.element('books').children[0].onclick();
-  await new Promise(resolve => setImmediate(resolve));
-  f.element('book-cover-image').onerror();
-  assert.equal(f.element('book-cover-panel').hidden, true);
-
-  set('show-covers', false);
-  assert.equal(cardCover().hidden, true);
-  assert.equal(f.element('book-cover-panel').hidden, true);
-
-  set('show-fallback-covers', true);
-  assert.equal(cardCover().hidden, false);
   assert.equal(f.element('book-cover-panel').hidden, false);
-});
+  assert.equal(f.element('book-options').hidden, true);
+  f.handlers['edit-from-details:click']();
+  assert.equal(f.element('book-cover-panel').hidden, true);
+  assert.equal(f.element('book-options').hidden, false);
+  f.handlers['cancel-edit:click']();
 
+  f.handlers['view-list:click']();
+  const listCover = () => f.element('books').children[0].children[1].children[0].children[0].children[0];
+  assert.equal(listCover().children[0].className, 'book-cover-fallback');
+  f.element('show-fallback-covers').checked = false;
+  f.handlers['show-fallback-covers:change']();
+  assert.equal(f.element('book-cover-panel').hidden, true);
+  assert.equal(listCover().hidden, true);
+  f.handlers['view-card:click']();
+  assert.equal(cardCover().hidden, true);
+});
 
 test('cancelling a library update does not write to the Sheet', async () => {
   const f = await fixture({ nine: true });
@@ -387,7 +328,8 @@ test('adding a scanned book fills available edition details from the existing lo
   for (const [key, value] of Object.entries({isbn:'9780140328721', title:'Matilda', author:'Roald Dahl', publisher:'Puffin', publication_year:'1988', language:'eng', pages:'240', category:'Fiction'})) assert.equal(f.form.elements[key].value, value);
   assert.equal(f.form.elements.shelf_location.value, '');
   await new Promise(resolve => setImmediate(resolve));
-  assert.match(f.element('book-cover-image').src, /covers\.openlibrary\.org\/b\/isbn\/9780140328721-M\.jpg/);
+  assert.equal(f.element('book-cover-panel').hidden, false);
+  assert.equal(f.requests.filter(r => r.url.includes('googleapis.com/books/')).length, 1);
   assert.equal(f.requests.filter(r => r.url.includes('openlibrary.org/api/books')).length, 1);
 });
 

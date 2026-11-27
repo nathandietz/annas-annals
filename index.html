@@ -18,7 +18,7 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_upward,barcode_scanner,book_2,edit,expand_less,expand_more,search,settings,unfold_more&display=block"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="style.css?v=header-refresh-1" />
+    <link rel="stylesheet" href="style.css?v=local-cover-thumbnails-1" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
     <script
@@ -31,7 +31,7 @@
     <script src="duplicates.js?v=017c5b1b32ae" defer></script>
     <script src="csv.js?v=017c5b1b32ae" defer></script>
     <script src="config.js?v=017c5b1b32ae" defer></script>
-    <script src="app.js?v=header-refresh-1" defer></script>
+    <script src="app.js?v=local-cover-thumbnails-2" defer></script>
   </head>
   <body>
     <template id="catalog-search-template">
@@ -295,28 +295,9 @@
         <section class="settings-group" aria-labelledby="covers-title">
           <h3 id="covers-title">Book covers</h3>
           <label class="cover-setting">
-            <span>
-              <strong>Show fallback thumbnails</strong>
-              <span class="hint"
-                >Show a blue thumbnail when cover art is unavailable or
-                downloads are off.</span
-              >
-            </span>
+            <strong>Show blue book thumbnails</strong>
             <input id="show-fallback-covers" type="checkbox" role="switch" />
           </label>
-          <label class="cover-setting"
-            ><span
-              ><strong>Download book covers</strong
-              ><span class="hint"
-                >Try Google Books first, then Open Library.</span
-              ></span
-            ><input id="show-covers" type="checkbox" role="switch"
-          /></label>
-          <p id="cover-cache-info" class="hint" role="status"></p>
-          <button id="clear-cover-cache" class="secondary" type="button">
-            Clear cached covers
-          </button>
-          <p id="cover-cache-status" class="hint" role="status"></p>
         </section>
         <section class="settings-group" aria-labelledby="tools-title">
           <h3 id="tools-title">Library tools</h3>
@@ -440,17 +421,7 @@
                 class="book-cover details-cover"
                 aria-hidden="true"
               >
-                <img
-                  id="book-cover-image"
-                  class="book-cover-art"
-                  src="icons/icon-180.png"
-                  alt=""
-                  hidden
-                />
-                <div
-                  id="book-cover-placeholder"
-                  class="book-cover-fallback"
-                ></div>
+                <div class="book-cover-fallback"></div>
               </div>
               <div id="book-details-heading" hidden>
                 <h3 id="book-details-title" tabindex="-1">Book title</h3>
@@ -601,11 +572,6 @@
             your library.
           </p>
         </section>
-        <p id="cover-attribution" class="hint" hidden>
-          Cover artwork from
-          <a href="https://books.google.com/">Google Books</a> and
-          <a href="https://openlibrary.org/">Open Library</a>.
-        </p>
         <nav class="policy-links" aria-label="App policies">
           <a href="privacy.html">Privacy Policy</a>
           <a href="terms.html">Terms of Service</a>

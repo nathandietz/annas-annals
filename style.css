@@ -265,19 +265,11 @@ section {
   vertical-align: middle;
 }
 
-.book-cover-art,
 .book-cover-fallback {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-}
-
-.book-cover-art {
-  object-fit: contain;
-}
-
-.book-cover-fallback {
   background:
     linear-gradient(to right, #000914e6 0 9%, transparent 9%),
     repeating-radial-gradient(

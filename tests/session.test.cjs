@@ -8,9 +8,8 @@ async function openWindow(shared, responseStatus = 200, mobile = false, editable
   const elements = {}, handlers = {}, requests = [], scanners = [], timers = [];
   const el = id => elements[id] ||= { hidden: false, value: '', textContent: '', children: [], classList: { values: new Set(), toggle(name, force) { if (force) this.values.add(name); else this.values.delete(name); }, remove(name) { this.values.delete(name); }, add(name) { this.values.add(name); }, contains(name) { return this.values.has(name); } }, addEventListener(type, fn) { handlers[id + ':' + type] = fn; }, style: { setProperty(name, value) { this[name] = value; } }, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute() {}, append(...children) { this.children.push(...children); }, replaceChildren() { this.children = []; } };
   el('catalog-search-template').content = { cloneNode: () => ({ querySelector: () => ({}) }) };
-  let deletedCache;
   let navigatedTo, tickUpdateAge;
-  const window = { LIBRARY_CONFIG: {}, innerHeight: 874, location: { href:'https://example.com/annals/?view=library', replace: value => { navigatedTo = value; } }, caches: { keys: async () => deletedCache ? [] : ['annas-annals-covers-v1'], open: async () => ({ matchAll: async () => [new Response(new Uint8Array(3000)), new Response(new Uint8Array(1500))] }), delete: async name => { deletedCache = name; } }, navigator: { storage: { estimate: async () => ({usage: 1048576}) } }, matchMedia: query => ({ matches: query === '(display-mode: standalone)' ? standalone : mobile }), setInterval: (fn, delay) => { if (delay === 60000) tickUpdateAge = fn; }, addEventListener: (type, fn) => { handlers['window:' + type] = fn; } };
+  const window = { LIBRARY_CONFIG: {}, innerHeight: 874, location: { href:'https://example.com/annals/?view=library', replace: value => { navigatedTo = value; } }, navigator: {}, matchMedia: query => ({ matches: query === '(display-mode: standalone)' ? standalone : mobile }), setInterval: (fn, delay) => { if (delay === 60000) tickUpdateAge = fn; }, addEventListener: (type, fn) => { handlers['window:' + type] = fn; } };
   const context = vm.createContext({ URL, Date: class extends Date { static now() { return now(); } }, document: { getElementById: el, createElement: () => ({ textContent: '', setAttribute() {}, addEventListener() {}, append() {} }) }, window, localStorage: shared, sessionStorage: tabStorage, findDuplicateGroups: () => [], normalizeIsbn: require('../isbn.js').normalizeIsbn, matchBook: () => ({kind:'exact', books:[]}), createLibraryScanner: () => { const scanner = { stops: 0, start: async (callback, onStatus) => { scanner.decoded = callback; onStatus('Starting camera…'); }, hold: duration => { scanner.holdDuration = duration; }, stop: async () => { scanner.stops++; } }; scanners.push(scanner); return scanner; }, setTimeout: (fn, delay) => delay === 1000 ? refreshDelay(fn) : timers.push(fn) - 1, clearTimeout: id => { if (id !== undefined) timers[id] = () => {}; }, fetch: async (url, options) => { requests.push({url, options}); if (url.includes('capabilities(canEdit)') && permissionReady) await permissionReady; return { ok: responseStatus === 200, status: responseStatus, json: async () => url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: editable } } : url.includes('fields=properties') ? { properties: {title: 'My library'}, sheets: [{properties: {title:'Books', gridProperties:{frozenRowCount:1}}}] } : { values: [headers] } }; }, console });
   if (google) {
     Object.assign(window, { google, gapi, LIBRARY_CONFIG: { clientId: 'client', apiKey: 'key', appId: 'app' } });
@@ -18,7 +17,7 @@ async function openWindow(shared, responseStatus = 200, mobile = false, editable
   }
   vm.runInContext(fs.readFileSync('app.js', 'utf8'), context);
   await new Promise(resolve => setImmediate(resolve));
-  return { el, handlers, requests, scanners, timers, window, tickUpdateAge, navigatedTo: () => navigatedTo, cacheDeleted: () => deletedCache };
+  return { el, handlers, requests, scanners, timers, window, tickUpdateAge, navigatedTo: () => navigatedTo };
 }
 const sheetKey = 'annas-annals-sheet-id', sessionKey = 'annas-annals-google-session';
 test('a new window restores a valid session without reconnecting', async () => {
@@ -268,17 +267,13 @@ test('the mobile Library tab bar stays full-size while scrolling in either direc
   }
 });
 
-test('cover preferences default to fallback thumbnails and persist independently', async () => {
+test('fallback thumbnails default to visible and the setting persists', async () => {
   const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
   const first = await openWindow(shared);
-  assert.equal(first.el('show-covers').checked, false);
   assert.equal(first.el('show-fallback-covers').checked, true);
-  first.el('show-covers').checked = true;
-  first.handlers['show-covers:change']();
   first.el('show-fallback-covers').checked = false;
   first.handlers['show-fallback-covers:change']();
   const second = await openWindow(shared);
-  assert.equal(second.el('show-covers').checked, true);
   assert.equal(second.el('show-fallback-covers').checked, false);
 });
 
@@ -304,36 +299,6 @@ test('the selected main view is restored when the page is reopened', async () =>
   second.handlers['settings-open:click']();
   const third = await openWindow(shared, 200, true);
   assert.equal(third.el('settings-dialog').hidden, false);
-});
-
-test('settings reports the cover cache count independently of total site storage', async () => {
-  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
-  const view = await openWindow(shared);
-  view.handlers['settings-open:click']();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(view.el('cover-cache-info').textContent, '2 cached images · 4.5 KB');
-});
-
-test('settings distinguishes unreadable cached covers from an empty cache', async () => {
-  const view = await openWindow(storage());
-  view.window.caches.open = async () => ({ matchAll: async () => [{type:'opaque'}] });
-  view.handlers['settings-open:click']();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(view.el('cover-cache-info').textContent, '1 cached image · Size unavailable');
-
-  view.window.caches.open = async () => ({ matchAll: async () => [new Response('image'), {type:'opaque'}] });
-  view.handlers['settings-open:click']();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(view.el('cover-cache-info').textContent, '2 cached images · At least 5 B');
-});
-
-test('clear cover cache deletes stored covers and reports completion', async () => {
-  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
-  const view = await openWindow(shared);
-  await view.handlers['clear-cover-cache:click']();
-  assert.equal(view.cacheDeleted(), 'annas-annals-covers-v1');
-  assert.match(view.el('cover-cache-status').textContent, /cleared/i);
-  assert.equal(view.el('cover-cache-info').textContent, '0 cached images · 0 B');
 });
 
 test('update app checks the worker and reloads the same URL without a stale document', async () => {
