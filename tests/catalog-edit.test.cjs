@@ -8,7 +8,7 @@ const { findDuplicateGroups } = require('../assets/js/duplicates.js');
 const { normalizeIsbn } = require('../assets/js/isbn.js');
 const { matchBook } = require('../assets/js/book-match.js');
 
-async function fixture({ initialRow, legacy = false, extraData = false, nine = false, reordered = false, deferLookup = false, bookData = null, editionData = null, workData = null, googleData = null, googleFails = false } = {}) {
+async function fixture({ initialRow, legacy = false, extraData = false, nine = false, reordered = false, deferLookup = false, bookData = null, editionData = null, workData = null, googleData = null, googleFails = false, mobile = false } = {}) {
   let scanTimer, resolveLookup;
   const lookupWait = new Promise(resolve => { resolveLookup = resolve; });
   const handlers = {}, elements = {}, requests = [];
@@ -20,11 +20,14 @@ async function fixture({ initialRow, legacy = false, extraData = false, nine = f
   if (reordered) { [headers[0], headers[2]] = [headers[2], headers[0]]; [row[0], row[2]] = [row[2], row[0]]; }
   function element(id) { return elements[id] ||= { hidden: false, value: '', textContent: '', disabled: false, classList: { toggle() {}, add() {}, remove() {} }, children: [], addEventListener(type, fn) { handlers[id + ':' + type] = fn; this['on' + type] = fn; }, replaceChildren(...children) { this.children = []; this.append(...children); }, append(...children) { for (const child of children) child.parent = this; this.children.push(...children); }, setAttribute() {}, removeAttribute() {}, showModal() { this.open = true; }, close() { this.open = false; }, reset() {} }; }
   const form = element('book-form'); form.elements = Object.fromEntries(['isbn','title','author','language','notes','publisher','publication_year','shelf_location','category','description','series_name','volume_number','pages'].map(k => [k, { value: '' }]));
+  element('editor').style = {};
   installTemplates(element);
   const localStorage = { getItem: key => key === 'annas-annals-show-covers' ? 'true' : key === 'annas-annals-sheet-id' ? 'sheet-id' : key === 'annas-annals-google-session' ? JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }) : null, setItem() {}, removeItem() {} };
   const sessionStorage = { getItem: () => JSON.stringify({ token: 'token', expiresAt: Date.now() + 60000 }), setItem() {}, removeItem() {} };
-  const context = vm.createContext({ document: { getElementById: element, createElement: tag => element('created-' + tag + '-' + Math.random()) }, window: { LIBRARY_CONFIG: {apiKey:'test-key'}, confirm: () => true, addEventListener() {} }, localStorage, sessionStorage, createLibraryScanner: () => ({ stop: async () => {} }), normalizeIsbn, matchBook, findDuplicateGroups, setTimeout: (fn, delay) => { if (delay === 400) scanTimer = fn; if (delay === 1000) queueMicrotask(fn); return 1; }, clearTimeout: () => {}, crypto: { randomUUID: () => 'new-id' }, fetch: async (url, options) => { requests.push({ url, options }); if (googleFails && url.includes('googleapis.com/books/')) throw new Error('unavailable'); if (deferLookup && url.includes('openlibrary.org')) return lookupWait; if (url.includes(':append') && options?.body) addedRows.push(JSON.parse(options.body).values[0]); return { ok: true, json: async () => url.includes('googleapis.com/books/') ? {items:googleData ? [{volumeInfo:googleData}] : []} : url.includes('openlibrary.org/api/books') ? { 'ISBN:9780140328721': bookData } : url.includes('openlibrary.org/books/') ? editionData : url.includes('openlibrary.org/works/') ? workData : url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: true } } : url.includes('fields=properties') ? { properties: { title: 'Library' }, sheets: [{ properties: { title: 'Books', gridProperties: { frozenRowCount: 1 } } }] } : url.includes('fields=sheets') ? { sheets: [{ properties: { title: 'Books', sheetId: 0 } }] } : { values: [headers, row, ...addedRows] } }; }, console });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/js/app.js'), 'utf8'), context);
+  const context = vm.createContext({ document: { getElementById: element, createElement: tag => element('created-' + tag + '-' + Math.random()) }, window: { LIBRARY_CONFIG: {apiKey:'test-key'}, confirm: () => true, matchMedia: query => ({ matches: mobile && query === '(max-width: 700px)' }), addEventListener() {} }, localStorage, sessionStorage, createLibraryScanner: () => ({ stop: async () => {} }), normalizeIsbn, matchBook, findDuplicateGroups, setTimeout: (fn, delay) => { if (delay === 400) scanTimer = fn; if (delay === 1000) queueMicrotask(fn); return 1; }, clearTimeout: () => {}, crypto: { randomUUID: () => 'new-id' }, fetch: async (url, options) => { requests.push({ url, options }); if (googleFails && url.includes('googleapis.com/books/')) throw new Error('unavailable'); if (deferLookup && url.includes('openlibrary.org')) return lookupWait; if (url.includes(':append') && options?.body) addedRows.push(JSON.parse(options.body).values[0]); return { ok: true, json: async () => url.includes('googleapis.com/books/') ? {items:googleData ? [{volumeInfo:googleData}] : []} : url.includes('openlibrary.org/api/books') ? { 'ISBN:9780140328721': bookData } : url.includes('openlibrary.org/books/') ? editionData : url.includes('openlibrary.org/works/') ? workData : url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: true } } : url.includes('fields=properties') ? { properties: { title: 'Library' }, sheets: [{ properties: { title: 'Books', gridProperties: { frozenRowCount: 1 } } }] } : url.includes('fields=sheets') ? { sheets: [{ properties: { title: 'Books', sheetId: 0 } }] } : { values: [headers, row, ...addedRows] } }; }, console });
+  for (const script of ['book-lookup.js', 'app.js']) {
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/js', script), 'utf8'), context);
+  }
   await new Promise(resolve => setImmediate(resolve));
   const card = element('books').children[0];
   const edit = card.children.find(child => child.className === 'book-actions').children.find(child => child.className.includes('book-edit'));
@@ -113,6 +116,68 @@ test('cancel returns to the saved details and restores the original draft values
   assert.equal(f.element('book-details-title').textContent, 'Original');
   f.handlers['edit-from-details:click']();
   assert.equal(f.form.elements.title.value, 'Original');
+});
+
+test('a mobile edge swipe goes back from book details and leaves edit drafts open', async () => {
+  const f = await fixture({ mobile: true });
+  const editor = f.element('editor');
+  const touch = (clientX, clientY) => ({ pointerType: 'touch', isPrimary: true, pointerId: 1, clientX, clientY, target: editor });
+  const swipe = (startX, startY, endX, endY) => {
+    f.handlers['editor:pointerdown'](touch(startX, startY));
+    f.handlers['editor:pointerup'](touch(endX, endY));
+  };
+
+  f.form.elements.title.value = 'Draft title';
+  swipe(20, 140, 135, 145);
+  assert.equal(editor.open, true);
+  assert.equal(f.form.elements.title.value, 'Draft title');
+
+  f.element('books').children[0].onclick();
+  swipe(100, 140, 215, 145);
+  swipe(20, 140, 130, 285);
+  assert.equal(editor.open, true);
+  f.handlers['editor:pointerdown'](touch(20, 140));
+  f.handlers['editor:pointercancel'](touch(20, 140));
+  f.handlers['editor:pointerup'](touch(135, 145));
+  assert.equal(editor.open, true);
+
+  swipe(20, 140, 135, 145);
+  assert.equal(editor.open, false);
+});
+
+test('book details follow an edge swipe and settle back or dismiss on release', async () => {
+  const f = await fixture({ mobile: true });
+  f.element('books').children[0].onclick();
+  const editor = f.element('editor');
+  const touch = clientX => ({ pointerType: 'touch', isPrimary: true, pointerId: 1, clientX, clientY: 140, target: editor });
+  let keyframes, finish;
+  editor.animate = frames => {
+    keyframes = Array.from(frames, frame => frame.transform);
+    return { finished: new Promise(resolve => { finish = resolve; }), cancel() {} };
+  };
+
+  f.handlers['editor:pointerdown'](touch(20));
+  f.handlers['editor:pointermove'](touch(65));
+  assert.equal(editor.style.transform, 'translateX(45px)');
+  f.handlers['editor:pointermove'](touch(50));
+  assert.equal(editor.style.transform, 'translateX(30px)');
+  f.handlers['editor:pointerup'](touch(50));
+  assert.deepEqual(keyframes, ['translateX(30px)', 'translateX(0)']);
+  assert.equal(editor.open, true);
+  finish();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(editor.style.transform, '');
+  assert.equal(editor.open, true);
+
+  f.handlers['editor:pointerdown'](touch(20));
+  f.handlers['editor:pointermove'](touch(140));
+  f.handlers['editor:pointerup'](touch(140));
+  assert.deepEqual(keyframes, ['translateX(120px)', 'translateX(100%)']);
+  assert.equal(editor.open, true);
+  finish();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(editor.style.transform, '');
+  assert.equal(editor.open, false);
 });
 
 test('cards show identification and shelf information while details retain the other fields', async () => {

@@ -17,7 +17,9 @@ async function openWindow(shared, responseStatus = 200, mobile = false, editable
     Object.assign(window, { google, gapi, LIBRARY_CONFIG: { clientId: 'client', apiKey: 'key', appId: 'app' } });
     Object.assign(context, { google, gapi });
   }
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/js/app.js'), 'utf8'), context);
+  for (const script of ['book-lookup.js', 'app.js']) {
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/js', script), 'utf8'), context);
+  }
   await new Promise(resolve => setImmediate(resolve));
   return { el, handlers, requests, scanners, timers, window, tickUpdateAge, navigatedTo: () => navigatedTo };
 }

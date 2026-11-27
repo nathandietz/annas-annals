@@ -744,6 +744,16 @@ button.upgrade-button:hover {
       max(20px, env(safe-area-inset-right));
   }
 
+  #editor.view-mode,
+  #editor.view-mode .editor-body {
+    touch-action: pan-y pinch-zoom;
+  }
+
+  #editor.view-mode.is-back-swiping::backdrop {
+    background: transparent;
+    backdrop-filter: none;
+  }
+
   #book-primary-fields {
     grid-template-columns: 1fr;
   }

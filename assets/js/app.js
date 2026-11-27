@@ -66,7 +66,6 @@
   let showFallbackCovers = true;
   try { showFallbackCovers = localStorage.getItem(fallbackCoverStorageKey) !== 'false'; } catch {}
   $('show-fallback-covers').checked = showFallbackCovers;
-  const googleBookRequests = new Map();
   try { const savedView = localStorage.getItem('annas-annals-view'); if (['card', 'list'].includes(savedView)) viewMode = savedView; } catch {}
   try { rememberedSheet = localStorage.getItem(storageKey) || ''; } catch {}
   const scanner = createLibraryScanner();
@@ -564,84 +563,11 @@
       input.focus?.();
     });
   }
-  function bookMetadata(data) {
-    return {
-      title: data.title || '',
-      author: (data.authors || []).map(a => a.name).filter(Boolean).join(', '),
-      publisher: (data.publishers || []).map(p => p.name).filter(Boolean).join(', '),
-      publication_year: (data.publish_date || '').match(/\b(?:1[0-9]{3}|20[0-9]{2})\b/)?.[0] || '',
-      language: (data.languages || []).map(language => language.name || language.key?.split('/').pop() || '').filter(Boolean).join(', '),
-      pages: data.number_of_pages ? String(data.number_of_pages) : '',
-      category: (data.subjects || []).map(subject => subject.name).find(Boolean) || ''
-    };
-  }
-  async function fetchLookup(url) {
-    const controller = typeof AbortController === 'undefined' ? null : new AbortController();
-    let timer;
-    try {
-      const response = await Promise.race([
-        fetch(url, controller ? {signal: controller.signal} : undefined),
-        new Promise((_, reject) => { timer = setTimeout(() => { controller?.abort(); reject(new Error('Lookup timed out')); }, 5000); })
-      ]);
-      if (!response.ok) throw new Error('Lookup unavailable');
-      return await response.json();
-    } finally { clearTimeout(timer); }
-  }
-  function googleBookMetadata(google) {
-    return {
-      title: google.title || '', author: (google.authors || []).join(', '), publisher: google.publisher || '',
-      publication_year: (google.publishedDate || '').match(/\b(?:1[0-9]{3}|20[0-9]{2})\b/)?.[0] || '',
-      language: google.language || '', pages: google.pageCount ? String(google.pageCount) : '',
-      category: google.mainCategory || google.categories?.[0] || ''
-    };
-  }
-  function requestGoogleBook(isbn) {
-    if (!config.apiKey) return Promise.resolve(null);
-    if (googleBookRequests.has(isbn)) return googleBookRequests.get(isbn);
-    const request = fetchLookup('https://www.googleapis.com/books/v1/volumes?q=' + encodeURIComponent('isbn:' + isbn) + '&key=' + encodeURIComponent(config.apiKey))
-      .then(data => (data.items || []).find(item => (item.volumeInfo?.industryIdentifiers || []).some(id => normalizeIsbn(id.identifier) === isbn))?.volumeInfo || null)
-      .finally(() => googleBookRequests.delete(isbn));
-    googleBookRequests.set(isbn, request);
-    return request;
-  }
-  async function lookupBookMetadata(isbn, onGoogle) {
-    const openLibrary = fetchLookup('https://openlibrary.org/api/books?bibkeys=' + encodeURIComponent('ISBN:' + isbn) + '&format=json&jscmd=data')
-      .then(data => data['ISBN:' + isbn] || null);
-    const googleBooks = requestGoogleBook(isbn)
-      .then(google => { if (google && onGoogle) { const metadata = googleBookMetadata(google), fieldSources = {}; for (const [key, value] of Object.entries(metadata)) if (value) fieldSources[key] = 'Google Books'; onGoogle({metadata, fieldSources}); } return google; });
-    const [openResult, googleResult] = await Promise.allSettled([openLibrary, googleBooks]);
-    if (openResult.status === 'rejected' && (googleResult.status === 'rejected' || !googleResult.value)) throw new Error('Book lookup unavailable. You can enter the details manually.');
-    const openData = openResult.status === 'fulfilled' ? openResult.value : null;
-    const google = googleResult.status === 'fulfilled' ? googleResult.value : null;
-    const fallback = openData ? bookMetadata(openData) : {};
-    const preferred = google ? googleBookMetadata(google) : {};
-    const metadata = {...fallback}, fieldSources = {};
-    for (const [key, value] of Object.entries(fallback)) if (value) fieldSources[key] = 'Open Library';
-    for (const [key, value] of Object.entries(preferred)) if (value) { metadata[key] = value; fieldSources[key] = 'Google Books'; }
-    return { metadata: openData || google ? metadata : null, bookData: openData, fieldSources };
-  }
   let editorGeneration = 0;
   function fillEmptyBookFields(values, generation, isbn) {
     const form = $('book-form');
     if (generation !== editorGeneration || !$('editor').open || normalizeIsbn(form.elements.isbn.value) !== isbn) return;
     for (const [key, value] of Object.entries(values)) if (value && form.elements[key] && !form.elements[key].value.trim()) form.elements[key].value = value;
-  }
-  async function enrichScannedBook(data, generation, isbn) {
-    const editionId = String(data?.url || '').match(/^https?:\/\/openlibrary\.org\/books\/(OL\d+M)(?:\/|$)/)?.[1];
-    if (!editionId) return;
-    try {
-      const response = await fetch('https://openlibrary.org/books/' + editionId + '.json');
-      if (!response.ok) return;
-      const edition = await response.json();
-      const text = value => typeof value === 'string' ? value : value?.value || '';
-      fillEmptyBookFields({ description: text(edition.description), series_name: (edition.series || []).filter(value => typeof value === 'string').join(', ') }, generation, isbn);
-      const workKey = edition.works?.[0]?.key;
-      if (!/^\/works\/OL\d+W$/.test(workKey || '')) return;
-      const workResponse = await fetch('https://openlibrary.org' + workKey + '.json');
-      if (!workResponse.ok) return;
-      const work = await workResponse.json();
-      fillEmptyBookFields({ description: text(work.description) }, generation, isbn);
-    } catch { /* Details are optional; the existing lookup remains usable. */ }
   }
   function showOwnedEditions(result, matchingBooks) {
     if (!matchingBooks.length) return;
@@ -689,7 +615,7 @@
       detail.textContent = 'Looking up the title and author.';
       heading.focus?.();
       try {
-        ({metadata, bookData} = await lookupBookMetadata(isbn));
+        ({metadata, bookData} = await bookLookup.lookupBookMetadata(isbn));
         match = matchBook(isbn, metadata, books);
       } catch { match = { kind: 'unknown', books: [] }; }
     }
@@ -715,7 +641,10 @@
         const form = $('book-form');
         form.elements.isbn.value = isbn;
         if (metadata) for (const [key, value] of Object.entries(metadata)) if (value) form.elements[key].value = value;
-        if (bookData) enrichScannedBook(bookData, editorGeneration, isbn);
+        if (bookData) {
+          const generation = editorGeneration;
+          bookLookup.lookupOpenLibraryDetails(bookData, values => fillEmptyBookFields(values, generation, isbn));
+        }
       });
     }
     const again = actions.querySelector('[data-scan-again]');
@@ -1106,6 +1035,7 @@
   }
   function setEditorMode(editable) {
     editorGeneration++;
+    resetBackSwipe();
     resetDelete();
     editMode = editable;
     const editor = $('editor');
@@ -1216,12 +1146,87 @@
   });
   let editorScanSequence = 0;
   async function stopScanner() { editorScanSequence++; $('scan-area').hidden = true; await scanner.stop(); }
-  $('close-editor').addEventListener('click', () => { if (!busy) $('editor').close(); });
-  $('editor').addEventListener('cancel', event => {
+  const editorDialog = $('editor');
+  function closeEditor() {
+    if (!busy) editorDialog.close();
+  }
+  $('close-editor').addEventListener('click', closeEditor);
+
+  let backSwipe, backSwipeAnimation;
+  function resetBackSwipe() {
+    const animation = backSwipeAnimation;
+    backSwipe = undefined;
+    backSwipeAnimation = undefined;
+    animation?.cancel();
+    editorDialog.style.transform = '';
+    editorDialog.classList.remove('is-back-swiping');
+  }
+
+  function settleBackSwipe(dismiss) {
+    const distance = backSwipe?.distance;
+    backSwipe = undefined;
+    if (!distance || !editorDialog.animate || window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) {
+      resetBackSwipe();
+      if (dismiss) closeEditor();
+      return;
+    }
+    const animation = editorDialog.animate([
+      { transform: editorDialog.style.transform },
+      { transform: dismiss ? 'translateX(100%)' : 'translateX(0)' }
+    ], { duration: 240, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'forwards' });
+    backSwipeAnimation = animation;
+    animation.finished.then(() => {
+      if (backSwipeAnimation !== animation) return;
+      if (dismiss && editorDialog.open) closeEditor();
+      resetBackSwipe();
+    }, () => {
+      if (backSwipeAnimation === animation) resetBackSwipe();
+    });
+  }
+
+  editorDialog.addEventListener('pointerdown', event => {
+    if (backSwipeAnimation) return;
+    if (backSwipe) {
+      settleBackSwipe(false);
+      return;
+    }
+    if (!compactLayout?.matches || !editorDialog.open || editMode || busy ||
+        event.pointerType !== 'touch' || !event.isPrimary || event.clientX > 36 ||
+        event.target.closest?.('button, a')) return;
+    backSwipe = { id: event.pointerId, x: event.clientX, y: event.clientY };
+  });
+  function moveBackSwipe(event) {
+    if (event.pointerId !== backSwipe?.id) return;
+    const across = event.clientX - backSwipe.x;
+    const vertical = Math.abs(event.clientY - backSwipe.y);
+    if (backSwipe.distance === undefined) {
+      if (Math.max(Math.abs(across), vertical) < 8) return;
+      if (across <= vertical) {
+        backSwipe = undefined;
+        return;
+      }
+      editorDialog.classList.add('is-back-swiping');
+    }
+    backSwipe.distance = Math.max(0, across);
+    editorDialog.style.transform = 'translateX(' + backSwipe.distance + 'px)';
+  }
+  editorDialog.addEventListener('pointermove', moveBackSwipe);
+  editorDialog.addEventListener('pointerup', event => {
+    if (event.pointerId !== backSwipe?.id) return;
+    moveBackSwipe(event);
+    if (!backSwipe) return;
+    const vertical = Math.abs(event.clientY - backSwipe.y);
+    settleBackSwipe(backSwipe.distance >= 72 && backSwipe.distance > vertical * 1.5);
+  });
+  editorDialog.addEventListener('pointercancel', event => {
+    if (event.pointerId === backSwipe?.id) settleBackSwipe(false);
+  });
+  editorDialog.addEventListener('cancel', event => {
     if (busy || (editMode && editingBook)) event.preventDefault();
     if (editMode && editingBook) cancelBookEdit();
   });
-  $('editor').addEventListener('close', () => {
+  editorDialog.addEventListener('close', () => {
+    resetBackSwipe();
     editorGeneration++;
     resetDelete();
     stopScanner().catch(() => {});
@@ -1303,7 +1308,7 @@
       if (pending) resultStatus.textContent += ' Checking Open Library for missing details…';
     }
     try {
-      const result = await lookupBookMetadata(isbn, partial => showLookupResult(partial, true));
+      const result = await bookLookup.lookupBookMetadata(isbn, partial => showLookupResult(partial, true));
       if (!isCurrent()) return;
       if (!result.metadata) { resultStatus.textContent = 'No match found. You can enter the details manually.'; return; }
       showLookupResult(result, false);
