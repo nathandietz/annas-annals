@@ -18,10 +18,7 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_upward,barcode_scanner,book_2,check,close,edit,expand_less,expand_more,search,settings,unfold_more&display=block"
       rel="stylesheet"
     />
-    <link
-      rel="stylesheet"
-      href="assets/css/style.css?v=check-scanner-layout-3"
-    />
+    <link rel="stylesheet" href="assets/css/style.css?v=connection-debug-1" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
     <script
@@ -35,7 +32,10 @@
     <script src="assets/js/csv.js?v=017c5b1b32ae" defer></script>
     <script src="assets/js/config.js?v=017c5b1b32ae" defer></script>
     <script src="assets/js/book-lookup.js?v=1" defer></script>
-    <script src="assets/js/app.js?v=check-scanner-layout-1" defer></script>
+    <script
+      src="assets/js/app.js?v=connection-update-shortcut-1"
+      defer
+    ></script>
   </head>
   <body>
     <template id="catalog-search-template">
@@ -289,10 +289,11 @@
       <header class="site-header">
         <div class="brand">
           <span class="material-symbol" aria-hidden="true">book_2</span>
-          <h1><a id="library-link">Anna’s Annals</a></h1>
+          <h1><a id="library-link">No Connected Library</a></h1>
         </div>
-        <p id="status" role="status" aria-live="polite">
-          Loading your library…
+        <p id="header-meta" class="header-meta" hidden>
+          <span id="library-count" hidden></span>
+          <span id="status" role="status" aria-live="polite"></span>
         </p>
         <nav id="mode-toggle" class="mode-toggle" aria-label="Main view" hidden>
           <button id="mode-scan" type="button">
@@ -320,37 +321,31 @@
               <div id="scan-books" class="scan-books" hidden></div>
             </div>
             <div class="check-preview-slot">
-              <div class="scanner-mark" aria-hidden="true">
-                <svg
-                  width="152"
-                  height="88"
-                  viewBox="0 12 152 88"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="3"
-                  stroke-linecap="round"
-                >
-                  <path
-                    d="M42 33v46m10-46v46m12-46v46m12-46v46m16-46v46m8-46v46m11-46v46"
-                    vector-effect="non-scaling-stroke"
-                  />
-                  <path
-                    d="M23 58h106"
-                    stroke="#5aa1ed"
-                    vector-effect="non-scaling-stroke"
-                  />
-                </svg>
-                <span class="scanner-guide" aria-hidden="true"></span>
-              </div>
-              <div id="check-camera" hidden>
-                <div id="check-preview" class="scanner-preview">
-                  <div id="check-qr-reader"></div>
+              <div class="check-preview-frame">
+                <div class="scanner-mark" aria-hidden="true">
+                  <!-- EAN-13 modules for Fahrenheit 451, ISBN 9780743247221. -->
+                  <svg
+                    width="117"
+                    height="66"
+                    viewBox="0 0 117 66"
+                    fill="#fff"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M11 15h1v39h-1z M13 15h1v39h-1z M15 15h3v34h-3z M19 15h2v34h-2z M24 15h1v34h-1z M27 15h1v34h-1z M29 15h1v34h-1z M32 15h3v34h-3z M36 15h3v34h-3z M40 15h2v34h-2z M44 15h3v34h-3z M48 15h1v34h-1z M50 15h4v34h-4z M55 15h1v34h-1z M57 15h1v39h-1z M59 15h1v39h-1z M61 15h2v34h-2z M64 15h2v34h-2z M68 15h1v34h-1z M70 15h3v34h-3z M75 15h1v34h-1z M79 15h1v34h-1z M82 15h2v34h-2z M85 15h2v34h-2z M89 15h2v34h-2z M92 15h2v34h-2z M96 15h2v34h-2z M100 15h2v34h-2z M103 15h1v39h-1z M105 15h1v39h-1z"
+                    />
+                  </svg>
                   <span class="scanner-guide" aria-hidden="true"></span>
+                </div>
+                <div id="check-camera" hidden>
+                  <div id="check-preview" class="scanner-preview">
+                    <div id="check-qr-reader"></div>
+                    <span class="scanner-guide" aria-hidden="true"></span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-          <p id="check-status" role="status"></p>
         </div>
         <button id="check-back" class="quiet-button" type="button" hidden>
           ‹ Check
@@ -358,32 +353,14 @@
         <p id="check-announcement" class="visually-hidden" role="status"></p>
         <section id="check-result" class="check-result" hidden></section>
         <div id="scan-controls">
-          <form id="check-isbn-form" hidden>
-            <label for="check-isbn">ISBN</label>
-            <input
-              id="check-isbn"
-              name="isbn"
-              type="text"
-              inputmode="text"
-              autocomplete="off"
-              required
-            />
-            <button type="submit">Check ISBN</button>
-            <button id="check-isbn-cancel" class="quiet-button" type="button">
-              Cancel
-            </button>
-            <p id="check-isbn-error" role="status"></p>
-          </form>
           <button
             id="scan-start"
             class="check-primary"
             type="button"
-            aria-expanded="false"
             aria-controls="check-camera"
+            aria-expanded="false"
           >
-            <span class="material-symbol" aria-hidden="true"
-              >barcode_scanner</span
-            ><span id="scan-start-label">Scan Book</span>
+            Scan Book
           </button>
           <div class="scan-options">
             <button
@@ -400,11 +377,29 @@
             </button>
             <input id="check-photo" type="file" accept="image/*" hidden />
           </div>
+          <form id="check-isbn-form" hidden>
+            <label for="check-isbn">ISBN</label>
+            <input
+              id="check-isbn"
+              name="isbn"
+              type="text"
+              inputmode="text"
+              autocomplete="off"
+              required
+            />
+            <button type="submit">Check ISBN</button>
+            <button id="check-isbn-cancel" class="quiet-button" type="button">
+              Cancel
+            </button>
+            <p id="check-isbn-error" role="status"></p>
+          </form>
+          <p id="check-guidance" class="hint"></p>
+          <p id="check-status" role="status"></p>
           <p id="check-photo-status" role="status"></p>
         </div>
       </section>
-      <section id="connect" hidden>
-        <h2>Your library, in your Sheet</h2>
+      <section id="connect" aria-labelledby="connect-title" hidden>
+        <h2 id="connect-title" class="page-title">Anna’s Annals</h2>
         <p>
           Sign in with Google, then choose an existing spreadsheet or create a
           new library.
@@ -417,6 +412,7 @@
             Choose a different Sheet
           </button>
         </div>
+        <p id="connect-status" class="hint" role="status" hidden></p>
         <p class="hint">
           Anna’s Annals reads and updates the library spreadsheet you choose or
           create. <a href="privacy.html">How we use Google data</a>
@@ -444,9 +440,6 @@
           <button id="all-books" class="secondary" type="button" hidden>
             All books
           </button>
-        </div>
-        <div id="library-meta" class="catalog-meta">
-          <p id="count" class="hint" role="status"></p>
         </div>
         <div class="mobile-sort">
           <label for="library-sort">Sort by</label
@@ -749,7 +742,7 @@
       </dialog>
       <footer class="app-footer">
         <section class="app-intro" aria-labelledby="app-intro-title">
-          <h2 id="app-intro-title">Anna’s Annals</h2>
+          <h2 id="app-intro-title">About Anna’s Annals</h2>
           <p>
             Catalog your books in a Google Sheet you control. Scan ISBN barcodes
             to look up book details, search your collection, check for
@@ -767,6 +760,19 @@
           <a href="privacy.html">Privacy Policy</a>
           <a href="terms.html">Terms of Service</a>
         </nav>
+        <!-- Temporary update shortcut for debugging while disconnected. -->
+        <section class="connection-debug" aria-labelledby="debug-title">
+          <h2 id="debug-title">Debug</h2>
+          <button id="connect-update-app" class="secondary" type="button">
+            Update app
+          </button>
+          <p
+            id="connect-update-app-status"
+            class="hint"
+            role="status"
+            hidden
+          ></p>
+        </section>
       </footer>
     </main>
     <button

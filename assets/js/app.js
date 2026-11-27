@@ -71,26 +71,37 @@
   const scanner = createLibraryScanner();
   const checkScanner = createLibraryScanner('check-qr-reader');
   const scanGuidance = 'Keep the entire barcode in view, including blank space at both ends. Hold steady in good light.';
+  $('check-guidance').textContent = scanGuidance;
   const compactLayout = window.matchMedia?.('(max-width: 700px)');
   let mainView = compactLayout?.matches ? 'scan' : 'library', canEdit = false, checkSequence = 0;
   try { const savedMainView = localStorage.getItem('annas-annals-main-view'); if (['scan', 'library', 'settings'].includes(savedMainView)) mainView = savedMainView; } catch {}
-  let lastCatalogUpdate = 0, showingUpdateAge = false, pendingHeaderUpdate;
+  let pendingHeaderUpdate;
   const headerStatus = $('status');
+  const catalogUpdateTime = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric', minute: '2-digit', hour12: true
+  });
   const status = (message, refreshing = false) => {
     pendingHeaderUpdate = undefined;
-    showingUpdateAge = false;
     headerStatus.classList.toggle('is-refreshing', refreshing);
     headerStatus.textContent = message;
   };
-  function showUpdateAge() {
-    if (!showingUpdateAge || !lastCatalogUpdate) return;
-    const minutes = Math.max(0, Math.floor((Date.now() - lastCatalogUpdate) / 60000));
-    headerStatus.textContent = minutes === 0 ? 'Updated just now' : 'Updated ' + minutes + (minutes === 1 ? ' minute ago' : ' minutes ago');
+  function connectionStatus(message) {
+    if ($('connect').hidden) {
+      status(message);
+      return;
+    }
+    const feedback = $('connect-status');
+    feedback.textContent = message;
+    feedback.hidden = false;
+  }
+  function updateLibraryCount() {
+    const count = $('library-count');
+    count.textContent = books.length.toLocaleString('en-US') + (books.length === 1 ? ' Book' : ' Books');
+    count.hidden = false;
   }
   function isCatalogRefreshing() {
     return !pendingHeaderUpdate && headerStatus.classList.contains('is-refreshing');
   }
-  window.setInterval?.(showUpdateAge, 60000);
   const formStatus = message => { $('form-status').textContent = message; };
   function message(error) { return error?.message || 'Something went wrong. Please try again.'; }
   function updateConnect() {
@@ -117,6 +128,8 @@
     link.href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit';
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
+    $('header-meta').hidden = false;
+    $('connect-status').hidden = true;
     $('connect').hidden = true;
     $('disconnect').hidden = false;
     $('new-library-connected').hidden = false;
@@ -141,8 +154,11 @@
       $(id).hidden = true;
     }
     for (const add of addBookButtons) add.hidden = true;
-    $('count').textContent = '';
-    $('library-link').textContent = appName;
+    $('header-meta').hidden = true;
+    $('library-count').hidden = true;
+    status('');
+    $('connect-status').hidden = true;
+    $('library-link').textContent = 'No Connected Library';
     for (const attribute of ['href', 'target', 'rel', 'title']) $('library-link').removeAttribute(attribute);
     $('books').replaceChildren();
     for (const input of searchInputs) input.disabled = true;
@@ -157,7 +173,7 @@
     return data;
   }
   async function refresh({ minimumIndicatorTime = 1000, finishIndicatorInBackground = false } = {}) {
-    status('Refreshing Catalog', true);
+    status('Refreshing', true);
     const minimumRefreshTime = minimumIndicatorTime
       ? new Promise(resolve => setTimeout(resolve, minimumIndicatorTime))
       : undefined;
@@ -177,11 +193,10 @@
     setLibraryLinkLabel(title);
     const updatedAt = Date.now();
     try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title, books, updatedAt, sheetHeaders, headerFrozen })); } catch {}
-    render(); lastCatalogUpdate = updatedAt;
+    updateLibraryCount();
+    render();
     function showCatalogUpdated() {
-      showingUpdateAge = true;
-      headerStatus.classList.remove('is-refreshing');
-      showUpdateAge();
+      status('Updated at ' + catalogUpdateTime.format(updatedAt).toLowerCase());
     }
     if (finishIndicatorInBackground && minimumRefreshTime) {
       pendingHeaderUpdate = minimumRefreshTime;
@@ -373,7 +388,6 @@
       });
       entries.append(entry);
     }
-    $('count').textContent = filtered.length + (filtered.length === 1 ? ' book' : ' books');
     const empty = $('library-empty');
     empty.hidden = filtered.length > 0;
     empty.textContent = query ? 'No books match your search. Try a different title, author, or keyword.' : duplicatesMode ? 'No duplicates found.' : 'Your library is empty.';
@@ -386,21 +400,27 @@
     if ($('editor').open) updateBookCover();
     render();
   });
-  $('update-app').addEventListener('click', async () => {
-    const button = $('update-app'), status = $('update-app-status');
-    button.disabled = true; status.textContent = 'Checking for updates…';
+  async function updateApp(button, feedback) {
+    button.disabled = true;
+    feedback.hidden = false;
+    feedback.textContent = 'Checking for updates…';
     try {
       const registration = await window.navigator?.serviceWorker?.getRegistration();
       if (registration) await registration.update();
       const url = new URL(window.location.href);
       url.searchParams.set('_update', String(Date.now()));
-      status.textContent = 'Reloading app…';
+      feedback.textContent = 'Reloading app…';
       window.location.replace(url.href);
     } catch {
-      status.textContent = 'Could not check for updates. Check your connection and try again.';
+      feedback.textContent = 'Could not check for updates. Check your connection and try again.';
       button.disabled = false;
     }
-  });
+  }
+  for (const id of ['update-app', 'connect-update-app']) {
+    const button = $(id);
+    const feedback = $(id + '-status');
+    button.addEventListener('click', () => updateApp(button, feedback));
+  }
   async function checkPermission() {
     const currentSheet = sheetId, currentToken = token;
     let cachedAccess;
@@ -657,7 +677,6 @@
     again.addEventListener('click', () => {
       returnToCheck();
       startCheckScanner();
-      $('scan-start').focus?.();
     });
     resultActions = { add, again };
     updateCheckActions();
@@ -678,7 +697,8 @@
     $('check-camera').hidden = !open && !standby;
     $('check-camera').classList.toggle('camera-standby', standby);
     $('check-camera').inert = standby;
-    $('scan-start-label').textContent = open ? 'Close scanner' : 'Scan Book';
+    $('check-status').textContent = '';
+    $('scan-start').textContent = open ? 'Close scanner' : 'Scan Book';
     $('scan-start').setAttribute('aria-expanded', String(open));
   }
   async function closeCheckScanner() {
@@ -694,7 +714,8 @@
     showIsbnForm(false);
     showCheckResult(false);
     $('check-photo-status').textContent = '';
-    setCameraOpen(true); $('check-status').textContent = scanGuidance; $('check-preview').classList.remove('recognized'); $('check-preview').classList.add('loading');
+    setCameraOpen(true); $('check-preview').classList.remove('recognized'); $('check-preview').classList.add('loading');
+    $('scan-start').focus?.();
     try {
       await checkScanner.start(async value => {
         if (scanId !== checkSequence || $('check-camera').hidden) return;
@@ -703,7 +724,11 @@
         if (scanId !== checkSequence || $('check-camera').hidden) return;
         checkScanner.hold(30000);
         setCameraOpen(false, true); checkIsbn(value);
-      }, value => { if (value !== 'Starting camera…') $('check-status').textContent = value; });
+      }, value => {
+        if (scanId === checkSequence && cameraOpen && value !== 'Starting camera…' && value !== scanGuidance) {
+          $('check-status').textContent = value;
+        }
+      });
       if (scanId === checkSequence) $('check-preview').classList.remove('loading');
     } catch (error) {
       if (scanId === checkSequence && !$('check-camera').hidden) { $('check-preview').classList.remove('loading'); $('check-status').textContent = message(error); }
@@ -771,14 +796,14 @@
         if (result.action !== google.picker.Action.PICKED) return;
         sheetId = result.docs[0].id;
         try { await refresh({ minimumIndicatorTime: 0 }); rememberSheet(sheetId); showLibrary(); }
-        catch (error) { sheetId = ''; status(message(error)); }
+        catch (error) { sheetId = ''; connectionStatus(message(error)); }
       }).build().setVisible(true);
   }
   async function createLibrary(name) {
     if (creatingLibrary) return;
     creatingLibrary = true;
     try {
-    status('Creating your library…');
+    connectionStatus('Creating your library…');
     let response;
     try { response = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
       method: 'POST',
@@ -804,34 +829,35 @@
     } finally { creatingLibrary = false; }
   }
   function connect(mode = 'connect', libraryName = '') {
-    if (!config.clientId || !config.apiKey || !config.appId) { status('Setup needed: add the Google Cloud identifiers to assets/js/config.js. See the setup guide.'); return; }
-    if (!window.google?.accounts?.oauth2 || !window.gapi) { status('Google sign-in is still loading. Please try again.'); return; }
+    $('connect-status').hidden = true;
+    if (!config.clientId || !config.apiKey || !config.appId) { connectionStatus('Setup needed: add the Google Cloud identifiers to assets/js/config.js. See the setup guide.'); return; }
+    if (!window.google?.accounts?.oauth2 || !window.gapi) { connectionStatus('Google sign-in is still loading. Please try again.'); return; }
     const client = google.accounts.oauth2.initTokenClient({ client_id: config.clientId, scope, callback: async response => {
-      if (response.error) { status('Google authorization was not completed: ' + response.error); return; }
+      if (response.error) { connectionStatus('Google authorization was not completed: ' + response.error); return; }
       token = response.access_token;
       try { sessionStorage.removeItem(cacheKey); sessionStorage.removeItem(editAccessKey); } catch {}
       try { localStorage.setItem(sessionKey, JSON.stringify({ token, expiresAt: Date.now() + Number(response.expires_in) * 1000 })); } catch {}
       if (mode === 'create') {
-        try { await createLibrary(libraryName); } catch (error) { status(message(error)); }
+        try { await createLibrary(libraryName); } catch (error) { connectionStatus(message(error)); }
         return;
       }
       if (rememberedSheet && mode === 'connect') {
         sheetId = rememberedSheet;
         try { await refresh({ minimumIndicatorTime: 0 }); showLibrary(); }
-        catch (error) { sheetId = ''; status('Could not open the remembered Sheet: ' + message(error) + ' You can choose a different Sheet.'); }
+        catch (error) { sheetId = ''; connectionStatus('Could not open the remembered Sheet: ' + message(error) + ' You can choose a different Sheet.'); }
         return;
       }
-      if (pickerReady) openPicker(); else gapi.load('picker', { callback: () => { pickerReady = true; openPicker(); }, onerror: () => status('Google Picker could not load. Please try again.'), timeout: 10000, ontimeout: () => status('Google Picker took too long to load. Please try again.') });
+      if (pickerReady) openPicker(); else gapi.load('picker', { callback: () => { pickerReady = true; openPicker(); }, onerror: () => connectionStatus('Google Picker could not load. Please try again.'), timeout: 10000, ontimeout: () => connectionStatus('Google Picker took too long to load. Please try again.') });
     }});
     client.requestAccessToken();
   }
   async function restoreSession() {
-    if (!rememberedSheet) { $('connect').hidden = false; status('Connect a private Google Sheet to get started.'); return; }
+    if (!rememberedSheet) { $('connect').hidden = false; return; }
     let session;
     try { session = JSON.parse(localStorage.getItem(sessionKey) || 'null'); } catch {}
     if (!session?.token || !Number.isFinite(session.expiresAt) || session.expiresAt <= Date.now() + 30000) {
       try { localStorage.removeItem(sessionKey); } catch {}
-      $('connect').hidden = false; status('Reconnect to your Google Sheet to continue.');
+      $('connect').hidden = false;
       return;
     }
     token = session.token; sheetId = rememberedSheet;
@@ -841,6 +867,7 @@
       if (snapshot?.sheetId === sheetId && Array.isArray(snapshot.books) && snapshot.books.every(book => headers.every(key => typeof book[key] === 'string')) && Number.isFinite(snapshot.updatedAt) && Array.isArray(snapshot.sheetHeaders)) {
         sheetHeaders = readHeaders(snapshot.sheetHeaders); headerFrozen = snapshot.headerFrozen === true; libraryWidth = sheetHeaders.length; $('upgrade-library').hidden = !canEdit || !needsUpdate();
         books = snapshot.books;
+        updateLibraryCount();
         setLibraryLinkLabel(snapshot.title);
         render(); showLibrary(); cached = true;
       }
@@ -857,7 +884,7 @@
         status('Showing saved catalog; refresh failed: ' + message(error));
       } else {
         clearSession();
-        status('Could not restore your session: ' + message(error) + ' Reconnect to try again.');
+        connectionStatus('Could not restore your session: ' + message(error) + ' Reconnect to try again.');
       }
     }
   }
@@ -876,15 +903,15 @@
     const name = $('new-library-name').value.trim();
     if (!name || creatingLibrary) return;
     $('new-library-dialog').close();
-    if (token) createLibrary(name).catch(error => status(message(error)));
+    if (token) createLibrary(name).catch(error => connectionStatus(message(error)));
     else connect('create', name);
   });
   $('new-library').addEventListener('click', requestNewLibrary);
   $('settings-open').addEventListener('click', () => setMainView('settings'));
   $('new-library-connected').addEventListener('click', requestNewLibrary);
-  $('disconnect').addEventListener('click', () => { clearSession(); rememberSheet(''); status('Disconnected. No catalog is stored in this tab.'); });
+  $('disconnect').addEventListener('click', () => { clearSession(); rememberSheet(''); });
   window.addEventListener('storage', event => {
-    if (event.key === sessionKey && !event.newValue && token) { clearSession(); rememberSheet(''); status('Disconnected in another window.'); }
+    if (event.key === sessionKey && !event.newValue && token) { clearSession(); rememberSheet(''); }
   });
   $('upgrade-library').addEventListener('click', () => {
     if (busy || !libraryWidth || !needsUpdate()) return;
@@ -1391,7 +1418,7 @@
         await api('/values/' + encodeURIComponent("'Books'!A:ZZ") + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', { method: 'POST', body: JSON.stringify({ values: [sheetHeaders.map(key => valuesByHeader[key] || '')] }) });
         returnToCheck();
         $('library-sort').value = ''; sortField = ''; duplicatesMode = false;
-        books.unshift(valuesByHeader); render();
+        books.unshift(valuesByHeader); updateLibraryCount(); render();
         await finishChange('Book saved.');
       }
     } catch (error) { formStatus('Save failed or could not be confirmed. Refresh the catalog before retrying: ' + message(error)); }

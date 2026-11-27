@@ -52,15 +52,31 @@ h2 {
   margin: 0;
 }
 
-#status {
+.header-meta {
+  --header-status-line-height: 15px;
+
   order: 1;
-  max-width: min(45ch, 50%);
+  max-width: min(58ch, 60%);
   margin: 0;
   margin-inline-start: auto;
   font-size: 12px;
+  line-height: var(--header-status-line-height);
   color: var(--muted);
   text-align: right;
   overflow-wrap: anywhere;
+}
+
+.header-meta:has(> #library-count:not([hidden])) {
+  padding-block-start: var(--header-status-line-height);
+}
+
+#library-count {
+  display: block;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 #status.is-refreshing::before {
@@ -1090,15 +1106,19 @@ button.upgrade-button:hover {
 /* Camera preview */
 
 .scanner-preview,
-.check-preview-slot {
+.check-preview-frame {
   height: clamp(180px, 52vw, 260px);
+}
+
+.scanner-preview,
+.scanner-mark {
+  border-radius: 12px;
+  background: var(--ink);
 }
 
 .scanner-preview {
   position: relative;
   overflow: hidden;
-  border-radius: 12px;
-  background: var(--ink);
 }
 
 #check-preview {
@@ -1151,10 +1171,6 @@ button.upgrade-button:hover {
     linear-gradient(#000 0 0) top right / 22px 22px no-repeat,
     linear-gradient(#000 0 0) bottom left / 22px 22px no-repeat,
     linear-gradient(#000 0 0) bottom right / 22px 22px no-repeat;
-}
-
-.scanner-mark .scanner-guide {
-  color: inherit;
 }
 
 .scanner-preview.recognized .scanner-guide {
@@ -1221,6 +1237,19 @@ main:has(#mode-toggle:not([hidden])) .app-intro {
   border-top: 1px solid var(--separator);
   color: var(--muted);
   line-height: 1.5;
+}
+
+.connection-debug {
+  margin-block-start: 16px;
+}
+
+.connection-debug h2 {
+  margin-block-end: 8px;
+  font-size: 14px;
+}
+
+#connect[hidden] ~ .app-footer .connection-debug {
+  display: none;
 }
 
 .policy-links {
@@ -1349,14 +1378,10 @@ button.quiet-button {
   text-decoration-color: currentcolor;
 }
 
-.mode-toggle,
-.catalog-meta {
+.mode-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.mode-toggle {
   margin-left: auto;
 }
 
@@ -1370,16 +1395,6 @@ button.quiet-button {
 .mode-toggle button[aria-pressed="true"] {
   color: var(--accent);
   background: var(--field);
-}
-
-.catalog-meta {
-  flex-wrap: wrap;
-  min-height: 18px;
-  margin: 12px 0;
-}
-
-.catalog-meta p {
-  margin: 0;
 }
 
 .policy-page section p {
@@ -1479,10 +1494,6 @@ button.quiet-button {
   margin: 0 auto;
 }
 
-#check-home {
-  flex: 1;
-}
-
 #check-stage {
   display: grid;
   margin-top: 12px;
@@ -1496,8 +1507,11 @@ button.quiet-button {
 }
 
 .check-preview-slot {
-  position: relative;
   pointer-events: none;
+}
+
+.check-preview-frame {
+  position: relative;
 }
 
 .scanner-mark {
@@ -1505,9 +1519,6 @@ button.quiet-button {
   inset: 0;
   display: grid;
   place-items: center;
-  border-radius: 12px;
-  background: var(--field);
-  color: var(--accent);
 }
 
 .scanner-mark svg {
@@ -1515,15 +1526,14 @@ button.quiet-button {
   height: 80%;
 }
 
-#check-stage:has(#scan-books:not([hidden])) .scanner-mark,
-#check-stage:has(#check-camera:not([hidden], .camera-standby)) .scanner-mark,
-#scan-view:has(#check-isbn-form:not([hidden])) .scanner-mark {
+#scan-view:has(#scan-books:not([hidden]), #check-isbn-form:not([hidden]))
+  .check-preview-slot:not(:has(#check-camera:not([hidden], .camera-standby))) {
   display: none;
 }
 
 #check-stage:has(#check-camera:not([hidden], .camera-standby))
   .check-search-results {
-  visibility: hidden;
+  display: none;
 }
 
 #check-search {
@@ -1536,7 +1546,7 @@ button.quiet-button {
 
 #scan-controls {
   position: relative;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .scan-options {
@@ -1551,7 +1561,7 @@ button.quiet-button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px 10px;
-  margin-bottom: 14px;
+  margin: 6px 0 14px;
 }
 
 #check-isbn {
@@ -1566,15 +1576,9 @@ button.quiet-button {
   line-height: 1.45;
 }
 
+#check-guidance,
 #check-status {
-  block-size: 4.35em;
-  margin: 12px 0 0;
-  overflow: auto;
-  visibility: hidden;
-}
-
-#check-stage:has(#check-camera:not([hidden], .camera-standby)) + #check-status {
-  visibility: visible;
+  margin: 6px 0 0;
 }
 
 #check-photo-status {
@@ -1582,6 +1586,7 @@ button.quiet-button {
 }
 
 #check-isbn-error:empty,
+#check-status:empty,
 #check-photo-status:empty {
   display: none;
 }
@@ -1596,6 +1601,10 @@ button.check-primary {
   padding: 10px 14px;
   font-size: 16px;
   border-radius: 13px;
+}
+
+#scan-start {
+  min-height: 100px;
 }
 
 #check-back {
@@ -1794,6 +1803,10 @@ button.scan-book {
   padding: 16px 0;
 }
 
+#settings-title + .settings-group {
+  border-top: 0;
+}
+
 .settings-group h3 {
   margin: 0 0 14px;
   font-size: 17px;
@@ -1818,11 +1831,6 @@ button.scan-book {
   border-radius: 0;
   box-shadow: none;
   background: transparent;
-}
-
-#connect h2 {
-  font-size: clamp(1.65rem, 6vw, 2rem);
-  letter-spacing: -0.035em;
 }
 
 #connect p {

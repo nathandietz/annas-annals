@@ -6,13 +6,13 @@ const vm = require('node:vm');
 const { installTemplates } = require('./helpers/templates.cjs');
 const headers = ['id','isbn','title','author','language','notes','created_at','publisher','publication_year','shelf_location','category','description','series_name','volume_number','pages','updated_at'];
 function storage(initial = {}) { const data = new Map(Object.entries(initial)); return { getItem: k => data.get(k) ?? null, setItem: (k,v) => data.set(k,String(v)), removeItem: k => data.delete(k) }; }
-async function openWindow(shared, responseStatus = 200, mobile = false, editable = true, { tabStorage = storage(), permissionReady, now = Date.now, refreshDelay = queueMicrotask, standalone = false, google, gapi } = {}) {
+async function openWindow(shared, responseStatus = 200, mobile = false, editable = true, { tabStorage = storage(), permissionReady, now = Date.now, refreshDelay = queueMicrotask, standalone = false, google, gapi, bookRows = [] } = {}) {
   const elements = {}, handlers = {}, requests = [], scanners = [], timers = [];
   const el = id => elements[id] ||= { hidden: false, value: '', textContent: '', children: [], classList: { values: new Set(), toggle(name, force) { if (force) this.values.add(name); else this.values.delete(name); }, remove(name) { this.values.delete(name); }, add(name) { this.values.add(name); }, contains(name) { return this.values.has(name); } }, addEventListener(type, fn) { handlers[id + ':' + type] = fn; }, style: { setProperty(name, value) { this[name] = value; } }, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute() {}, append(...children) { for (const child of children) child.parent = this; this.children.push(...children); }, replaceChildren(...children) { this.children = []; this.append(...children); } };
   installTemplates(el);
-  let navigatedTo, tickUpdateAge;
-  const window = { LIBRARY_CONFIG: {}, innerHeight: 874, location: { href:'https://example.com/annals/?view=library', replace: value => { navigatedTo = value; } }, navigator: {}, matchMedia: query => ({ matches: query === '(display-mode: standalone)' ? standalone : mobile }), setInterval: (fn, delay) => { if (delay === 60000) tickUpdateAge = fn; }, addEventListener: (type, fn) => { handlers['window:' + type] = fn; } };
-  const context = vm.createContext({ URL, Date: class extends Date { static now() { return now(); } }, document: { getElementById: el, createElement: () => ({ textContent: '', setAttribute() {}, addEventListener() {}, append() {} }) }, window, localStorage: shared, sessionStorage: tabStorage, findDuplicateGroups: () => [], normalizeIsbn: require('../assets/js/isbn.js').normalizeIsbn, matchBook: () => ({kind:'exact', books:[]}), createLibraryScanner: () => { const scanner = { stops: 0, start: async (callback, onStatus) => { scanner.decoded = callback; onStatus('Starting camera…'); }, hold: duration => { scanner.holdDuration = duration; }, stop: async () => { scanner.stops++; } }; scanners.push(scanner); return scanner; }, setTimeout: (fn, delay) => delay === 1000 ? refreshDelay(fn) : timers.push(fn) - 1, clearTimeout: id => { if (id !== undefined) timers[id] = () => {}; }, fetch: async (url, options) => { requests.push({url, options}); if (url.includes('capabilities(canEdit)') && permissionReady) await permissionReady; return { ok: responseStatus === 200, status: responseStatus, json: async () => url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: editable } } : url.includes('fields=properties') ? { properties: {title: 'My library'}, sheets: [{properties: {title:'Books', gridProperties:{frozenRowCount:1}}}] } : { values: [headers] } }; }, console });
+  let navigatedTo;
+  const window = { LIBRARY_CONFIG: {}, innerHeight: 874, location: { href:'https://example.com/annals/?view=library', replace: value => { navigatedTo = value; } }, navigator: {}, matchMedia: query => ({ matches: query === '(display-mode: standalone)' ? standalone : mobile }), addEventListener: (type, fn) => { handlers['window:' + type] = fn; } };
+  const context = vm.createContext({ URL, Date: class extends Date { static now() { return now(); } }, document: { getElementById: el, createElement: () => ({ textContent: '', setAttribute() {}, addEventListener() {}, append() {} }) }, window, localStorage: shared, sessionStorage: tabStorage, findDuplicateGroups: () => [], normalizeIsbn: require('../assets/js/isbn.js').normalizeIsbn, matchBook: () => ({kind:'exact', books:[]}), createLibraryScanner: () => { const scanner = { stops: 0, start: async (callback, onStatus) => { scanner.decoded = callback; onStatus?.('Starting camera…'); onStatus?.('Keep the entire barcode in view, including blank space at both ends. Hold steady in good light.'); }, hold: duration => { scanner.holdDuration = duration; }, stop: async () => { scanner.stops++; } }; scanners.push(scanner); return scanner; }, setTimeout: (fn, delay) => delay === 1000 ? refreshDelay(fn) : timers.push(fn) - 1, clearTimeout: id => { if (id !== undefined) timers[id] = () => {}; }, fetch: async (url, options) => { requests.push({url, options}); if (url.includes('capabilities(canEdit)') && permissionReady) await permissionReady; return { ok: responseStatus === 200, status: responseStatus, json: async () => url.includes('capabilities(canEdit)') ? { capabilities: { canEdit: editable } } : url.includes('fields=properties') ? { properties: {title: 'My library'}, sheets: [{properties: {title:'Books', gridProperties:{frozenRowCount:1}}}] } : { values: [headers, ...bookRows] } }; }, console });
   if (google) {
     Object.assign(window, { google, gapi, LIBRARY_CONFIG: { clientId: 'client', apiKey: 'key', appId: 'app' } });
     Object.assign(context, { google, gapi });
@@ -21,7 +21,7 @@ async function openWindow(shared, responseStatus = 200, mobile = false, editable
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/js', script), 'utf8'), context);
   }
   await new Promise(resolve => setImmediate(resolve));
-  return { el, handlers, requests, scanners, timers, window, tickUpdateAge, navigatedTo: () => navigatedTo };
+  return { el, handlers, requests, scanners, timers, window, navigatedTo: () => navigatedTo };
 }
 const sheetKey = 'annas-annals-sheet-id', sessionKey = 'annas-annals-google-session';
 test('a new window restores a valid session without reconnecting', async () => {
@@ -55,7 +55,7 @@ test('a first connection and reconnect open the selected Sheet without an indica
     if (!remembered) pickSheet({ action: 'picked', docs: [{ id: 'sheet' }] });
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(view.el('connect').hidden, true, remembered ? 'reconnect' : 'first connection');
-    assert.equal(view.el('status').textContent, 'Updated just now');
+    assert.match(view.el('status').textContent, /^Updated at \d{1,2}:\d{2} [ap]m$/);
     await connection;
   }
 });
@@ -63,7 +63,7 @@ test('restoring a session without a cached catalog opens the Sheet without an in
   const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
   const view = await openWindow(shared, 200, false, true, { refreshDelay() {} });
   assert.equal(view.el('connect').hidden, true);
-  assert.equal(view.el('status').textContent, 'Updated just now');
+  assert.match(view.el('status').textContent, /^Updated at \d{1,2}:\d{2} [ap]m$/);
 });
 test('a fast refresh of a cached catalog keeps its progress indicator visible for one second', async () => {
   const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
@@ -73,13 +73,13 @@ test('a fast refresh of a cached catalog keeps its progress indicator visible fo
   const view = await openWindow(shared, 200, false, true, { tabStorage, refreshDelay: fn => { finishDelay = fn; } });
   const status = view.el('status');
 
-  assert.equal(status.textContent, 'Refreshing Catalog');
+  assert.equal(status.textContent, 'Refreshing');
   assert.equal(status.classList.contains('is-refreshing'), true);
   assert.equal(typeof finishDelay, 'function');
 
   finishDelay();
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(status.textContent, 'Updated just now');
+  assert.match(status.textContent, /^Updated at \d{1,2}:\d{2} [ap]m$/);
   assert.equal(status.classList.contains('is-refreshing'), false);
 });
 test('only a standalone pull from the top refreshes the catalog', async () => {
@@ -145,27 +145,27 @@ test('only a standalone pull from the top refreshes the catalog', async () => {
   assert.deepEqual(opacities(), Array(8).fill(1));
   assert.equal(displacement(), 0);
   assert.equal(app.el('pull-refresh').hidden, false);
-  assert.equal(app.el('status').textContent, 'Refreshing Catalog');
+  assert.equal(app.el('status').textContent, 'Refreshing');
   assert.equal(pull(120), false);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(app.requests.length, initialRequests + 2);
   assert.equal(displacement(), 0);
   assert.equal(indicator.hidden, false);
-  assert.equal(app.el('status').textContent, 'Refreshing Catalog');
+  assert.equal(app.el('status').textContent, 'Refreshing');
   assert.equal(typeof finishHeader, 'function');
 
   finishPullExit();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(indicator.hidden, true);
   assert.equal(indicator.classList.contains('is-armed'), false);
-  assert.equal(app.el('status').textContent, 'Refreshing Catalog');
+  assert.equal(app.el('status').textContent, 'Refreshing');
   assert.equal(app.el('status').classList.contains('is-refreshing'), true);
   assert.equal(pull(120), true);
   assert.equal(app.requests.length, initialRequests + 2);
 
   finishHeader();
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(app.el('status').textContent, 'Updated just now');
+  assert.match(app.el('status').textContent, /^Updated at \d{1,2}:\d{2} [ap]m$/);
   assert.equal(app.el('status').classList.contains('is-refreshing'), false);
 });
 
@@ -196,24 +196,38 @@ test('the pull threshold requests a single haptic pulse per gesture', async () =
   assert.deepEqual(pulses, [12, 12]);
 });
 
-test('catalog update age advances and stays in the header across views', async () => {
-  let now = Date.now();
+test('the header shows the whole library count and the local time of the last update', async () => {
+  let now = new Date(2026, 10, 27, 11, 53).getTime();
   const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: now + 120000 }) });
-  const view = await openWindow(shared, 200, true, true, { now: () => now });
-  const status = view.el('status');
-  assert.equal(status.textContent, 'Updated just now');
+  const bookRows = [['1', '', 'First book'], ['2', '', 'Second book']];
+  const view = await openWindow(shared, 200, true, true, { now: () => now, bookRows });
+  const count = view.el('library-count'), status = view.el('status');
+  assert.equal(count.hidden, false);
+  assert.equal(count.textContent, '2 Books');
+  assert.equal(status.textContent, 'Updated at 11:53 am');
 
   now += 60000;
-  view.tickUpdateAge();
-  assert.equal(status.textContent, 'Updated 1 minute ago');
   view.handlers['mode-library:click']();
+  view.el('search').value = 'First book';
+  view.handlers['search:input']();
+  assert.equal(view.el('books').children.length, 1);
+  assert.equal(count.textContent, '2 Books');
   view.handlers['settings-open:click']();
-  assert.equal(view.el('library-meta').children.includes(status), false);
-  assert.equal(view.el('settings-meta').children.includes(status), false);
+  assert.equal(status.textContent, 'Updated at 11:53 am');
 
-  now += 60000;
-  view.tickUpdateAge();
-  assert.equal(status.textContent, 'Updated 2 minutes ago');
+  view.handlers['disconnect:click']();
+  assert.equal(view.el('library-count').hidden, true);
+  assert.equal(view.el('header-meta').hidden, true);
+  assert.equal(view.el('status').textContent, '');
+  assert.equal(view.el('library-link').textContent, 'No Connected Library');
+});
+
+test('connection feedback appears beside the connect controls', async () => {
+  const view = await openWindow(storage());
+  assert.equal(view.el('status').textContent, '');
+  view.handlers['signin:click']();
+  assert.equal(view.el('status').textContent, '');
+  assert.match(view.el('connect-status').textContent, /^Setup needed:/);
 });
 
 test('desktop reload keeps Add book in place while editor access is verified once', async () => {
@@ -326,23 +340,30 @@ test('update app reports a worker update failure without navigating', async () =
 
 test('update app reloads even without a service worker', async () => {
   const view = await openWindow(storage());
-  await view.handlers['update-app:click']();
+  assert.equal(view.el('connect').hidden, false);
+  await view.handlers['connect-update-app:click']();
   assert.ok(new URL(view.navigatedTo()).searchParams.has('_update'));
+  assert.equal(view.el('connect-update-app-status').textContent, 'Reloading app…');
+  assert.equal(view.requests.length, 0);
 });
 
-test('scan button opens and closes its connected panel', async () => {
+test('the scan button opens and closes the camera in the same control', async () => {
   const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
   const view = await openWindow(shared, 200, true);
   view.el('check-camera').hidden = true;
+  const tips = view.el('check-guidance');
+  assert.match(tips.textContent, /Keep the entire barcode in view/);
   await view.handlers['scan-start:click']();
   assert.equal(view.el('check-camera').hidden, false);
   assert.equal(view.el('scan-start').attributes['aria-expanded'], 'true');
-  assert.equal(view.el('scan-start-label').textContent, 'Close scanner');
-  assert.match(view.el('check-status').textContent, /Keep the entire barcode in view/);
+  assert.equal(view.el('scan-start').textContent, 'Close scanner');
+  assert.equal(view.el('check-status').textContent, '');
+  assert.match(tips.textContent, /Keep the entire barcode in view/);
   await view.handlers['scan-start:click']();
   assert.equal(view.el('check-camera').hidden, true);
   assert.equal(view.el('scan-start').attributes['aria-expanded'], 'false');
-  assert.equal(view.el('scan-start-label').textContent, 'Scan Book');
+  assert.equal(view.el('scan-start').textContent, 'Scan Book');
+  assert.match(tips.textContent, /Keep the entire barcode in view/);
 });
 
 test('typing in Check closes the camera and reveals search results', async () => {
@@ -352,7 +373,7 @@ test('typing in Check closes the camera and reveals search results', async () =>
   view.el('scan-search').value = 'Water';
   view.handlers['scan-search:input']();
   assert.equal(view.el('check-camera').hidden, true);
-  assert.equal(view.el('scan-start-label').textContent, 'Scan Book');
+  assert.equal(view.el('scan-start').textContent, 'Scan Book');
   assert.equal(view.el('scan-books').hidden, false);
   assert.equal(view.scanners[1].stops, 1);
 });
