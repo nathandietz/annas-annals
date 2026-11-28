@@ -89,6 +89,8 @@
   try { const savedMainView = localStorage.getItem('annas-annals-main-view'); if (['scan', 'library', 'settings'].includes(savedMainView)) mainView = savedMainView; } catch {}
   let pendingHeaderUpdate;
   const headerStatus = $('status');
+  const updateAppButton = $('update-app');
+  const appUpdateFeedback = $('app-update-feedback');
   const catalogUpdateTime = new Intl.DateTimeFormat('en-US', {
     hour: 'numeric', minute: '2-digit', hour12: true
   });
@@ -163,7 +165,8 @@
     libraryConnected = connected;
     $('connect').hidden = connected;
     updateConnect();
-    for (const id of ['header-meta', 'view-switcher', 'catalog-content']) {
+    $('header-meta').hidden = !connected && !appUpdateFeedback.textContent;
+    for (const id of ['view-switcher', 'catalog-content']) {
       $(id).hidden = !connected;
     }
     for (const id of ['duplicates-toggle', 'export-csv', 'expire-session']) {
@@ -178,6 +181,7 @@
     updateScanButton();
     if (!connected) {
       $('import-open').disabled = true;
+      $('import-open').classList.remove('awaiting-edit-access');
       $('upgrade-library').disabled = true;
       updateEditingToolVisibility();
       sort.value = '';
@@ -519,21 +523,20 @@
     if ($('editor').open) updateBookCover();
     render();
   });
-  $('update-app').addEventListener('click', async () => {
-    const button = $('update-app'), feedback = $('update-app-status');
-    button.disabled = true;
-    feedback.hidden = false;
-    feedback.textContent = 'Checking for updates…';
+  updateAppButton.addEventListener('click', async () => {
+    updateAppButton.disabled = true;
+    $('header-meta').hidden = false;
+    appUpdateFeedback.textContent = 'Checking for updates…';
     try {
       const registration = await window.navigator?.serviceWorker?.getRegistration();
       if (registration) await registration.update();
       const url = new URL(window.location.href);
       url.searchParams.set('_update', String(Date.now()));
-      feedback.textContent = 'Reloading app…';
+      appUpdateFeedback.textContent = 'Reloading app…';
       window.location.replace(url.href);
     } catch {
-      feedback.textContent = 'Could not check for updates. Check your connection and try again.';
-      button.disabled = false;
+      appUpdateFeedback.textContent = 'Could not check for updates. Check your connection and try again.';
+      updateAppButton.disabled = false;
     }
   });
   function updateEditingToolVisibility() {
@@ -542,6 +545,7 @@
   }
   async function checkPermission() {
     const currentSheet = sheetId, currentToken = token;
+    const importButton = $('import-open');
     let cachedAccess;
     try {
       const saved = JSON.parse(sessionStorage.getItem(editAccessKey) || 'null');
@@ -555,7 +559,8 @@
       add.classList.toggle('awaiting-edit-access', cachedAccess === undefined);
     }
     updateCheckActions();
-    $('import-open').disabled = true;
+    importButton.disabled = true;
+    importButton.classList.toggle('awaiting-edit-access', cachedAccess !== false);
     $('upgrade-library').disabled = true;
     showEditingTools = cachedAccess !== false;
     updateEditingToolVisibility();
@@ -577,7 +582,8 @@
       if (sheetId === currentSheet && token === currentToken) status('Could not check editing access. You can still browse and scan.');
     } finally {
       if (sheetId === currentSheet && token === currentToken) {
-        $('import-open').disabled = !canEdit;
+        importButton.classList.remove('awaiting-edit-access');
+        importButton.disabled = !canEdit;
         $('upgrade-library').disabled = !canEdit;
         for (const add of addBookButtons) {
           add.classList.remove('awaiting-edit-access');
@@ -590,6 +596,10 @@
   function setMainView(view) {
     const previousView = mainView;
     mainView = view;
+    if (previousView === 'settings' && view !== 'settings' && !updateAppButton.disabled && appUpdateFeedback.textContent) {
+      appUpdateFeedback.textContent = '';
+      $('header-meta').hidden = !libraryConnected;
+    }
     try { localStorage.setItem('annas-annals-main-view', view); } catch {}
     $('scan-view').hidden = view !== 'scan';
     $('library').hidden = view !== 'library';
@@ -1165,6 +1175,7 @@
   });
   let importRows = [], importReading = 0;
   $('import-open').addEventListener('click', () => {
+    if (!libraryConnected || !canEdit) return;
     importRows = []; $('import-file').value = ''; $('import-status').textContent = 'Select a CSV file.'; $('import-confirm').disabled = true; $('import-dialog').showModal();
   });
   $('import-cancel').addEventListener('click', () => { if (!busy) { importReading++; $('import-dialog').close(); } });

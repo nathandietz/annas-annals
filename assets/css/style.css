@@ -86,6 +86,10 @@ h2 {
   white-space: nowrap;
 }
 
+#app-update-feedback:not(:empty) + #status {
+  display: none;
+}
+
 #status.is-refreshing::before {
   display: inline-block;
   inline-size: 1em;
@@ -1761,6 +1765,10 @@ button.scan-book {
 
 .catalog-add.awaiting-edit-access {
   visibility: hidden;
+}
+
+#import-open.awaiting-edit-access:disabled {
+  opacity: 1;
 }
 
 .add-symbol {

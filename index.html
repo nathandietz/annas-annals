@@ -18,10 +18,7 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_upward,barcode_scanner,book_2,check,close,edit,expand_less,expand_more,search,settings,unfold_more&display=block"
       rel="stylesheet"
     />
-    <link
-      rel="stylesheet"
-      href="assets/css/style.css?v=settings-action-rows-1"
-    />
+    <link rel="stylesheet" href="assets/css/style.css?v=app-update-header-1" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
     <script
@@ -35,7 +32,7 @@
     <script src="assets/js/csv.js?v=017c5b1b32ae" defer></script>
     <script src="assets/js/config.js?v=017c5b1b32ae" defer></script>
     <script src="assets/js/book-lookup.js?v=1" defer></script>
-    <script src="assets/js/app.js?v=sheet-connection-5" defer></script>
+    <script src="assets/js/app.js?v=app-update-header-1" defer></script>
   </head>
   <body>
     <template id="catalog-search-template">
@@ -293,6 +290,7 @@
         </div>
         <p id="header-meta" class="header-meta" hidden>
           <span id="library-count" hidden></span>
+          <span id="app-update-feedback" role="status"></span>
           <span id="status" role="status" aria-live="polite"></span>
         </p>
         <nav id="mode-toggle" class="mode-toggle" aria-label="Main view">
@@ -484,7 +482,6 @@
           <button id="update-app" class="secondary" type="button">
             Update app
           </button>
-          <p id="update-app-status" class="hint" role="status"></p>
         </section>
         <section
           id="settings-library-connection"
@@ -502,7 +499,7 @@
           </div>
           <div class="settings-action-row">
             <button type="button" id="disconnect" class="secondary" disabled>
-              Connection Library
+              Disconnect Library
             </button>
             <button
               type="button"

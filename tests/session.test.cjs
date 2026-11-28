@@ -324,6 +324,11 @@ test('desktop reload keeps editor controls in place while access is verified onc
     assert.equal(view.el(id).hidden, false, id);
     assert.equal(view.el(id).disabled, true, id);
   }
+  assert.equal(view.el('import-open').classList.contains('awaiting-edit-access'), true);
+  let importOpened = false;
+  view.el('import-dialog').showModal = () => { importOpened = true; };
+  view.handlers['import-open:click']();
+  assert.equal(importOpened, false);
   assert.equal(view.requests.filter(request => request.url.includes('capabilities(canEdit)')).length, 1);
 
   finishPermission();
@@ -334,6 +339,9 @@ test('desktop reload keeps editor controls in place while access is verified onc
     assert.equal(view.el(id).hidden, false, id);
     assert.equal(view.el(id).disabled, false, id);
   }
+  assert.equal(view.el('import-open').classList.contains('awaiting-edit-access'), false);
+  view.handlers['import-open:click']();
+  assert.equal(importOpened, true);
 });
 
 test('an expired session is cleared and requires reconnection', async () => {
@@ -618,10 +626,19 @@ test('the selected main view is restored when the page is reopened', async () =>
 });
 
 test('update app checks the worker and reloads the same URL without a stale document', async () => {
-  const view = await openWindow(storage()); let updated = false;
-  view.window.navigator.serviceWorker = { getRegistration: async () => ({update: async () => { updated = true; }}) };
-  await view.handlers['update-app:click']();
-  assert.equal(updated, true);
+  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
+  const view = await openWindow(shared);
+  view.handlers['settings-open:click']();
+  let finishUpdate;
+  const update = new Promise(resolve => { finishUpdate = resolve; });
+  view.window.navigator.serviceWorker = { getRegistration: async () => ({ update: () => update }) };
+  const updating = view.handlers['update-app:click']();
+  assert.equal(view.el('app-update-feedback').textContent, 'Checking for updates…');
+  assert.equal(view.el('library-count').hidden, false);
+  assert.equal(view.navigatedTo(), undefined);
+  finishUpdate();
+  await updating;
+  assert.equal(view.el('app-update-feedback').textContent, 'Reloading app…');
   const url = new URL(view.navigatedTo());
   assert.equal(url.pathname, '/annals/'); assert.equal(url.searchParams.get('view'), 'library');
   assert.ok(url.searchParams.has('_update'));
@@ -629,11 +646,16 @@ test('update app checks the worker and reloads the same URL without a stale docu
 
 test('update app reports a worker update failure without navigating', async () => {
   const view = await openWindow(storage());
+  view.handlers['settings-open:click']();
   view.window.navigator.serviceWorker = { getRegistration: async () => ({update: async () => { throw new Error('offline'); }}) };
   await view.handlers['update-app:click']();
   assert.equal(view.navigatedTo(), undefined);
-  assert.match(view.el('update-app-status').textContent, /could not/i);
+  assert.match(view.el('app-update-feedback').textContent, /could not/i);
+  assert.equal(view.el('header-meta').hidden, false);
   assert.equal(view.el('update-app').disabled, false);
+  view.handlers['mode-library:click']();
+  assert.equal(view.el('app-update-feedback').textContent, '');
+  assert.equal(view.el('header-meta').hidden, true);
 });
 
 test('update app reloads even without a service worker', async () => {
@@ -642,7 +664,8 @@ test('update app reloads even without a service worker', async () => {
   view.handlers['settings-open:click']();
   await view.handlers['update-app:click']();
   assert.ok(new URL(view.navigatedTo()).searchParams.has('_update'));
-  assert.equal(view.el('update-app-status').textContent, 'Reloading app…');
+  assert.equal(view.el('app-update-feedback').textContent, 'Reloading app…');
+  assert.equal(view.el('header-meta').hidden, false);
   assert.equal(view.requests.length, 0);
 });
 
