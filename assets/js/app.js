@@ -62,6 +62,9 @@
   const editAccessKey = 'annas-annals-edit-access';
   let token = '', sheetId = '', books = [], pickerReady = false, busy = false, creatingLibrary = false, libraryWidth = 16;
   let rememberedSheet = '', editingBook = null, viewMode = 'card', duplicatesMode = false, sortField = '', sortDirection = 1;
+  let connectionAttempt = 0;
+  let sessionExpiresAt, sessionExpiryTimer;
+  const expiredSessionMessage = 'Google authorization expired. Reconnect to your library.';
   const fallbackCoverStorageKey = 'annas-annals-show-fallback-covers';
   let showFallbackCovers = true;
   try { showFallbackCovers = localStorage.getItem(fallbackCoverStorageKey) !== 'false'; } catch {}
@@ -73,7 +76,8 @@
   const scanGuidance = 'Keep the entire barcode in view, including blank space at both ends. Hold steady in good light.';
   $('check-guidance').textContent = scanGuidance;
   const compactLayout = window.matchMedia?.('(max-width: 700px)');
-  let mainView = compactLayout?.matches ? 'scan' : 'library', canEdit = false, checkSequence = 0;
+  let mainView = compactLayout?.matches ? 'scan' : 'library', libraryConnected = false, canEdit = false, checkSequence = 0;
+  let showEditingTools = false;
   try { const savedMainView = localStorage.getItem('annas-annals-main-view'); if (['scan', 'library', 'settings'].includes(savedMainView)) mainView = savedMainView; } catch {}
   let pendingHeaderUpdate;
   const headerStatus = $('status');
@@ -81,16 +85,17 @@
     hour: 'numeric', minute: '2-digit', hour12: true
   });
   const status = (message, refreshing = false) => {
+    if (message && !token) return;
     pendingHeaderUpdate = undefined;
     headerStatus.classList.toggle('is-refreshing', refreshing);
     headerStatus.textContent = message;
   };
   function connectionStatus(message) {
-    if ($('connect').hidden) {
+    if (libraryConnected) {
       status(message);
       return;
     }
-    const feedback = $('connect-status');
+    const feedback = $({ library: 'connect-status', scan: 'check-status', settings: 'settings-connect-status' }[mainView]);
     feedback.textContent = message;
     feedback.hidden = false;
   }
@@ -105,8 +110,10 @@
   const formStatus = message => { $('form-status').textContent = message; };
   function message(error) { return error?.message || 'Something went wrong. Please try again.'; }
   function updateConnect() {
-    $('signin').textContent = rememberedSheet ? 'Reconnect to Google Sheet' : 'Connect Google Sheet';
-    $('choose-sheet').hidden = !rememberedSheet;
+    const button = $('signin');
+    button.textContent = rememberedSheet ? 'Reconnect to Google Sheet' : 'Connect Google Sheet';
+    $('create-library-link').hidden = Boolean(rememberedSheet);
+    $('choose-sheet').hidden = !libraryConnected && !rememberedSheet;
   }
   function rememberSheet(id) {
     rememberedSheet = id;
@@ -121,56 +128,142 @@
       ? 'Open “' + name + '” in Google Sheets (opens in a new tab)'
       : 'Open the library in Google Sheets (opens in a new tab)';
   }
+  function setLibraryConnected(connected) {
+    libraryConnected = connected;
+    $('connect').hidden = connected;
+    updateConnect();
+    for (const id of ['header-meta', 'view-switcher', 'catalog-content']) {
+      $(id).hidden = !connected;
+    }
+    for (const id of ['duplicates-toggle', 'export-csv', 'disconnect']) {
+      $(id).disabled = !connected;
+    }
+    for (const input of searchInputs) input.disabled = !connected;
+    const sort = $('library-sort');
+    sort.disabled = !connected;
+    for (const id of ['check-isbn-open', 'check-isbn', 'check-photo-open', 'check-photo']) {
+      $(id).disabled = !connected;
+    }
+    updateScanButton();
+    if (!connected) {
+      $('import-open').disabled = true;
+      $('upgrade-library').disabled = true;
+      updateEditingToolVisibility();
+      sort.value = '';
+      for (const add of addBookButtons) {
+        add.classList.remove('awaiting-edit-access');
+        add.hidden = false;
+        add.disabled = true;
+      }
+    }
+  }
+  function showDisconnectedLibrary() {
+    setLibraryConnected(false);
+    setMainView('library');
+  }
   function showLibrary() {
-    $('mode-toggle').hidden = false;
+    setLibraryConnected(true);
     checkPermission();
     const link = $('library-link');
     link.href = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(sheetId) + '/edit';
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
-    $('header-meta').hidden = false;
     $('connect-status').hidden = true;
-    $('connect').hidden = true;
-    $('disconnect').hidden = false;
-    $('new-library-connected').hidden = false;
-    $('transfer-actions').hidden = false;
-    $('view-switcher').hidden = false;
-    for (const input of searchInputs) input.disabled = false;
+    $('settings-connect-status').hidden = true;
+    $('check-status').textContent = '';
     setMainView(mainView);
   }
   updateConnect();
-  function clearSession() {
+  function clearSession(removeSavedSession = true) {
+    connectionAttempt++;
     canEdit = false;
-    checkScanner.stop?.().catch(() => {});
-    try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(cacheKey); sessionStorage.removeItem(editAccessKey); } catch {}
+    clearTimeout(sessionExpiryTimer);
+    sessionExpiresAt = undefined;
+    try { if (removeSavedSession) localStorage.removeItem(sessionKey); } catch {}
+    try { sessionStorage.removeItem(cacheKey); sessionStorage.removeItem(editAccessKey); } catch {}
     token = '';
     sheetId = '';
     books = [];
     duplicatesMode = false;
     setSearchText('');
     $('check-isbn').value = '';
-    resetOwnershipCheck();
-    for (const id of ['mode-toggle', 'scan-view', 'all-books', 'view-switcher', 'library', 'disconnect', 'new-library-connected', 'transfer-actions', 'settings-dialog']) {
-      $(id).hidden = true;
-    }
-    for (const add of addBookButtons) add.hidden = true;
-    $('header-meta').hidden = true;
+    $('all-books').hidden = true;
     $('library-count').hidden = true;
     status('');
     $('connect-status').hidden = true;
-    $('library-link').textContent = 'No Connected Library';
-    for (const attribute of ['href', 'target', 'rel', 'title']) $('library-link').removeAttribute(attribute);
+    const link = $('library-link');
+    link.textContent = 'No Connected Library';
+    link.setAttribute('href', '#connect');
+    for (const attribute of ['target', 'rel', 'title']) link.removeAttribute(attribute);
     $('books').replaceChildren();
-    for (const input of searchInputs) input.disabled = true;
-    $('connect').hidden = false;
+    importReading++;
+    for (const id of ['editor', 'import-dialog', 'upgrade-dialog', 'new-library-dialog']) {
+      const dialog = $(id);
+      if (dialog.open) dialog.close();
+    }
+    showDisconnectedLibrary();
+    window.scrollTo?.(0, 0);
   }
-  async function api(path, options = {}) {
-    const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(sheetId) + path, {
-      ...options, headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
+  function readSavedSession() {
+    try { return JSON.parse(localStorage.getItem(sessionKey) || 'null'); } catch {}
+  }
+  function expireSession(accessToken) {
+    if (!token || token !== accessToken) return;
+    clearSession(readSavedSession()?.token === accessToken);
+    connectionStatus(expiredSessionMessage);
+  }
+  function checkSessionExpiry() {
+    if (token && Date.now() >= sessionExpiresAt) expireSession(token);
+  }
+  function activateSession(session) {
+    clearTimeout(sessionExpiryTimer);
+    token = session.token;
+    sessionExpiresAt = session.expiresAt;
+    if (Number.isFinite(sessionExpiresAt)) {
+      sessionExpiryTimer = setTimeout(checkSessionExpiry, Math.max(0, sessionExpiresAt - Date.now()));
+    }
+  }
+  window.addEventListener('pageshow', checkSessionExpiry);
+  async function api(path, options = {}, { id = sheetId, accessToken = token } = {}) {
+    const usesActiveSession = accessToken === token;
+    if (usesActiveSession) checkSessionExpiry();
+    if (!accessToken || (usesActiveSession && accessToken !== token)) throw new Error(expiredSessionMessage);
+    const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(id) + path, {
+      ...options, headers: { Authorization: 'Bearer ' + accessToken, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
     });
+    if (response.status === 401) expireSession(accessToken);
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) { const error = new Error(response.status === 401 ? 'Google authorization expired. Disconnect and connect again.' : (data.error?.message || 'Google Sheets request failed.')); error.status = response.status; throw error; }
+    if (!response.ok) { const error = new Error(response.status === 401 ? expiredSessionMessage : (data.error?.message || 'Google Sheets request failed.')); error.status = response.status; throw error; }
+    if (usesActiveSession && accessToken !== token) throw new Error(expiredSessionMessage);
     return data;
+  }
+  async function loadCatalog(target) {
+    const [data, spreadsheet] = await Promise.all([
+      api('/values/' + encodeURIComponent("'Books'!A:ZZ"), undefined, target),
+      api('?fields=properties(title),sheets(properties(title,gridProperties(frozenRowCount)))', undefined, target)
+    ]);
+    const rows = data.values || [];
+    const catalogHeaders = readHeaders(rows[0] || []);
+    return {
+      headers: catalogHeaders,
+      headerFrozen: (spreadsheet.sheets?.find(item => item.properties?.title === 'Books')?.properties?.gridProperties?.frozenRowCount || 0) >= 1,
+      books: rows.slice(1).map(row => record(row, catalogHeaders)).filter(book => book.title).sort((a, b) => (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0)),
+      title: spreadsheet.properties?.title
+    };
+  }
+  function applyCatalog(catalog, updatedAt) {
+    sheetHeaders = catalog.headers;
+    libraryWidth = sheetHeaders.length;
+    headerFrozen = catalog.headerFrozen;
+    books = catalog.books;
+    setLibraryLinkLabel(catalog.title);
+    try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title: catalog.title, books, updatedAt, sheetHeaders, headerFrozen })); } catch {}
+    updateEditingToolVisibility();
+    updateLibraryCount();
+    render();
+  }
+  function showCatalogUpdated(updatedAt) {
+    status('Updated at ' + catalogUpdateTime.format(updatedAt).toLowerCase());
   }
   async function refresh({ minimumIndicatorTime = 1000, finishIndicatorInBackground = false } = {}) {
     status('Refreshing', true);
@@ -178,35 +271,20 @@
       ? new Promise(resolve => setTimeout(resolve, minimumIndicatorTime))
       : undefined;
     const refreshSheet = sheetId, refreshToken = token;
-    const [data, spreadsheet] = await Promise.all([
-      api('/values/' + encodeURIComponent("'Books'!A:ZZ")),
-      api('?fields=properties(title),sheets(properties(title,gridProperties(frozenRowCount)))')
-    ]).finally(() => finishIndicatorInBackground ? undefined : minimumRefreshTime);
+    const catalog = await loadCatalog().finally(() =>
+      finishIndicatorInBackground || token !== refreshToken ? undefined : minimumRefreshTime);
     if (sheetId !== refreshSheet || token !== refreshToken) return;
-    const rows = data.values || [];
-    const foundHeaders = rows[0] || [];
-    sheetHeaders = readHeaders(foundHeaders); libraryWidth = sheetHeaders.length;
-    headerFrozen = (spreadsheet.sheets?.find(item => item.properties?.title === 'Books')?.properties?.gridProperties?.frozenRowCount || 0) >= 1;
-    $('upgrade-library').hidden = !canEdit || !needsUpdate();
-    books = rows.slice(1).map(row => record(row, sheetHeaders)).filter(book => book.title).sort((a, b) => (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0));
-    const title = spreadsheet.properties?.title;
-    setLibraryLinkLabel(title);
     const updatedAt = Date.now();
-    try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title, books, updatedAt, sheetHeaders, headerFrozen })); } catch {}
-    updateLibraryCount();
-    render();
-    function showCatalogUpdated() {
-      status('Updated at ' + catalogUpdateTime.format(updatedAt).toLowerCase());
-    }
+    applyCatalog(catalog, updatedAt);
     if (finishIndicatorInBackground && minimumRefreshTime) {
       pendingHeaderUpdate = minimumRefreshTime;
       minimumRefreshTime.then(() => {
         if (pendingHeaderUpdate !== minimumRefreshTime) return;
         pendingHeaderUpdate = undefined;
-        showCatalogUpdated();
+        showCatalogUpdated(updatedAt);
       });
     } else {
-      showCatalogUpdated();
+      showCatalogUpdated(updatedAt);
     }
   }
   if (window.navigator?.standalone || window.matchMedia?.('(display-mode: standalone)')?.matches) {
@@ -400,7 +478,8 @@
     if ($('editor').open) updateBookCover();
     render();
   });
-  async function updateApp(button, feedback) {
+  $('update-app').addEventListener('click', async () => {
+    const button = $('update-app'), feedback = $('update-app-status');
     button.disabled = true;
     feedback.hidden = false;
     feedback.textContent = 'Checking for updates…';
@@ -415,11 +494,10 @@
       feedback.textContent = 'Could not check for updates. Check your connection and try again.';
       button.disabled = false;
     }
-  }
-  for (const id of ['update-app', 'connect-update-app']) {
-    const button = $(id);
-    const feedback = $(id + '-status');
-    button.addEventListener('click', () => updateApp(button, feedback));
+  });
+  function updateEditingToolVisibility() {
+    $('import-open').hidden = libraryConnected && !showEditingTools;
+    $('upgrade-library').hidden = libraryConnected && (!showEditingTools || !needsUpdate());
   }
   async function checkPermission() {
     const currentSheet = sheetId, currentToken = token;
@@ -428,7 +506,7 @@
       const saved = JSON.parse(sessionStorage.getItem(editAccessKey) || 'null');
       if (saved?.sheetId === currentSheet && typeof saved.canEdit === 'boolean') cachedAccess = saved.canEdit;
     } catch {}
-    // Cache the toolbar layout only. Editing still requires a fresh Drive response.
+    // Keep the saved layout while Drive verifies editing access for this session.
     canEdit = false;
     for (const add of addBookButtons) {
       add.disabled = true;
@@ -436,25 +514,30 @@
       add.classList.toggle('awaiting-edit-access', cachedAccess === undefined);
     }
     updateCheckActions();
-    $('import-open').hidden = true;
-    $('upgrade-library').hidden = true;
+    $('import-open').disabled = true;
+    $('upgrade-library').disabled = true;
+    showEditingTools = cachedAccess !== false;
+    updateEditingToolVisibility();
     try {
       const response = await fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(currentSheet) + '?fields=capabilities(canEdit)', { headers: { Authorization: 'Bearer ' + currentToken } });
+      if (response.status === 401) expireSession(currentToken);
       const data = await response.json();
       if (sheetId !== currentSheet || token !== currentToken) return;
       const access = data.capabilities?.canEdit;
       canEdit = response.ok && access === true;
       if (response.ok && typeof access === 'boolean') {
+        showEditingTools = access;
         try { sessionStorage.setItem(editAccessKey, JSON.stringify({ sheetId: currentSheet, canEdit })); } catch {}
       }
       updateCheckActions();
-      $('import-open').hidden = !canEdit;
-      $('upgrade-library').hidden = !canEdit || !needsUpdate();
+      updateEditingToolVisibility();
       render();
     } catch {
       if (sheetId === currentSheet && token === currentToken) status('Could not check editing access. You can still browse and scan.');
     } finally {
       if (sheetId === currentSheet && token === currentToken) {
+        $('import-open').disabled = !canEdit;
+        $('upgrade-library').disabled = !canEdit;
         for (const add of addBookButtons) {
           add.classList.remove('awaiting-edit-access');
           add.hidden = !canEdit;
@@ -475,7 +558,7 @@
       resetOwnershipCheck();
       checkScanner.stop?.().catch(() => {});
     }
-    if (view === 'library' && lastLibrarySearch !== $('search').value) render();
+    if (libraryConnected && view === 'library' && lastLibrarySearch !== $('search').value) render();
     if (view !== previousView) window.scrollTo?.(0, 0);
   }
   $('mode-scan').addEventListener('click', () => setMainView('scan'));
@@ -617,6 +700,7 @@
   }
 
   async function checkIsbn(value) {
+    if (!libraryConnected) return;
     const sequence = ++checkSequence;
     const isbn = normalizeIsbn(value);
     const result = $('check-result');
@@ -692,14 +776,19 @@
     if (add) add.hidden = !canEdit;
     again.className = add && canEdit ? 'quiet-button' : 'check-primary';
   }
+  function updateScanButton() {
+    const button = $('scan-start');
+    button.classList.toggle('connect-button', !libraryConnected);
+    button.textContent = !libraryConnected ? 'Connect to a Library to Scan a Book' : cameraOpen ? 'Close scanner' : 'Scan Book';
+    button.setAttribute('aria-expanded', String(cameraOpen));
+  }
   function setCameraOpen(open, standby = false) {
     cameraOpen = open;
     $('check-camera').hidden = !open && !standby;
     $('check-camera').classList.toggle('camera-standby', standby);
     $('check-camera').inert = standby;
     $('check-status').textContent = '';
-    $('scan-start').textContent = open ? 'Close scanner' : 'Scan Book';
-    $('scan-start').setAttribute('aria-expanded', String(open));
+    updateScanButton();
   }
   async function closeCheckScanner() {
     const sequence = ++checkSequence;
@@ -709,6 +798,7 @@
     return sequence;
   }
   async function startCheckScanner() {
+    if (!libraryConnected) return;
     const scanId = ++checkSequence;
     clearTimeout(scanSearchTimer);
     showIsbnForm(false);
@@ -734,9 +824,13 @@
       if (scanId === checkSequence && !$('check-camera').hidden) { $('check-preview').classList.remove('loading'); $('check-status').textContent = message(error); }
     }
   }
-  $('scan-start').addEventListener('click', () => cameraOpen ? closeCheckScanner() : startCheckScanner());
+  $('scan-start').addEventListener('click', () => {
+    if (!libraryConnected) return connect();
+    return cameraOpen ? closeCheckScanner() : startCheckScanner();
+  });
   document.addEventListener?.('visibilitychange', () => {
-    if (!document.hidden || $('check-camera').hidden) return;
+    if (!document.hidden) { checkSessionExpiry(); return; }
+    if ($('check-camera').hidden) return;
     if (cameraOpen) checkSequence++;
     setCameraOpen(false);
     checkScanner.stop().catch(() => {});
@@ -788,26 +882,62 @@
     } catch (error) { status('Could not confirm ID assignment: ' + message(error) + ' Refresh before trying again.'); }
     finally { busy = false; button.disabled = false; }
   }
-  function openPicker() {
+  function useGoogleSession(session) {
+    activateSession(session);
+    try { sessionStorage.removeItem(cacheKey); sessionStorage.removeItem(editAccessKey); } catch {}
+    try { localStorage.setItem(sessionKey, JSON.stringify(session)); } catch {}
+  }
+  function openPicker(session, attempt) {
+    if (attempt !== connectionAttempt) return;
     const mine = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS);
     const shared = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS).setOwnedByMe(false);
-    new google.picker.PickerBuilder().addView(mine).addView(shared).setOAuthToken(token).setDeveloperKey(config.apiKey).setAppId(config.appId)
+    new google.picker.PickerBuilder().addView(mine).addView(shared).setOAuthToken(session.token).setDeveloperKey(config.apiKey).setAppId(config.appId)
       .setCallback(async result => {
-        if (result.action !== google.picker.Action.PICKED) return;
-        sheetId = result.docs[0].id;
-        try { await refresh({ minimumIndicatorTime: 0 }); rememberSheet(sheetId); showLibrary(); }
-        catch (error) { sheetId = ''; connectionStatus(message(error)); }
+        if (attempt !== connectionAttempt || result.action !== google.picker.Action.PICKED) return;
+        if (busy) { connectionStatus('Finish the current library action before switching libraries.'); return; }
+        const id = result.docs?.[0]?.id;
+        if (!id) return;
+        busy = true;
+        try {
+          const catalog = await loadCatalog({ id, accessToken: session.token });
+          if (attempt !== connectionAttempt) return;
+          if (libraryConnected && id !== sheetId) {
+            duplicatesMode = false;
+            sortField = '';
+            sortDirection = 1;
+            $('library-sort').value = '';
+            setSearchText('');
+            $('check-isbn').value = '';
+            resetOwnershipCheck();
+            checkScanner.stop?.().catch(() => {});
+          }
+          canEdit = false;
+          useGoogleSession(session);
+          sheetId = id;
+          rememberSheet(id);
+          const updatedAt = Date.now();
+          applyCatalog(catalog, updatedAt);
+          showLibrary();
+          showCatalogUpdated(updatedAt);
+        } catch (error) {
+          if (attempt === connectionAttempt) connectionStatus('Could not open the selected Sheet: ' + message(error));
+        } finally {
+          busy = false;
+        }
       }).build().setVisible(true);
   }
   async function createLibrary(name) {
     if (creatingLibrary) return;
     creatingLibrary = true;
     try {
+    const accessToken = token;
+    checkSessionExpiry();
+    if (token !== accessToken) return;
     connectionStatus('Creating your library…');
     let response;
     try { response = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
       method: 'POST',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         properties: { title: name },
         sheets: [{ properties: { title: 'Books', gridProperties: { frozenRowCount: 1 } },
@@ -815,13 +945,19 @@
       })
     });
     } catch { throw new Error('Could not confirm creation. Check Google Drive before trying again.'); }
+    if (response.status === 401) expireSession(accessToken);
     const data = await response.json().catch(() => ({}));
+    if (token !== accessToken) return;
     if (!response.ok || !data.spreadsheetId) throw new Error(data.error?.message || 'The creation result could not be confirmed. Check Google Drive before trying again.');
     const previousSheet = sheetId;
     sheetId = data.spreadsheetId;
     rememberSheet(sheetId);
-    try { await refresh({ minimumIndicatorTime: 0 }); showLibrary(); status('New library created.'); }
+    try {
+      await refresh({ minimumIndicatorTime: 0 });
+      if (token === accessToken) { showLibrary(); status('New library created.'); }
+    }
     catch (error) {
+      if (token !== accessToken) return;
       sheetId = previousSheet;
       if (previousSheet) rememberSheet(previousSheet);
       throw new Error('The new spreadsheet was created, but could not be opened. Find it in Google Drive and reconnect. ' + message(error));
@@ -829,43 +965,56 @@
     } finally { creatingLibrary = false; }
   }
   function connect(mode = 'connect', libraryName = '') {
+    if (busy) return;
+    const attempt = ++connectionAttempt;
     $('connect-status').hidden = true;
+    $('settings-connect-status').hidden = true;
+    if (!libraryConnected) $('check-status').textContent = '';
     if (!config.clientId || !config.apiKey || !config.appId) { connectionStatus('Setup needed: add the Google Cloud identifiers to assets/js/config.js. See the setup guide.'); return; }
     if (!window.google?.accounts?.oauth2 || !window.gapi) { connectionStatus('Google sign-in is still loading. Please try again.'); return; }
     const client = google.accounts.oauth2.initTokenClient({ client_id: config.clientId, scope, callback: async response => {
+      if (attempt !== connectionAttempt) return;
       if (response.error) { connectionStatus('Google authorization was not completed: ' + response.error); return; }
-      token = response.access_token;
-      try { sessionStorage.removeItem(cacheKey); sessionStorage.removeItem(editAccessKey); } catch {}
-      try { localStorage.setItem(sessionKey, JSON.stringify({ token, expiresAt: Date.now() + Number(response.expires_in) * 1000 })); } catch {}
+      const session = { token: response.access_token, expiresAt: Date.now() + Number(response.expires_in) * 1000 };
       if (mode === 'create') {
+        useGoogleSession(session);
         try { await createLibrary(libraryName); } catch (error) { connectionStatus(message(error)); }
         return;
       }
       if (rememberedSheet && mode === 'connect') {
+        useGoogleSession(session);
         sheetId = rememberedSheet;
-        try { await refresh({ minimumIndicatorTime: 0 }); showLibrary(); }
-        catch (error) { sheetId = ''; connectionStatus('Could not open the remembered Sheet: ' + message(error) + ' You can choose a different Sheet.'); }
+        try { await refresh({ minimumIndicatorTime: 0 }); if (attempt === connectionAttempt) showLibrary(); }
+        catch (error) {
+          if (attempt !== connectionAttempt) return;
+          sheetId = '';
+          connectionStatus('Could not open the remembered Sheet: ' + message(error) + ' You can choose a different Sheet.');
+        }
         return;
       }
-      if (pickerReady) openPicker(); else gapi.load('picker', { callback: () => { pickerReady = true; openPicker(); }, onerror: () => connectionStatus('Google Picker could not load. Please try again.'), timeout: 10000, ontimeout: () => connectionStatus('Google Picker took too long to load. Please try again.') });
+      if (pickerReady) openPicker(session, attempt); else gapi.load('picker', { callback: () => { pickerReady = true; openPicker(session, attempt); }, onerror: () => connectionStatus('Google Picker could not load. Please try again.'), timeout: 10000, ontimeout: () => connectionStatus('Google Picker took too long to load. Please try again.') });
     }});
     client.requestAccessToken();
   }
   async function restoreSession() {
-    if (!rememberedSheet) { $('connect').hidden = false; return; }
-    let session;
-    try { session = JSON.parse(localStorage.getItem(sessionKey) || 'null'); } catch {}
-    if (!session?.token || !Number.isFinite(session.expiresAt) || session.expiresAt <= Date.now() + 30000) {
-      try { localStorage.removeItem(sessionKey); } catch {}
-      $('connect').hidden = false;
+    if (!rememberedSheet) { showDisconnectedLibrary(); return; }
+    const session = readSavedSession();
+    if (session?.token && session.expiresAt <= Date.now()) {
+      clearSession();
+      connectionStatus(expiredSessionMessage);
       return;
     }
-    token = session.token; sheetId = rememberedSheet;
+    if (!session?.token || !Number.isFinite(session.expiresAt) || session.expiresAt <= Date.now() + 30000) {
+      try { localStorage.removeItem(sessionKey); } catch {}
+      showDisconnectedLibrary();
+      return;
+    }
+    activateSession(session); sheetId = rememberedSheet;
     let cached = false;
     try {
       const snapshot = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
       if (snapshot?.sheetId === sheetId && Array.isArray(snapshot.books) && snapshot.books.every(book => headers.every(key => typeof book[key] === 'string')) && Number.isFinite(snapshot.updatedAt) && Array.isArray(snapshot.sheetHeaders)) {
-        sheetHeaders = readHeaders(snapshot.sheetHeaders); headerFrozen = snapshot.headerFrozen === true; libraryWidth = sheetHeaders.length; $('upgrade-library').hidden = !canEdit || !needsUpdate();
+        sheetHeaders = readHeaders(snapshot.sheetHeaders); headerFrozen = snapshot.headerFrozen === true; libraryWidth = sheetHeaders.length;
         books = snapshot.books;
         updateLibraryCount();
         setLibraryLinkLabel(snapshot.title);
@@ -877,9 +1026,10 @@
         await refresh();
       } else {
         await refresh({ minimumIndicatorTime: 0 });
-        if (sheetId) showLibrary();
+        if (token === session.token && sheetId) showLibrary();
       }
     } catch (error) {
+      if (token !== session.token) return;
       if (cached && error.status !== 401 && error.status !== 403) {
         status('Showing saved catalog; refresh failed: ' + message(error));
       } else {
@@ -888,9 +1038,19 @@
       }
     }
   }
-  restoreSession();
+  $('library-link').addEventListener('click', event => {
+    if (libraryConnected) return;
+    event.preventDefault();
+    setMainView('library');
+    connect();
+  });
   $('signin').addEventListener('click', () => connect());
   $('choose-sheet').addEventListener('click', () => connect('choose'));
+  $('create-library-link').addEventListener('click', event => {
+    event.preventDefault();
+    setMainView('settings');
+    $('new-library').focus?.();
+  });
   function requestNewLibrary() {
     if (creatingLibrary) return;
     $('new-library-name').value = 'My Library';
@@ -908,13 +1068,19 @@
   });
   $('new-library').addEventListener('click', requestNewLibrary);
   $('settings-open').addEventListener('click', () => setMainView('settings'));
-  $('new-library-connected').addEventListener('click', requestNewLibrary);
-  $('disconnect').addEventListener('click', () => { clearSession(); rememberSheet(''); });
+  $('disconnect').addEventListener('click', () => { rememberSheet(''); clearSession(); });
   window.addEventListener('storage', event => {
-    if (event.key === sessionKey && !event.newValue && token) { clearSession(); rememberSheet(''); }
+    if (event.key !== sessionKey || event.newValue || !token) return;
+    try {
+      const savedSheet = localStorage.getItem(storageKey) || '';
+      if (savedSheet && JSON.parse(event.oldValue || 'null')?.token !== token) return;
+      rememberedSheet = savedSheet;
+    } catch {}
+    clearSession(false);
+    if (rememberedSheet) connectionStatus(expiredSessionMessage);
   });
   $('upgrade-library').addEventListener('click', () => {
-    if (busy || !libraryWidth || !needsUpdate()) return;
+    if (!libraryConnected || busy || !libraryWidth || !needsUpdate()) return;
     const labels = { publisher: 'Publisher', publication_year: 'Publication year', shelf_location: 'Shelf location', category: 'Category', description: 'Description', series_name: 'Series name', volume_number: 'Volume number', pages: 'Pages', updated_at: 'Updated at' };
     const changes = missingHeaders().map(key => 'Add ' + (labels[key] || key));
     if (!headerFrozen) changes.push('Freeze the header row.');
@@ -930,7 +1096,7 @@
   });
   $('cancel-upgrade').addEventListener('click', () => $('upgrade-dialog').close());
   $('confirm-upgrade').addEventListener('click', async () => {
-    if (busy || !libraryWidth || !needsUpdate()) return;
+    if (!libraryConnected || busy || !libraryWidth || !needsUpdate()) return;
     $('upgrade-dialog').close(); busy = true; $('upgrade-library').disabled = true;
     try {
       status('Checking library columns…');
@@ -956,7 +1122,7 @@
       if (requests.length) await api(':batchUpdate', { method: 'POST', body: JSON.stringify({ requests }) });
       await refresh(); status('Library updated.');
     } catch (error) { status('Library update failed: ' + message(error)); }
-    finally { busy = false; $('upgrade-library').disabled = false; }
+    finally { busy = false; $('upgrade-library').disabled = !canEdit; }
   });
   let importRows = [], importReading = 0;
   $('import-open').addEventListener('click', () => {
@@ -983,7 +1149,7 @@
     } catch (error) { if (request === importReading) $('import-status').textContent = message(error); }
   });
   $('import-confirm').addEventListener('click', async () => {
-    if (busy || !importRows.length) return;
+    if (!libraryConnected || busy || !importRows.length) return;
     if (missingHeaders().length) { $('import-status').textContent = 'Update the library before importing.'; return; }
     busy = true; $('import-confirm').disabled = true; $('import-cancel').disabled = true; $('import-file').disabled = true;
     try {
@@ -1424,4 +1590,5 @@
     } catch (error) { formStatus('Save failed or could not be confirmed. Refresh the catalog before retrying: ' + message(error)); }
     finally { setBookSavePending(false); }
   });
+  restoreSession();
 })();

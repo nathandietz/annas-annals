@@ -18,7 +18,7 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_upward,barcode_scanner,book_2,check,close,edit,expand_less,expand_more,search,settings,unfold_more&display=block"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="assets/css/style.css?v=connection-debug-1" />
+    <link rel="stylesheet" href="assets/css/style.css?v=connect-row-height-1" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
     <script
@@ -32,10 +32,7 @@
     <script src="assets/js/csv.js?v=017c5b1b32ae" defer></script>
     <script src="assets/js/config.js?v=017c5b1b32ae" defer></script>
     <script src="assets/js/book-lookup.js?v=1" defer></script>
-    <script
-      src="assets/js/app.js?v=connection-update-shortcut-1"
-      defer
-    ></script>
+    <script src="assets/js/app.js?v=session-expiry-1" defer></script>
   </head>
   <body>
     <template id="catalog-search-template">
@@ -289,13 +286,13 @@
       <header class="site-header">
         <div class="brand">
           <span class="material-symbol" aria-hidden="true">book_2</span>
-          <h1><a id="library-link">No Connected Library</a></h1>
+          <h1><a id="library-link" href="#connect">No Connected Library</a></h1>
         </div>
         <p id="header-meta" class="header-meta" hidden>
           <span id="library-count" hidden></span>
           <span id="status" role="status" aria-live="polite"></span>
         </p>
-        <nav id="mode-toggle" class="mode-toggle" aria-label="Main view" hidden>
+        <nav id="mode-toggle" class="mode-toggle" aria-label="Main view">
           <button id="mode-scan" type="button">
             <span class="material-symbol" aria-hidden="true"
               >barcode_scanner</span
@@ -355,12 +352,12 @@
         <div id="scan-controls">
           <button
             id="scan-start"
-            class="check-primary"
+            class="check-primary connect-button"
             type="button"
             aria-controls="check-camera"
             aria-expanded="false"
           >
-            Scan Book
+            Connect to a Library to Scan a Book
           </button>
           <div class="scan-options">
             <button
@@ -369,10 +366,16 @@
               type="button"
               aria-controls="check-isbn-form"
               aria-expanded="false"
+              disabled
             >
               Enter ISBN
             </button>
-            <button id="check-photo-open" class="quiet-button" type="button">
+            <button
+              id="check-photo-open"
+              class="quiet-button"
+              type="button"
+              disabled
+            >
               Use a photo
             </button>
             <input id="check-photo" type="file" accept="image/*" hidden />
@@ -397,26 +400,6 @@
           <p id="check-status" role="status"></p>
           <p id="check-photo-status" role="status"></p>
         </div>
-      </section>
-      <section id="connect" aria-labelledby="connect-title" hidden>
-        <h2 id="connect-title" class="page-title">Anna’s Annals</h2>
-        <p>
-          Sign in with Google, then choose an existing spreadsheet or create a
-          new library.
-        </p>
-        <div class="actions">
-          <button type="button" id="signin">Connect Google Sheet</button
-          ><button type="button" id="new-library" class="secondary">
-            Create new library</button
-          ><button type="button" id="choose-sheet" class="secondary" hidden>
-            Choose a different Sheet
-          </button>
-        </div>
-        <p id="connect-status" class="hint" role="status" hidden></p>
-        <p class="hint">
-          Anna’s Annals reads and updates the library spreadsheet you choose or
-          create. <a href="privacy.html">How we use Google data</a>
-        </p>
       </section>
       <section id="library" aria-labelledby="library-title" hidden>
         <h2 id="library-title" class="page-title">Library</h2>
@@ -443,15 +426,50 @@
         </div>
         <div class="mobile-sort">
           <label for="library-sort">Sort by</label
-          ><select id="library-sort">
+          ><select id="library-sort" disabled>
             <option value="">Recently added</option>
             <option value="title">Title</option>
             <option value="author">Author</option>
             <option value="shelf_location">Shelf location</option>
           </select>
         </div>
-        <p id="library-empty" class="empty-state" hidden></p>
-        <div id="books" class="books"></div>
+        <section id="connect" aria-label="Connect a library" hidden>
+          <button
+            type="button"
+            id="signin"
+            class="check-primary connect-button"
+          >
+            Connect Google Sheet
+          </button>
+          <p>Sign in with Google to connect an existing spreadsheet.</p>
+          <a id="create-library-link" class="hint" href="#new-library" hidden>
+            Create New Library in Settings
+          </a>
+          <p id="connect-status" class="hint" role="status" hidden></p>
+          <p class="hint">
+            Anna’s Annals reads and updates the library spreadsheet you choose
+            or create. <a href="privacy.html">How we use Google data</a>
+          </p>
+          <section class="app-intro" aria-labelledby="app-intro-title">
+            <h2 id="app-intro-title">About Anna’s Annals</h2>
+            <p>
+              Catalog your books in a Google Sheet you control. Scan ISBN
+              barcodes to look up book details, search your collection, check
+              for duplicates, and import or export your catalog as CSV.
+            </p>
+            <p>
+              Connect an existing library spreadsheet or create a new one in
+              your Google account. Anna’s Annals asks for per-file permission so
+              it can read the catalog and save your changes in the spreadsheet
+              you select or create. Your Google sharing settings control who can
+              view or edit your library.
+            </p>
+          </section>
+        </section>
+        <div id="catalog-content" hidden>
+          <p id="library-empty" class="empty-state" hidden></p>
+          <div id="books" class="books"></div>
+        </div>
       </section>
       <section id="settings-dialog" aria-labelledby="settings-title" hidden>
         <h2 id="settings-title" class="page-title">Settings</h2>
@@ -463,6 +481,27 @@
           </button>
           <p id="update-app-status" class="hint" role="status"></p>
         </section>
+        <section
+          id="settings-library-connection"
+          class="settings-group"
+          aria-labelledby="connection-title"
+        >
+          <h3 id="connection-title">Library connection</h3>
+          <div class="connection-secondary-actions">
+            <button type="button" id="new-library" class="secondary">
+              Create New Library
+            </button>
+            <button type="button" id="choose-sheet" class="secondary" hidden>
+              Choose Different Library
+            </button>
+          </div>
+          <div class="settings-actions">
+            <button type="button" id="disconnect" class="secondary" disabled>
+              Disconnect
+            </button>
+          </div>
+          <p id="settings-connect-status" class="hint" role="status" hidden></p>
+        </section>
         <section class="settings-group" aria-labelledby="covers-title">
           <h3 id="covers-title">Book covers</h3>
           <label class="cover-setting">
@@ -470,7 +509,11 @@
             <input id="show-fallback-covers" type="checkbox" role="switch" />
           </label>
         </section>
-        <section class="settings-group" aria-labelledby="tools-title">
+        <section
+          id="settings-library-tools"
+          class="settings-group"
+          aria-labelledby="tools-title"
+        >
           <h3 id="tools-title">Library tools</h3>
           <div class="settings-actions">
             <button
@@ -478,38 +521,24 @@
               class="secondary"
               type="button"
               aria-pressed="false"
+              disabled
             >
               Find duplicates</button
             ><button
               type="button"
               id="upgrade-library"
               class="upgrade-button"
-              hidden
+              disabled
             >
               Update library
             </button>
-            <div id="transfer-actions" class="settings-actions" hidden>
-              <button type="button" id="import-open" class="secondary">
+            <div id="transfer-actions" class="settings-actions">
+              <button type="button" id="import-open" class="secondary" disabled>
                 Import CSV</button
-              ><button type="button" id="export-csv" class="secondary">
+              ><button type="button" id="export-csv" class="secondary" disabled>
                 Export CSV
               </button>
             </div>
-          </div>
-        </section>
-        <section class="settings-group" aria-labelledby="connection-title">
-          <h3 id="connection-title">Library connection</h3>
-          <div class="settings-actions">
-            <button
-              type="button"
-              id="new-library-connected"
-              class="secondary"
-              hidden
-            >
-              New library</button
-            ><button type="button" id="disconnect" class="secondary" hidden>
-              Disconnect
-            </button>
           </div>
         </section>
       </section>
@@ -741,38 +770,10 @@
         </form>
       </dialog>
       <footer class="app-footer">
-        <section class="app-intro" aria-labelledby="app-intro-title">
-          <h2 id="app-intro-title">About Anna’s Annals</h2>
-          <p>
-            Catalog your books in a Google Sheet you control. Scan ISBN barcodes
-            to look up book details, search your collection, check for
-            duplicates, and import or export your catalog as CSV.
-          </p>
-          <p>
-            Connect an existing library spreadsheet or create a new one in your
-            Google account. Anna’s Annals asks for per-file permission so it can
-            read the catalog and save your changes in the spreadsheet you select
-            or create. Your Google sharing settings control who can view or edit
-            your library.
-          </p>
-        </section>
         <nav class="policy-links" aria-label="App policies">
           <a href="privacy.html">Privacy Policy</a>
           <a href="terms.html">Terms of Service</a>
         </nav>
-        <!-- Temporary update shortcut for debugging while disconnected. -->
-        <section class="connection-debug" aria-labelledby="debug-title">
-          <h2 id="debug-title">Debug</h2>
-          <button id="connect-update-app" class="secondary" type="button">
-            Update app
-          </button>
-          <p
-            id="connect-update-app-status"
-            class="hint"
-            role="status"
-            hidden
-          ></p>
-        </section>
       </footer>
     </main>
     <button

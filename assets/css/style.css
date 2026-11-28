@@ -15,6 +15,13 @@
   --page-top-inset: env(safe-area-inset-top, 0px);
   --bottom-nav-gap: max(3px, calc(env(safe-area-inset-bottom) * 0.6));
   --bottom-nav-height: calc(62px + var(--bottom-nav-gap));
+  --book-row-cover-width: 43px;
+  --book-row-padding: 12px;
+  --book-row-divider: 1px;
+  --default-book-row-height: calc(
+    var(--book-row-cover-width) * 1.5 + var(--book-row-padding) * 2 +
+      var(--book-row-divider)
+  );
 }
 
 * {
@@ -1213,7 +1220,7 @@ button.upgrade-button:hover {
 
 .app-intro {
   max-width: 620px;
-  margin: 0;
+  margin: 24px 0 0;
   font-size: 15px;
   line-height: 1.6;
 }
@@ -1227,29 +1234,12 @@ button.upgrade-button:hover {
   margin: 10px 0;
 }
 
-main:has(#mode-toggle:not([hidden])) .app-intro {
-  display: none;
-}
-
 .app-footer {
   margin-top: 32px;
   padding-top: 16px;
   border-top: 1px solid var(--separator);
   color: var(--muted);
   line-height: 1.5;
-}
-
-.connection-debug {
-  margin-block-start: 16px;
-}
-
-.connection-debug h2 {
-  margin-block-end: 8px;
-  font-size: 14px;
-}
-
-#connect[hidden] ~ .app-footer .connection-debug {
-  display: none;
 }
 
 .policy-links {
@@ -1603,8 +1593,12 @@ button.check-primary {
   border-radius: 13px;
 }
 
-#scan-start {
+#scan-start:not(.connect-button) {
   min-height: 100px;
+}
+
+button.check-primary.connect-button {
+  min-height: var(--default-book-row-height);
 }
 
 #check-back {
@@ -1756,10 +1750,6 @@ button.scan-book {
   min-width: 44px;
 }
 
-.catalog-add:disabled {
-  opacity: 1;
-}
-
 .catalog-add.awaiting-edit-access {
   visibility: hidden;
 }
@@ -1824,9 +1814,27 @@ button.scan-book {
   width: auto;
 }
 
+.connection-secondary-actions {
+  display: flex;
+  gap: 8px;
+  max-width: 570px;
+  margin-block-end: 8px;
+}
+
+.connection-secondary-actions button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+#create-library-link {
+  display: inline-block;
+  margin-block-start: 12px;
+}
+
 #connect {
-  max-width: 540px;
-  padding: 20px 0;
+  max-width: 570px;
+  margin: 0;
+  padding: 0;
   border: 0;
   border-radius: 0;
   box-shadow: none;
@@ -1984,7 +1992,9 @@ button.scan-book {
   }
 
   #scan-view,
-  #settings-dialog {
+  #settings-dialog,
+  #connect,
+  .connection-secondary-actions {
     max-width: none;
   }
 
@@ -2043,6 +2053,11 @@ button.scan-book {
     font-weight: 600;
   }
 
+  .mobile-sort select:disabled {
+    color: var(--muted);
+    opacity: 0.6;
+  }
+
   .books.view-card {
     display: block;
   }
@@ -2050,9 +2065,9 @@ button.scan-book {
   .books.view-card .book {
     position: relative;
     min-height: 74px;
-    padding: 12px 0;
+    padding: var(--book-row-padding) 0;
     border: 0;
-    border-bottom: 1px solid var(--separator);
+    border-bottom: var(--book-row-divider) solid var(--separator);
     border-radius: 0;
     background: transparent;
     box-shadow: none;
@@ -2077,7 +2092,7 @@ button.scan-book {
   }
 
   .card-cover {
-    --cover-width: 43px;
+    --cover-width: var(--book-row-cover-width);
   }
 
   .books.view-card .book h3 {
