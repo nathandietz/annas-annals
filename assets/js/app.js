@@ -112,7 +112,6 @@
   function updateConnect() {
     const button = $('signin');
     button.textContent = rememberedSheet ? 'Reconnect to Google Sheet' : 'Connect Google Sheet';
-    $('create-library-link').hidden = Boolean(rememberedSheet);
     $('choose-sheet').hidden = !libraryConnected && !rememberedSheet;
   }
   function rememberSheet(id) {
@@ -1046,11 +1045,6 @@
   });
   $('signin').addEventListener('click', () => connect());
   $('choose-sheet').addEventListener('click', () => connect('choose'));
-  $('create-library-link').addEventListener('click', event => {
-    event.preventDefault();
-    setMainView('settings');
-    $('new-library').focus?.();
-  });
   function requestNewLibrary() {
     if (creatingLibrary) return;
     $('new-library-name').value = 'My Library';

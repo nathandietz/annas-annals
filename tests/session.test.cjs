@@ -318,7 +318,6 @@ test('an expired session is cleared and requires reconnection', async () => {
   assert.equal(view.requests.length, 0); assert.equal(shared.getItem(sessionKey), null); assert.equal(view.el('connect').hidden, false);
   assert.equal(view.el('library').hidden, false);
   assert.equal(view.el('search').disabled, true);
-  assert.equal(view.el('create-library-link').hidden, true);
   assert.equal(view.el('signin').textContent, 'Reconnect to Google Sheet');
   assert.match(view.el('connect-status').textContent, /expired/i);
   view.handlers['settings-open:click']();
@@ -452,11 +451,7 @@ test('disconnected navigation defaults to Library with a disabled search', async
   assert.equal(view.el('scan-view').hidden, true);
   assert.match(view.el('connect-status').textContent, /^Setup needed:/);
 
-  assert.equal(view.el('create-library-link').hidden, false);
-  let createFocused = false;
-  view.el('new-library').focus = () => { createFocused = true; };
-  view.handlers['create-library-link:click']({ preventDefault() {} });
-  assert.equal(createFocused, true);
+  view.handlers['settings-open:click']();
   assert.equal(view.el('settings-dialog').hidden, false);
   assert.equal(view.el('settings-library-tools').hidden, false);
   assert.equal(view.el('settings-library-connection').hidden, false);

@@ -32,7 +32,7 @@
     <script src="assets/js/csv.js?v=017c5b1b32ae" defer></script>
     <script src="assets/js/config.js?v=017c5b1b32ae" defer></script>
     <script src="assets/js/book-lookup.js?v=1" defer></script>
-    <script src="assets/js/app.js?v=session-expiry-1" defer></script>
+    <script src="assets/js/app.js?v=library-connect-1" defer></script>
   </head>
   <body>
     <template id="catalog-search-template">
@@ -441,15 +441,7 @@
           >
             Connect Google Sheet
           </button>
-          <p>Sign in with Google to connect an existing spreadsheet.</p>
-          <a id="create-library-link" class="hint" href="#new-library" hidden>
-            Create New Library in Settings
-          </a>
           <p id="connect-status" class="hint" role="status" hidden></p>
-          <p class="hint">
-            Anna’s Annals reads and updates the library spreadsheet you choose
-            or create. <a href="privacy.html">How we use Google data</a>
-          </p>
           <section class="app-intro" aria-labelledby="app-intro-title">
             <h2 id="app-intro-title">About Anna’s Annals</h2>
             <p>
@@ -463,6 +455,10 @@
               it can read the catalog and save your changes in the spreadsheet
               you select or create. Your Google sharing settings control who can
               view or edit your library.
+            </p>
+            <p class="hint">
+              Anna’s Annals reads and updates the library spreadsheet you choose
+              or create. <a href="privacy.html">How we use Google data</a>
             </p>
           </section>
         </section>
