@@ -30,6 +30,30 @@ test('a new window restores a valid session without reconnecting', async () => {
   const first = await openWindow(shared), second = await openWindow(shared);
   for (const view of [first, second]) { assert.equal(view.el('library').hidden, false); assert.equal(view.el('connect').hidden, true); assert.equal(view.requests.length, 3); assert.equal(view.el('add').hidden, false); }
 });
+test('both connection buttons remember the last opened Sheet name across visits', async () => {
+  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
+  const connected = await openWindow(shared);
+  assert.equal(connected.el('scan-start-subtitle').hidden, true);
+
+  shared.removeItem(sessionKey);
+  const disconnected = await openWindow(shared);
+  for (const id of ['signin', 'scan-start']) {
+    assert.equal(disconnected.el(id + '-title').textContent, 'Reconnect to My library');
+    assert.equal(disconnected.el(id + '-subtitle').textContent, 'Sign in to reopen your library.');
+  }
+
+  shared.setItem(sheetKey, 'another-sheet');
+  const legacy = await openWindow(shared);
+  assert.equal(legacy.el('signin-title').textContent, 'Reconnect to Google Sheet');
+  assert.equal(legacy.el('scan-start-subtitle').textContent, 'Sign in to reopen your last library.');
+
+  connected.handlers['disconnect:click']();
+  const fresh = await openWindow(shared);
+  for (const id of ['signin', 'scan-start']) {
+    assert.equal(fresh.el(id + '-title').textContent, 'Connect Google Sheet');
+    assert.equal(fresh.el(id + '-subtitle').textContent, 'Choose a spreadsheet from Google Drive.');
+  }
+});
 function googlePickerFixture() {
   let authorize, pickSheet;
   const google = {
@@ -68,7 +92,7 @@ test('a first connection and reconnect open the selected Sheet without an indica
     assert.match(view.el('status').textContent, /^Updated at \d{1,2}:\d{2} [ap]m$/);
     if (remembered) {
       assert.equal(view.el('scan-view').hidden, false);
-      assert.equal(view.el('scan-start').textContent, 'Scan Book');
+      assert.equal(view.el('scan-start-title').textContent, 'Scan Book');
       assert.equal(view.el('disconnect').disabled, false);
     }
     await connection;
@@ -318,11 +342,64 @@ test('an expired session is cleared and requires reconnection', async () => {
   assert.equal(view.requests.length, 0); assert.equal(shared.getItem(sessionKey), null); assert.equal(view.el('connect').hidden, false);
   assert.equal(view.el('library').hidden, false);
   assert.equal(view.el('search').disabled, true);
-  assert.equal(view.el('signin').textContent, 'Reconnect to Google Sheet');
-  assert.match(view.el('connect-status').textContent, /expired/i);
+  assert.equal(view.el('signin-title').textContent, 'Reconnect to Google Sheet');
+  assert.equal(view.el('signin-subtitle').textContent, 'Google authorization expired. Sign in to reopen your Library.');
+  assert.equal(view.el('scan-start-subtitle').textContent, view.el('signin-subtitle').textContent);
+  assert.equal(view.el('connect-status').hidden, true);
   view.handlers['settings-open:click']();
   assert.equal(view.el('choose-sheet').hidden, false);
 });
+
+test('Settings can expire the current Google session without forgetting the Sheet', async () => {
+  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
+  const { google, gapi, authorize } = googlePickerFixture();
+  const view = await openWindow(shared, 200, true, true, { google, gapi });
+  view.handlers['settings-open:click']();
+  assert.equal(view.el('expire-session').disabled, false);
+  view.handlers['expire-session:click']();
+  assert.equal(shared.getItem(sessionKey), null);
+  assert.equal(shared.getItem(sheetKey), 'sheet');
+  assert.equal(view.el('connect').hidden, false);
+  assert.equal(view.el('signin-title').textContent, 'Reconnect to My library');
+  assert.equal(view.el('signin-subtitle').textContent, 'Google authorization expired. Sign in to reopen your Library.');
+  assert.equal(view.el('scan-start-subtitle').textContent, view.el('signin-subtitle').textContent);
+  assert.equal(view.el('connect-status').hidden, true);
+  assert.equal(view.el('expire-session').disabled, true);
+
+  const reloaded = await openWindow(shared, 200, true, true, { google, gapi });
+  assert.equal(reloaded.el('signin-subtitle').textContent, view.el('signin-subtitle').textContent);
+  assert.equal(reloaded.el('scan-start-subtitle').textContent, view.el('signin-subtitle').textContent);
+
+  reloaded.handlers['signin:click']();
+  await authorize({ error: 'access_denied' });
+  assert.equal(reloaded.el('signin-subtitle').textContent, view.el('signin-subtitle').textContent);
+  reloaded.handlers['signin:click']();
+  await authorize({ access_token: 'replacement', expires_in: 120 });
+  assert.equal(reloaded.el('connect').hidden, true);
+  assert.equal(reloaded.el('expire-session').disabled, false);
+
+  shared.removeItem(sessionKey);
+  const reopened = await openWindow(shared);
+  assert.equal(reopened.el('signin-subtitle').textContent, 'Sign in to reopen your library.');
+});
+
+test('Disconnect can forget the Sheet after Google authorization expires', async () => {
+  const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
+  const view = await openWindow(shared);
+  view.handlers['settings-open:click']();
+  view.handlers['expire-session:click']();
+  assert.equal(view.el('signin-title').textContent, 'Reconnect to My library');
+
+  view.handlers['settings-open:click']();
+  assert.equal(view.el('disconnect').disabled, false);
+  assert.equal(view.el('expire-session').disabled, true);
+  view.handlers['disconnect:click']();
+  assert.equal(shared.getItem(sheetKey), null);
+  assert.equal(view.el('signin-title').textContent, 'Connect Google Sheet');
+  assert.equal(view.el('signin-subtitle').textContent, 'Choose a spreadsheet from Google Drive.');
+  assert.equal(view.el('disconnect').disabled, true);
+});
+
 test('token expiry returns to Library and closes the open editor', async () => {
   let now = 1000000;
   const expiresAt = now + 120000;
@@ -343,8 +420,10 @@ test('token expiry returns to Library and closes the open editor', async () => {
   assert.equal(view.el('library').hidden, false);
   assert.equal(view.el('connect').hidden, false);
   assert.equal(view.el('header-meta').hidden, true);
-  assert.equal(view.el('signin').textContent, 'Reconnect to Google Sheet');
-  assert.match(view.el('connect-status').textContent, /expired/i);
+  assert.equal(view.el('signin-title').textContent, 'Reconnect to My library');
+  assert.equal(view.el('signin-subtitle').textContent, 'Google authorization expired. Sign in to reopen your Library.');
+  assert.equal(view.el('scan-start-subtitle').textContent, view.el('signin-subtitle').textContent);
+  assert.equal(view.el('connect-status').hidden, true);
   assert.equal(shared.getItem(sheetKey), 'sheet');
   assert.equal(shared.getItem(sessionKey), null);
   assert.equal(tabStorage.getItem('annas-annals-catalog-snapshot'), null);
@@ -387,7 +466,9 @@ test('a Google authorization rejection while checking Drive permissions returns 
   const shared = storage({ [sheetKey]: 'sheet', [sessionKey]: JSON.stringify({ token: 'token', expiresAt: Date.now() + 120000 }) });
   const view = await openWindow(shared, url => url.includes('capabilities(canEdit)') ? 401 : 200);
   assert.equal(view.el('connect').hidden, false);
-  assert.match(view.el('connect-status').textContent, /expired/i);
+  assert.equal(view.el('signin-subtitle').textContent, 'Google authorization expired. Sign in to reopen your Library.');
+  assert.equal(view.el('scan-start-subtitle').textContent, view.el('signin-subtitle').textContent);
+  assert.equal(view.el('connect-status').hidden, true);
   assert.equal(shared.getItem(sheetKey), 'sheet');
 });
 
@@ -398,7 +479,7 @@ test('expiry in another window preserves the remembered Sheet', async () => {
   shared.removeItem(sessionKey);
   view.handlers['window:storage']({ key: sessionKey, oldValue: session, newValue: null });
   assert.equal(view.el('connect').hidden, false);
-  assert.equal(view.el('signin').textContent, 'Reconnect to Google Sheet');
+  assert.equal(view.el('signin-title').textContent, 'Reconnect to My library');
   assert.equal(shared.getItem(sheetKey), 'sheet');
 });
 
@@ -438,7 +519,7 @@ test('disconnected navigation defaults to Library with a disabled search', async
     assert.equal(view.el(id).disabled, true, id);
   }
   assert.equal(Boolean(view.el('scan-start').disabled), false);
-  assert.equal(view.el('scan-start').textContent, 'Connect to a Library to Scan a Book');
+  assert.equal(view.el('scan-start-title').textContent, 'Connect Google Sheet');
   assert.equal(view.el('scan-start').classList.contains('connect-button'), true);
   view.handlers['scan-start:click']();
   assert.match(view.el('check-status').textContent, /^Setup needed:/);
@@ -459,7 +540,7 @@ test('disconnected navigation defaults to Library with a disabled search', async
     assert.equal(view.el(id).hidden, false, id);
     assert.equal(view.el(id).disabled, true, id);
   }
-  assert.equal(view.el('signin').textContent, 'Connect Google Sheet');
+  assert.equal(view.el('signin-title').textContent, 'Connect Google Sheet');
   assert.equal(view.el('choose-sheet').hidden, true);
   assert.equal(Boolean(view.el('new-library').disabled), false);
   assert.equal(Boolean(view.el('update-app').disabled), false);
@@ -478,7 +559,7 @@ test('mobile opens scan view and viewers cannot add books', async () => {
   assert.equal(view.el('scan-search').disabled, false);
   assert.equal(view.el('library-sort').disabled, false);
   assert.equal(Boolean(view.el('scan-start').disabled), false);
-  assert.equal(view.el('scan-start').textContent, 'Scan Book');
+  assert.equal(view.el('scan-start-title').textContent, 'Scan Book');
   assert.equal(view.el('scan-start').classList.contains('connect-button'), false);
   assert.equal(view.el('check-isbn-open').disabled, false);
   assert.equal(view.el('check-photo-open').disabled, false);
@@ -574,13 +655,13 @@ test('the scan button opens and closes the camera in the same control', async ()
   await view.handlers['scan-start:click']();
   assert.equal(view.el('check-camera').hidden, false);
   assert.equal(view.el('scan-start').attributes['aria-expanded'], 'true');
-  assert.equal(view.el('scan-start').textContent, 'Close scanner');
+  assert.equal(view.el('scan-start-title').textContent, 'Close scanner');
   assert.equal(view.el('check-status').textContent, '');
   assert.match(tips.textContent, /Keep the entire barcode in view/);
   await view.handlers['scan-start:click']();
   assert.equal(view.el('check-camera').hidden, true);
   assert.equal(view.el('scan-start').attributes['aria-expanded'], 'false');
-  assert.equal(view.el('scan-start').textContent, 'Scan Book');
+  assert.equal(view.el('scan-start-title').textContent, 'Scan Book');
   assert.match(tips.textContent, /Keep the entire barcode in view/);
 });
 
@@ -591,7 +672,7 @@ test('typing in Check closes the camera and reveals search results', async () =>
   view.el('scan-search').value = 'Water';
   view.handlers['scan-search:input']();
   assert.equal(view.el('check-camera').hidden, true);
-  assert.equal(view.el('scan-start').textContent, 'Scan Book');
+  assert.equal(view.el('scan-start-title').textContent, 'Scan Book');
   assert.equal(view.el('scan-books').hidden, false);
   assert.equal(view.scanners[1].stops, 1);
 });

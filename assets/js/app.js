@@ -57,20 +57,28 @@
   function needsUpdate() { return !headerFrozen || missingHeaders().length > 0 || JSON.stringify(sheetHeaders) !== JSON.stringify(desiredOrder(sheetHeaders)); }
   function record(row, names) { return Object.fromEntries(headers.map(key => [key, names.indexOf(key) < 0 ? '' : String(row[names.indexOf(key)] ?? '')])); }
   const storageKey = 'annas-annals-sheet-id';
+  const sheetNameKey = 'annas-annals-sheet-name';
   const sessionKey = 'annas-annals-google-session';
+  const expiredSheetKey = 'annas-annals-expired-sheet';
   const cacheKey = 'annas-annals-catalog-snapshot';
   const editAccessKey = 'annas-annals-edit-access';
   let token = '', sheetId = '', books = [], pickerReady = false, busy = false, creatingLibrary = false, libraryWidth = 16;
-  let rememberedSheet = '', editingBook = null, viewMode = 'card', duplicatesMode = false, sortField = '', sortDirection = 1;
+  let rememberedSheet = '', rememberedSheetName = '';
+  let editingBook = null, viewMode = 'card', duplicatesMode = false, sortField = '', sortDirection = 1;
   let connectionAttempt = 0;
   let sessionExpiresAt, sessionExpiryTimer;
+  let sessionExpired = false;
   const expiredSessionMessage = 'Google authorization expired. Reconnect to your library.';
   const fallbackCoverStorageKey = 'annas-annals-show-fallback-covers';
   let showFallbackCovers = true;
   try { showFallbackCovers = localStorage.getItem(fallbackCoverStorageKey) !== 'false'; } catch {}
   $('show-fallback-covers').checked = showFallbackCovers;
   try { const savedView = localStorage.getItem('annas-annals-view'); if (['card', 'list'].includes(savedView)) viewMode = savedView; } catch {}
-  try { rememberedSheet = localStorage.getItem(storageKey) || ''; } catch {}
+  try {
+    rememberedSheet = localStorage.getItem(storageKey) || '';
+    sessionExpired = Boolean(rememberedSheet && localStorage.getItem(expiredSheetKey) === rememberedSheet);
+  } catch {}
+  rememberedSheetName = readRememberedSheetName(rememberedSheet);
   const scanner = createLibraryScanner();
   const checkScanner = createLibraryScanner('check-qr-reader');
   const scanGuidance = 'Keep the entire barcode in view, including blank space at both ends. Hold steady in good light.';
@@ -110,13 +118,37 @@
   const formStatus = message => { $('form-status').textContent = message; };
   function message(error) { return error?.message || 'Something went wrong. Please try again.'; }
   function updateConnect() {
-    const button = $('signin');
-    button.textContent = rememberedSheet ? 'Reconnect to Google Sheet' : 'Connect Google Sheet';
+    const title = rememberedSheet ? 'Reconnect to ' + (rememberedSheetName || 'Google Sheet') : 'Connect Google Sheet';
+    const subtitle = sessionExpired ? 'Google authorization expired. Sign in to reopen your Library.'
+      : !rememberedSheet ? 'Choose a spreadsheet from Google Drive.'
+      : rememberedSheetName ? 'Sign in to reopen your library.' : 'Sign in to reopen your last library.';
+    $('signin-title').textContent = title;
+    $('signin-subtitle').textContent = subtitle;
+    if (!libraryConnected) {
+      $('scan-start-title').textContent = title;
+      $('scan-start-subtitle').textContent = subtitle;
+    }
     $('choose-sheet').hidden = !libraryConnected && !rememberedSheet;
+    $('disconnect').disabled = !libraryConnected && !rememberedSheet;
   }
-  function rememberSheet(id) {
+  function readRememberedSheetName(id) {
+    if (!id) return '';
+    try {
+      const saved = JSON.parse(localStorage.getItem(sheetNameKey) || 'null');
+      if (saved?.id === id && typeof saved.name === 'string') return saved.name.trim();
+    } catch {}
+    return '';
+  }
+  function rememberSheet(id, title) {
+    if (id !== rememberedSheet) rememberedSheetName = '';
     rememberedSheet = id;
-    try { if (id) localStorage.setItem(storageKey, id); else localStorage.removeItem(storageKey); } catch {}
+    if (id && typeof title === 'string' && title.trim()) rememberedSheetName = title.trim();
+    try {
+      if (id) localStorage.setItem(storageKey, id);
+      else localStorage.removeItem(storageKey);
+      if (id && rememberedSheetName) localStorage.setItem(sheetNameKey, JSON.stringify({ id, name: rememberedSheetName }));
+      else localStorage.removeItem(sheetNameKey);
+    } catch {}
     updateConnect();
   }
   function setLibraryLinkLabel(title) {
@@ -134,7 +166,7 @@
     for (const id of ['header-meta', 'view-switcher', 'catalog-content']) {
       $(id).hidden = !connected;
     }
-    for (const id of ['duplicates-toggle', 'export-csv', 'disconnect']) {
+    for (const id of ['duplicates-toggle', 'export-csv', 'expire-session']) {
       $(id).disabled = !connected;
     }
     for (const input of searchInputs) input.disabled = !connected;
@@ -161,6 +193,7 @@
     setMainView('library');
   }
   function showLibrary() {
+    setSessionExpired(false);
     setLibraryConnected(true);
     checkPermission();
     const link = $('library-link');
@@ -173,11 +206,12 @@
     setMainView(mainView);
   }
   updateConnect();
-  function clearSession(removeSavedSession = true) {
+  function clearSession({ removeSavedSession = true, expired = false } = {}) {
     connectionAttempt++;
     canEdit = false;
     clearTimeout(sessionExpiryTimer);
     sessionExpiresAt = undefined;
+    if (expired || !rememberedSheet) setSessionExpired(expired);
     try { if (removeSavedSession) localStorage.removeItem(sessionKey); } catch {}
     try { sessionStorage.removeItem(cacheKey); sessionStorage.removeItem(editAccessKey); } catch {}
     token = '';
@@ -206,10 +240,16 @@
   function readSavedSession() {
     try { return JSON.parse(localStorage.getItem(sessionKey) || 'null'); } catch {}
   }
+  function setSessionExpired(expired) {
+    sessionExpired = expired;
+    try {
+      if (expired && rememberedSheet) localStorage.setItem(expiredSheetKey, rememberedSheet);
+      else if (!expired) localStorage.removeItem(expiredSheetKey);
+    } catch {}
+  }
   function expireSession(accessToken) {
     if (!token || token !== accessToken) return;
-    clearSession(readSavedSession()?.token === accessToken);
-    connectionStatus(expiredSessionMessage);
+    clearSession({ removeSavedSession: readSavedSession()?.token === accessToken, expired: true });
   }
   function checkSessionExpiry() {
     if (token && Date.now() >= sessionExpiresAt) expireSession(token);
@@ -256,6 +296,8 @@
     headerFrozen = catalog.headerFrozen;
     books = catalog.books;
     setLibraryLinkLabel(catalog.title);
+    const name = typeof catalog.title === 'string' ? catalog.title.trim() : '';
+    if (sheetId && sheetId === rememberedSheet && name && name !== rememberedSheetName) rememberSheet(sheetId, name);
     try { sessionStorage.setItem(cacheKey, JSON.stringify({ sheetId, title: catalog.title, books, updatedAt, sheetHeaders, headerFrozen })); } catch {}
     updateEditingToolVisibility();
     updateLibraryCount();
@@ -778,7 +820,8 @@
   function updateScanButton() {
     const button = $('scan-start');
     button.classList.toggle('connect-button', !libraryConnected);
-    button.textContent = !libraryConnected ? 'Connect to a Library to Scan a Book' : cameraOpen ? 'Close scanner' : 'Scan Book';
+    $('scan-start-subtitle').hidden = libraryConnected;
+    if (libraryConnected) $('scan-start-title').textContent = cameraOpen ? 'Close scanner' : 'Scan Book';
     button.setAttribute('aria-expanded', String(cameraOpen));
   }
   function setCameraOpen(open, standby = false) {
@@ -913,7 +956,7 @@
           canEdit = false;
           useGoogleSession(session);
           sheetId = id;
-          rememberSheet(id);
+          rememberSheet(id, catalog.title);
           const updatedAt = Date.now();
           applyCatalog(catalog, updatedAt);
           showLibrary();
@@ -949,8 +992,9 @@
     if (token !== accessToken) return;
     if (!response.ok || !data.spreadsheetId) throw new Error(data.error?.message || 'The creation result could not be confirmed. Check Google Drive before trying again.');
     const previousSheet = sheetId;
+    const previousSheetName = rememberedSheetName;
     sheetId = data.spreadsheetId;
-    rememberSheet(sheetId);
+    rememberSheet(sheetId, data.properties?.title || name);
     try {
       await refresh({ minimumIndicatorTime: 0 });
       if (token === accessToken) { showLibrary(); status('New library created.'); }
@@ -958,7 +1002,7 @@
     catch (error) {
       if (token !== accessToken) return;
       sheetId = previousSheet;
-      if (previousSheet) rememberSheet(previousSheet);
+      if (previousSheet) rememberSheet(previousSheet, previousSheetName);
       throw new Error('The new spreadsheet was created, but could not be opened. Find it in Google Drive and reconnect. ' + message(error));
     }
     } finally { creatingLibrary = false; }
@@ -999,8 +1043,7 @@
     if (!rememberedSheet) { showDisconnectedLibrary(); return; }
     const session = readSavedSession();
     if (session?.token && session.expiresAt <= Date.now()) {
-      clearSession();
-      connectionStatus(expiredSessionMessage);
+      clearSession({ expired: true });
       return;
     }
     if (!session?.token || !Number.isFinite(session.expiresAt) || session.expiresAt <= Date.now() + 30000) {
@@ -1017,6 +1060,7 @@
         books = snapshot.books;
         updateLibraryCount();
         setLibraryLinkLabel(snapshot.title);
+        if (!rememberedSheetName) rememberSheet(sheetId, snapshot.title);
         render(); showLibrary(); cached = true;
       }
     } catch {}
@@ -1063,15 +1107,16 @@
   $('new-library').addEventListener('click', requestNewLibrary);
   $('settings-open').addEventListener('click', () => setMainView('settings'));
   $('disconnect').addEventListener('click', () => { rememberSheet(''); clearSession(); });
+  $('expire-session').addEventListener('click', () => expireSession(token));
   window.addEventListener('storage', event => {
     if (event.key !== sessionKey || event.newValue || !token) return;
     try {
       const savedSheet = localStorage.getItem(storageKey) || '';
       if (savedSheet && JSON.parse(event.oldValue || 'null')?.token !== token) return;
       rememberedSheet = savedSheet;
+      rememberedSheetName = readRememberedSheetName(savedSheet);
     } catch {}
-    clearSession(false);
-    if (rememberedSheet) connectionStatus(expiredSessionMessage);
+    clearSession({ removeSavedSession: false, expired: Boolean(rememberedSheet) });
   });
   $('upgrade-library').addEventListener('click', () => {
     if (!libraryConnected || busy || !libraryWidth || !needsUpdate()) return;

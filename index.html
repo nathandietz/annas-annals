@@ -18,7 +18,10 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_upward,barcode_scanner,book_2,check,close,edit,expand_less,expand_more,search,settings,unfold_more&display=block"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="assets/css/style.css?v=connect-row-height-1" />
+    <link
+      rel="stylesheet"
+      href="assets/css/style.css?v=settings-action-rows-1"
+    />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
     <script
@@ -32,7 +35,7 @@
     <script src="assets/js/csv.js?v=017c5b1b32ae" defer></script>
     <script src="assets/js/config.js?v=017c5b1b32ae" defer></script>
     <script src="assets/js/book-lookup.js?v=1" defer></script>
-    <script src="assets/js/app.js?v=library-connect-1" defer></script>
+    <script src="assets/js/app.js?v=sheet-connection-5" defer></script>
   </head>
   <body>
     <template id="catalog-search-template">
@@ -357,7 +360,10 @@
             aria-controls="check-camera"
             aria-expanded="false"
           >
-            Connect to a Library to Scan a Book
+            <span id="scan-start-title">Connect Google Sheet</span>
+            <span id="scan-start-subtitle" class="connect-subtitle"
+              >Choose a spreadsheet from Google Drive.</span
+            >
           </button>
           <div class="scan-options">
             <button
@@ -439,7 +445,10 @@
             id="signin"
             class="check-primary connect-button"
           >
-            Connect Google Sheet
+            <span id="signin-title">Connect Google Sheet</span>
+            <span id="signin-subtitle" class="connect-subtitle"
+              >Sign in to Google Google Drive.</span
+            >
           </button>
           <p id="connect-status" class="hint" role="status" hidden></p>
           <section class="app-intro" aria-labelledby="app-intro-title">
@@ -483,7 +492,7 @@
           aria-labelledby="connection-title"
         >
           <h3 id="connection-title">Library connection</h3>
-          <div class="connection-secondary-actions">
+          <div class="settings-action-row">
             <button type="button" id="new-library" class="secondary">
               Create New Library
             </button>
@@ -491,9 +500,17 @@
               Choose Different Library
             </button>
           </div>
-          <div class="settings-actions">
+          <div class="settings-action-row">
             <button type="button" id="disconnect" class="secondary" disabled>
-              Disconnect
+              Connection Library
+            </button>
+            <button
+              type="button"
+              id="expire-session"
+              class="secondary"
+              disabled
+            >
+              Expire Google session
             </button>
           </div>
           <p id="settings-connect-status" class="hint" role="status" hidden></p>
@@ -511,7 +528,7 @@
           aria-labelledby="tools-title"
         >
           <h3 id="tools-title">Library tools</h3>
-          <div class="settings-actions">
+          <div class="settings-action-row">
             <button
               id="duplicates-toggle"
               class="secondary"
@@ -528,13 +545,13 @@
             >
               Update library
             </button>
-            <div id="transfer-actions" class="settings-actions">
-              <button type="button" id="import-open" class="secondary" disabled>
-                Import CSV</button
-              ><button type="button" id="export-csv" class="secondary" disabled>
-                Export CSV
-              </button>
-            </div>
+          </div>
+          <div id="transfer-actions" class="settings-action-row">
+            <button type="button" id="import-open" class="secondary" disabled>
+              Import CSV</button
+            ><button type="button" id="export-csv" class="secondary" disabled>
+              Export CSV
+            </button>
           </div>
         </section>
       </section>

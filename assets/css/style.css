@@ -1599,6 +1599,15 @@ button.check-primary {
 
 button.check-primary.connect-button {
   min-height: var(--default-book-row-height);
+  flex-direction: column;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.connect-subtitle {
+  font-size: 13px;
+  font-weight: 450;
+  line-height: 1.35;
 }
 
 #check-back {
@@ -1802,26 +1811,14 @@ button.scan-book {
   font-size: 17px;
 }
 
-.settings-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 5px;
-}
-
-.settings-actions button {
-  text-align: left;
-  width: auto;
-}
-
-.connection-secondary-actions {
+.settings-action-row {
   display: flex;
   gap: 8px;
   max-width: 570px;
   margin-block-end: 8px;
 }
 
-.connection-secondary-actions button {
+.settings-action-row button {
   flex: 1 1 0;
   min-width: 0;
 }
@@ -1855,6 +1852,8 @@ button.scan-book {
   :root {
     --mobile-content-left: max(20px, env(safe-area-inset-left));
     --mobile-content-right: max(20px, env(safe-area-inset-right));
+    --mobile-library-toolbar-bottom: 2px;
+    --mobile-library-sort-height: 44px;
   }
 
   main {
@@ -1994,8 +1993,12 @@ button.scan-book {
   #scan-view,
   #settings-dialog,
   #connect,
-  .connection-secondary-actions {
+  .settings-action-row {
     max-width: none;
+  }
+
+  #connect {
+    padding-block-start: var(--book-row-padding);
   }
 
   #scan-view {
@@ -2014,9 +2017,23 @@ button.scan-book {
     margin-top: 16px;
   }
 
+  #check-stage {
+    margin-top: calc(
+      var(--mobile-library-toolbar-bottom) + var(--mobile-library-sort-height) +
+        var(--book-row-padding)
+    );
+  }
+
+  #scan-view:has(#scan-books:not([hidden]), #check-isbn-form:not([hidden])):not(
+      :has(#check-camera:not([hidden], .camera-standby))
+    )
+    #check-stage {
+    margin-top: 12px;
+  }
+
   .toolbar {
     position: static;
-    padding: 8px 0 2px;
+    padding: 8px 0 var(--mobile-library-toolbar-bottom);
   }
 
   #view-switcher {
@@ -2031,6 +2048,7 @@ button.scan-book {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    min-block-size: var(--mobile-library-sort-height);
     gap: 8px;
   }
 
@@ -2043,7 +2061,7 @@ button.scan-book {
   }
 
   .mobile-sort select {
-    min-height: 44px;
+    min-height: var(--mobile-library-sort-height);
     max-width: 65%;
     color: var(--accent);
     background: transparent;
